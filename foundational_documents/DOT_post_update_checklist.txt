@@ -129,32 +129,47 @@
 
 
 ═══════════════════════════════════════════════════════════════════════════
- PHASE G: STRATEGY TESTER ALIGNMENT
+ PHASE G: PER-BAR EXECUTION MODEL (change e) — per-tick -> per-bar SL
 ═══════════════════════════════════════════════════════════════════════════
-[ ] G.1  RUN book reproduces within tolerance: WR 91.9%, PF 5.83, net $58,685
+[ ] G.1  the DOTS SL repositions ONLY on a new bar (not per-tick); ManageDotsPositions is
+         gated to new-bar detection (call moved inside the isNewBar block, or Time-guarded).
+[ ] G.2  arm / tier / trail are computed off the CLOSED bar’s High/Low (High[1]/Low[1]),
+         NOT the live Bid/Ask tick and NOT the Close.
+[ ] G.3  the BROKER hard SL still executes intrabar on any tick (downside protection is
+         ALWAYS live per-tick); only the EA’s REPOSITIONING of the SL is per-bar.
+[ ] G.4  per-bar sequence order per open position = exit-check -> tiers -> BE-arm -> trail.
+[ ] G.5  EA per-bar management reproduces portfolio_simulation_engine.py trade-for-trade on
+         a parity run (same entries, same SL levels, same exits — live == the validated book).
+
+
+═══════════════════════════════════════════════════════════════════════════
+ PHASE H: STRATEGY TESTER ALIGNMENT
+═══════════════════════════════════════════════════════════════════════════
+[ ] H.1  RUN book reproduces within tolerance: WR 91.9%, PF 5.83, net $58,685
          @1lot, worst-day −$127.5, max-DD −$165.6.
-[ ] G.2  Persistence reproduces: 6/6 folds, 22/22 ISO-weeks, 5/5 weekdays,
+[ ] H.2  Persistence reproduces: 6/6 folds, 22/22 ISO-weeks, 5/5 weekdays,
          min-fold PF 5.01.
-[ ] G.3  March bear fold reproduces: PF 5.47 / net $14,500 (positive through the
+[ ] H.3  March bear fold reproduces: PF 5.47 / net $14,500 (positive through the
          −10% crash).
-[ ] G.4  OOS (May–Jun) reproduces: PF 6.57, WR 92.2%, net $18,926.
-[ ] G.5  Survival margins hold: worst-day 19× inside −$2,500; max-DD 60× inside
+[ ] H.4  OOS (May–Jun) reproduces: PF 6.57, WR 92.2%, net $18,926.
+[ ] H.5  Survival margins hold: worst-day 19× inside −$2,500; max-DD 60× inside
          −$10,000.
-[ ] G.6  Both F1 signals contribute trades in the tester run; the runner lag
+[ ] H.6  Both F1 signals contribute trades in the tester run; the runner lag
          switch is observed on high-velocity entries.
 
 
 ═══════════════════════════════════════════════════════════════════════════
- PHASE H: DIRECTIVE RECONCILIATION (A2.7) & PARITY
+ PHASE I: DIRECTIVE RECONCILIATION (A2.7) & PARITY
 ═══════════════════════════════════════════════════════════════════════════
-[ ] H.1  COMPLETENESS: all 8 structures present; all 50 signals live.
-[ ] H.2  ADAPTIVITY: every threshold self-computes through the oracle regardless
+[ ] I.1  COMPLETENESS: all 8 structures present; all 50 signals live.
+[ ] I.2  ADAPTIVITY: every threshold self-computes through the oracle regardless
          of chart history.
-[ ] H.3  PARITY: fresh export reproduced bit-for-bit by dots_thresholds.py
-         (export = live). No look-ahead anywhere, including the F1 latch.
-[ ] H.4  CONSISTENCY: the sacred layer is byte-identical except the 4 authorized
+[ ] I.3  PARITY: fresh export reproduced bit-for-bit by dots_thresholds.py
+         (export = live). No look-ahead anywhere, including the F1 latch. Per-bar SL
+         management reproduces portfolio_simulation_engine.py trade-for-trade (parity run).
+[ ] I.4  CONSISTENCY: the sacred layer is byte-identical except the 5 authorized
          changes; no retired mechanism returned.
-[ ] H.5  The complete system — not just the 4 edits — satisfies all standing
+[ ] I.5  The complete system — not just the 5 edits — satisfies all standing
          directives. Any gap flagged and resolved before sign-off.
 
 FINAL: all items PASS -> proceed to the FTMO demo (the true final test).

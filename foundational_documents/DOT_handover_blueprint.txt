@@ -119,6 +119,21 @@ are where the method was forged.
           Validated: +74 trades, +$1,418 net, at the IDENTICAL 6-lot hard bound, same
           worst-day and max-DD — a strict improvement over the position-count cap.
 
+  (g) THE EXECUTION-MODEL DECISION (per-tick -> per-bar SL management).
+      The EA had been switched to manage the SL PER-TICK, intending to "lock in sooner"
+      against single-minute whipsaws. Tracing it against the sim exposed the opposite effect:
+      with LOCK_FRAC = 1.0 the BE lock lands on the tier-1/trigger price, so PER-TICK the SL
+      arms directly onto current price and the very next adverse tick scratches the trade —
+      runners collapse (387 -> 102) before they can develop. The sim (and the validated book)
+      is PER-BAR: it repositions the SL only at bar boundaries off the closed bar's High/Low,
+      which holds the armed stop through the minute's intrabar noise and lets trades reach
+      tier 3+. Bracketed on the sealed baseline: per-bar $58,685 (the validated book) vs a
+      per-tick worst-case ~$33.9k — live-per-tick can only diverge DOWNWARD, and where it
+      lands depends on intrabar tick order (unresolvable from OHLC; a demo/tick run settles it).
+      DECISION: revert to PER-BAR. The broker still holds a hard SL that executes intrabar on
+      any tick (downside always live); only the EA's REPOSITIONING is per-bar. This is a parity
+      fix — per-bar management is what makes live == the validated book.
+
   The recurring lesson across all three: a weak or negative result is a data
   point that redirects, not a verdict that closes a door. Depth stayed closed
   because the clean test said so; the +18 and F1 opened because the clean test
@@ -236,7 +251,7 @@ are where the method was forged.
   The signal set and trade management are validated and frozen. The remaining
   work takes the CURRENT equiDOT.cs (frozen, compiles 0/0) to BOOK-50 through
   the full pipeline (Developer -> Supervisor -> Auditor -> human confirm +
-  MetaEditor 0/0). FOUR changes, no more:
+  MetaEditor 0/0). FIVE changes, no more:
 
     (a) MOMENTUM-RUNNER TM BRANCH. In the LeapFrog trail only, switch lag = 3
         when the entry bar's Micro_LogReturn × direction ≥ 0.00012, else 2.
@@ -258,6 +273,16 @@ are where the method was forged.
         It counts live risk, not open positions — break-even'd winners no longer
         block new entries. Causal (the live-lot count is known at entry). A
         sacred/S.7 change; human authorization granted.
+
+    (e) PER-BAR EXECUTION MODEL. Revert DOTS SL management from per-tick to per-bar:
+        gate the reposition logic (ManageDotsPositions) to new-bar detection and compute
+        arm / tier / trail off the CLOSED bar's High/Low (High[1]/Low[1]) — not the live Bid
+        tick, not the Close. Per-bar sequence per open position: (1) exit-check vs current SL,
+        (2) tiers off closed-bar high/low, (3) arm/lock BE, (4) trail — reproducing
+        portfolio_simulation_engine.py. The broker's hard SL still executes intrabar on any
+        tick (downside always live); only the EA's REPOSITIONING is per-bar. Parity fix —
+        per-bar is the validated $58,685 book; per-tick diverges downward. Sacred/S.7 change;
+        human authorization granted.
 
   Then: MetaEditor 0/0 compile, Strategy Tester alignment to the reference
   numbers, and the live FTMO demo.

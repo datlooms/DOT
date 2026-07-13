@@ -60,6 +60,18 @@
   2. STEP 0.30×risk  3. BE: profit≥1×step → SL=entry±step (printed only)
   4. TIERS: entry±N×step → TiersReached=N  5. LEAPFROG Tiers≥3 → SL=entry±(Tiers-lag)×step
      lag=3 if Micro_LogReturn×dir≥0.00012 else 2   6. FRIDAY 16:45 EST close ALL
+  7. EXECUTION MODEL — PER-BAR SL REPOSITIONING (LAW; matches portfolio_simulation_engine.py):
+     The EA REPOSITIONS the SL ONLY at a NEW BAR (bar close), computed off the CLOSED bar's
+     High/Low. Arm / tier / trail detection uses the closed bar's extremes — NOT the live Bid
+     tick and NOT the Close. The BROKER holds a HARD SL that executes intrabar on any tick, so
+     downside protection is ALWAYS live per-tick; only the EA's REPOSITIONING of the SL is per-bar.
+     PER-BAR SEQUENCE each new bar: (1) exit-check vs current SL -> (2) update tiers off the closed
+     bar high/low -> (3) arm/lock BE -> (4) trail. This order reproduces the validated book exactly.
+     RATIONALE: with LOCK_FRAC=1.0 the lock lands on the tier-1/trigger price; under PER-TICK the SL
+     sits on price the instant it arms, so the next adverse tick scratches it and runners collapse
+     (387 -> 102) before they can run. PER-BAR holds the armed stop through the minute's intrabar
+     noise, letting trades reach tier 3+. Per-bar IS the validated $58,685 book; per-tick diverges
+     downward only ($33.9k worst-case). Parity fix — SACRED / S.7 execution-model law.
 
 ╔══════════════════════════════════════════════════════════════════════════════╗
 ║  PART I — THE 48 F0 SAME-BAR TRIPLE-CONVERGENCE SIGNALS                    ║

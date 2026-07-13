@@ -13,7 +13,7 @@ deconstruct second (see DOT_linear_development_schedule.txt).
 ```
 SECTION 1.0   [  102 –  536]  INITIALISATION (OnInit @195)
 SECTION 1.1   [  537 – 1120]  EXPORTDATAFORANALYSIS (ExportDataForAnalysis @564)
-SECTION 1.2   [ 1121 – 1413]  MAIN LOOP (OnTick @1123)
+SECTION 1.2   [ 1121 – 1413]  MAIN LOOP (OnTick @1123)              << change (e): gate Dots SL reposition to new-bar
 SECTION 1.3   [ 1414 – 1425]  TIDYING UP & HEALTH CHECKS
 SECTION 1.4   [ 1426 – 1511]  KAMA WARM-START PERSISTENCE            *** SACRED ***
 SECTION 2.0   [ 1512 – 1725]  USER SETTINGS (externs)
@@ -53,7 +53,7 @@ SECTION 8.4   [ 8614 – 8683]  SESSION ENFORCEMENT LOGIC (Friday close)
 SECTION 8.5   [ 8684 – 8770]  DATA CACHING HELPER & RE-PAINT
 SECTION 8.6   [ 8771 – 8852]  DOTS TRADE MANAGEMENT                  << lag entry + jar admission / increment
 SECTION 8.7   [ 8853 – 8926]  DOTS HELPERS
-SECTION 8.8   [ 8927 – 9057]  DOTS POSITIONS & ALERTS
+SECTION 8.8   [ 8927 – 9057]  DOTS POSITIONS & ALERTS               << ManageDotsPositions: per-tick -> per-bar SL reposition
 SECTION 9.0   [ 9058 – 11020] STATISTICS PANEL
 SECTION 9.1   [11021 – 11059] DAILY SUMMARY REPORTING
 SECTION 10.0  [11060 – 11448] UI BUTTON EVENTS
@@ -63,7 +63,7 @@ SECTION 11    [11500 – 11673] THE SHUTDOWN ROUTINE (STATEFUL)
 
 ---
 
-## 2. WHERE THE FOUR CHANGES LAND
+## 2. WHERE THE FIVE CHANGES LAND
 
 ### Change (a) — Momentum-runner TM branch
 - **Primary: SECTION 8.1 ADVANCED TRADE MANAGEMENT [8032–8218]** — the LeapFrog
@@ -124,6 +124,24 @@ SECTION 11    [11500 – 11673] THE SHUTDOWN ROUTINE (STATEFUL)
 - **Untouched:** SL / step / BE nudge / tier / LeapFrog / runner / Friday close / entry gate /
   eligibility — the jar changes ADMISSION only, keyed on the live-lot count.
 
+### Change (e) — Per-bar SL repositioning (per-tick -> per-bar; parity fix)
+- **Function: SECTION 8.8 DOTS POSITIONS & ALERTS [8927–9057]** — `ManageDotsPositions`
+  (@8929) is the DOTS SL manager. It currently reads the LIVE TICK (`RefreshRates();`
+  `favourable=(Bid-entry)/Point` for long / `(entry-Ask)/Point` for short, @8961–8964) and
+  repositions the SL — arm @8971–8976, LeapFrog trail @8988–9008 — on EVERY tick. Change it to
+  reposition ONLY on a new bar, computing favourable / tiers / arm / trail off the CLOSED bar's
+  `High[1]/Low[1]` — NOT Bid/Ask, NOT Close.
+- **Call site / gate: SECTION 1.2 MAIN LOOP (OnTick @1123)** — the call `if(UseDots)`
+  `ManageDotsPositions();` sits at @1380, at OnTick's TOP LEVEL, OUTSIDE the `if(isNewBar)`
+  block (@1157). Gate the reposition logic to new-bar detection so it runs ONCE per closed bar
+  (move the call inside the isNewBar block, or gate internally on a `Time[0]!=dotsLastBar` guard).
+- **Per-bar sequence (in ManageDotsPositions, per open position):** (1) exit-check vs current SL
+  -> (2) update tiers off closed-bar high/low -> (3) arm/lock BE -> (4) trail. Reproduces
+  portfolio_simulation_engine.py.
+- **UNTOUCHED:** the BROKER's hard SL (still executes intrabar on any tick — downside protection
+  is always live per-tick), LOCK_FRAC / BE_TRIG_FRAC, and the SL / step / BE / tier / trail
+  arithmetic. Change (e) alters WHEN the EA repositions the SL, not the values it computes.
+
 ---
 
 ## 3. SACRED — DO NOT MODIFY (behavior-changing edits INVALID without human sign-off)
@@ -139,7 +157,7 @@ SECTION 11    [11500 – 11673] THE SHUTDOWN ROUTINE (STATEFUL)
 - **Locked tunables (SECTION 2.0):** Dots_RollingBufferSize = 2500,
   Dots_InitBars = 6900, and the S.7 trade-management constants.
 
-The four changes are additive and bounded. They do not touch the calculation
+The five changes are additive and bounded. They do not touch the calculation
 memory chain, the threshold oracle, the KAMA persistence, or the export schema.
 
 ---
@@ -161,4 +179,6 @@ Eval_Dots_Signals          @4805    << F1 latch write + lagged fire; signal disp
 (SECTION 8.6 Dots entry)   ~8771    << capture entryLogReturn + set leapFrogLag
 (SECTION 3.0 state)        ~1781    << g_dots_live_lots counter (live-risk jar)
 (SECTION 8.6 Dots admit)   ~8771    << jar admission (live_lots < 6) + increment
+ManageDotsPositions        @8929    << change (e): per-tick -> per-bar SL reposition (closed-bar H/L)
+(OnTick Dots mgmt call)    ~1380    << change (e): gate to new-bar (currently every tick)
 ```

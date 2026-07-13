@@ -14,12 +14,14 @@
            non_negotiables_developer.txt        (coding laws)
            non_negotiables_supervisor.txt       (architectural laws + audit rules)
 
-  SCOPE — EXACTLY FOUR CHANGES, NOTHING MORE:
+  SCOPE — EXACTLY FIVE CHANGES, NOTHING MORE:
     (a) Momentum-conditional runner in the LeapFrog trail (runner trail only).
     (b) Sequential-latch subsystem for the 2 F1 signals (bounded state add).
     (c) Replace the current signal set with the BOOK-50 50-signal panel.
     (d) Replace the MAX_POSITIONS=6 count cap with the 6-LOT LIVE-RISK JAR
         (ratified S.7 change; human authorization GRANTED).
+    (e) Revert DOTS trade management from PER-TICK to PER-BAR SL repositioning
+        (ratified S.7 execution-model change; human authorization GRANTED).
 
   Every change goes through the full pipeline: Developer -> Supervisor ->
   Auditor -> human confirm, with a MetaEditor 0/0 compile at each deliverable.
@@ -36,8 +38,9 @@
     - Dots_RollingBufferSize = 2500, Dots_InitBars = 6900 (locked depth tunables).
     - S.7 trade-management constants (SPREAD 3.0, RISK_MULT 2.0, MAX_RISK 150.0,
       STEP_PCT 0.30). BE nudge = +1 step. Tier-3 LeapFrog activate. The S.7 SL / BE /
-      tier / runner base is UNTOUCHED; MAX_POSITIONS=6 is the ONE authorized S.7 change,
-      REPLACED by the 6-lot live-risk jar (change d).
+      tier / runner base is UNTOUCHED. TWO authorized S.7 changes only: MAX_POSITIONS=6 is
+      REPLACED by the 6-lot live-risk jar (change d); PER-TICK SL repositioning is REVERTED to
+      PER-BAR (change e). No other S.7 element changes.
     - ResizeAndSmartShift as sole shift authority; sacred calculation pass order.
   ────────────────────────────────────────────────────────────────────────────
 
@@ -202,29 +205,62 @@
   eligibility — all remain S.7. The jar changes ADMISSION only, keyed on live-lot count.
 
 ================================================================================
- PHASE 5 — VERIFICATION (before any deconstruction)
+ PHASE 5 — PER-BAR EXECUTION MODEL (change e)
 ================================================================================
 
-  Step 20. MetaEditor compile: 0 errors / 0 warnings.
-  Step 21. Run DOT_post_update_checklist.txt in full — every item PASS.
-  Step 22. Strategy Tester alignment: reproduce the reference RUN numbers under the
+  Revert the DOTS SL-management path from PER-TICK to PER-BAR so live == the validated
+  per-bar book. The EA currently repositions the SL on live ticks; it must reposition ONLY
+  on a NEW BAR, off the CLOSED bar's High/Low, reproducing portfolio_simulation_engine.py.
+
+  Step 20. GATE TO NEW-BAR (SECTION 8.6 / 8.1, ManageDotsPositions path). Wrap the SL
+           reposition logic (arm / tier / trail) behind new-bar detection so it runs ONCE
+           per closed bar, not on every tick. Do NOT gate the broker SL — the hard SL stays
+           live and executes intrabar on any tick (downside protection is always per-tick).
+  Step 21. USE CLOSED-BAR EXTREMES. Compute favourable-move / tier count / arm / trail off
+           the CLOSED bar's High/Low (High[1]/Low[1]), NOT the live Bid tick and NOT Close.
+           Long: favourable = High[1] - entry; Short: favourable = entry - Low[1].
+  Step 22. PER-BAR SEQUENCE (exact order, matches the sim): on each new bar, per open Dots
+           position — (1) exit-check vs current SL, (2) update tiers off the closed bar
+           high/low, (3) arm/lock BE (SL -> entry ± be_lock_dist), (4) trail (tier ≥ 3 ->
+           entry ± (tiers - lag) × step). This order reproduces the validated book.
+
+  RATIONALE (why per-bar, not per-tick): with LOCK_FRAC = 1.0 the lock lands on the
+  tier-1/trigger price. Under PER-TICK the SL sits on price the instant it arms, so the next
+  adverse tick scratches it and runners collapse (387 -> 102) before they can run. PER-BAR
+  holds the armed stop through the minute's intrabar noise, letting trades reach tier 3+.
+  Per-bar IS the validated $58,685 book; per-tick diverges downward only ($33.9k worst-case).
+  This is a parity fix — the same discipline as export = live and jar-parity.
+
+  DO NOT TOUCH: LOCK_FRAC = 1.0, BE_TRIG_FRAC = 1.0, the SL/step/BE/tier/trail arithmetic,
+  or the broker's hard-SL execution. Change (e) alters WHEN the EA repositions the SL, not
+  the values it computes.
+
+================================================================================
+ PHASE 6 — VERIFICATION (before any deconstruction)
+================================================================================
+
+  Step 23. MetaEditor compile: 0 errors / 0 warnings.
+  Step 24. Run DOT_post_update_checklist.txt in full — every item PASS.
+  Step 25. Strategy Tester alignment: reproduce the reference RUN numbers under the
            jar (WR 91.9%, PF 5.83, net $58,685 @1lot, worst-day −$127.5, 6/6 folds,
            22/22 weeks, OOS PF 6.57) within tolerance. Confirm both F1 signals fire, the
-           momentum-runner lag switches on v ≥ 0.00012, and the live-lot jar never exceeds
-           6 (BE frees a lot; +74 trades vs the old count cap).
-  Step 23. A2.7 DIRECTIVE RECONCILIATION: verify the COMPLETE system still
+           momentum-runner lag switches on v ≥ 0.00012, the live-lot jar never exceeds
+           6 (BE frees a lot; +74 trades vs the old count cap), and per-bar management
+           reproduces portfolio_simulation_engine.py trade-for-trade on a parity run.
+  Step 26. A2.7 DIRECTIVE RECONCILIATION: verify the COMPLETE system still
            satisfies completeness (8/8 structures present), adaptivity (all
-           thresholds through the oracle), parity (export = live), and
-           consistency (sacred layer untouched; jar bounds live risk at 6 lots) — not merely
-           that the 4 changes were executed.
+           thresholds through the oracle), parity (export = live; per-bar management ==
+           the sim), and consistency (sacred layer untouched; jar bounds live risk at 6
+           lots) — not merely that the 5 changes were executed.
 
   ONLY AFTER all of the above pass does any old-code removal proceed
   (build-first, deconstruct-second — see DOT_linear_development_schedule.txt).
 
 
-  NET EFFECT: four bounded changes. The runner touches one arithmetic line in
+  NET EFFECT: five bounded changes. The runner touches one arithmetic line in
   the trail; the F1 subsystem adds two 16-slot boolean buffers + lagged lookups
-  on already-computed conditions; the signal set becomes the validated 50; and the
-  live-risk jar replaces the count cap with a single live-lot counter that BE frees.
-  The heavy machinery (adaptive calibration, KAMA warm-start, export, thresholds,
-  memory chain) is sacred and untouched.
+  on already-computed conditions; the signal set becomes the validated 50; the
+  live-risk jar replaces the count cap with a single live-lot counter that BE frees;
+  and the SL-management path is gated to new-bar (per-bar reposition off closed-bar
+  extremes), reproducing the sim. The heavy machinery (adaptive calibration, KAMA
+  warm-start, export, thresholds, memory chain) is sacred and untouched.

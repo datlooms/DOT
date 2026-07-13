@@ -171,6 +171,21 @@ one lot. (An earlier era used 100×; every figure here is the corrected 1×.)
        admission diverges from the EA's live-lot logic, the backtest is invalid. Expect
        2,409 tr under RUN (+74 vs the old count cap) at a hard bound of 6 live lots.
 
+  4.8  EXECUTION-MODEL PARITY (per-bar SL management — the third parity leg). The sim
+       repositions the SL only at bar boundaries, off the CLOSED bar's High/Low. The live EA
+       must do the SAME: reposition the SL ONLY on a new bar, off the closed bar's High/Low
+       (NOT the live Bid tick, NOT the Close). The broker still holds a hard SL that executes
+       intrabar on any tick (downside protection is always live per-tick); only the EA's
+       REPOSITIONING is per-bar. Per-bar sequence per open position each new bar: (1) exit-check
+       vs current SL, (2) tiers off closed-bar high/low, (3) arm/lock BE, (4) trail. LIVE
+       PER-BAR MANAGEMENT == THE PER-BAR SIM (the $58,685 RUN book). PER-TICK management diverges
+       DOWNWARD into an unvalidated bracket: with LOCK_FRAC=1.0 the lock sits on the tier-1/
+       trigger price, so per-tick the SL arms onto current price and the next adverse tick
+       scratches it — runners collapse (387 -> 102) and net falls toward a ~$33.9k worst-case
+       vs the $58.7k per-bar book. This is a parity requirement of the same class as export=live
+       (thresholds) and jar-parity (admission): if the EA repositions per-tick, live != the
+       validated book. Only tick-level data / a demo can locate live inside that bracket.
+
   LABELLING: per-signal numbers are STANDALONE (that signal alone; F0 ->
   signal_full_records.csv, F1 -> signal_full_records_F1.csv). Book numbers are
   IN-BOOK PORTFOLIO. Never mix the two.
