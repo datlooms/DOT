@@ -1,0 +1,197 @@
+================================================================================
+  equiDOT BOOK-50 — BACKTEST & VALIDATION GUIDE
+  How to run the validated pipeline and reproduce the BOOK-50 findings
+================================================================================
+
+SYSTEM ROLE: You are a quantitative researcher reproducing and validating the
+equiDOT convergence-signal family on the sealed US30.cash 1-minute dataset. The
+rules, thresholds, and exit mechanics are FIXED. Your job is to execute the
+simulation and selection EXACTLY as specified and report results honestly, at
+true scale. You have zero discretion to modify rules, thresholds, exits, or the
+simulation logic.
+
+ARCHITECTURE: 50 signals — 48 F0 same-bar triple-convergence + 2 F1 sequential
+structure-fills. All 50 use the SAME universal exit (S.7 dynamic SL + optional
+momentum-runner). Entry requires ≥2 signals concurrent, OR a solo signal with
+Volume ≥ 300 ticks (unconfirmed solos are blocked). Eligibility: ADX ≥ 15 AND
+Volume > 50. Every signal is D2D-direction-gated. The only exits are: initial SL,
+BE-nudge SL, LeapFrog trailing SL, and Friday 16:45 EST forced close.
+
+SCALE: TRUE FTMO US30.cash $1 per point per 1.0 lot. One point = one dollar at
+one lot. (An earlier era used 100×; every figure here is the corrected 1×.)
+
+
+═══════════════════════════════════════════════════════════════════════
+ 0. THE SEALED DATASET (never look ahead of it)
+═══════════════════════════════════════════════════════════════════════
+  File: equiDOT_recon171_step7_part1..8.csv  (152,983 rows × 171 columns)
+  Range: 2026.01.19 – 2026.06.25. Warmup floor: 6,900 bars.
+  Contains a real March US-Iran-war crash (~−10%) — the only bear regime.
+  Reconstructed by core.py, Auditor-ratified, parity 88/88 at 6 decimals.
+  This is the dataset all discovery and selection runs on. No EA changes while
+  discovery runs on a sealed baseline.
+
+
+═══════════════════════════════════════════════════════════════════════
+ 1. THE RATIFIED TOOLS (import; never reconstruct)
+═══════════════════════════════════════════════════════════════════════
+  portfolio_simulation_engine.py  — the SOLE ratified trade path (S.7). Exposes
+      run_portfolio(); condition_mask(df, feat, thresh, adaptive, structural);
+      build_signal_masks (ANDs the 3 conditions + D2D gate); load_sealed_baseline;
+      warmup_floor (= 6900). Signal scoring must be bit-for-bit through this path.
+  dots_thresholds.py  — the threshold ORACLE (SACRED, sha 518862bf…). Mechanism D
+      (rolling-2500 floor-index percentile, day-refreshed, hi=p80/lo=p20) +
+      structural (VWAP_Z ±2, OR_Position .80/.20). compute_adaptive_thresholds();
+      compute_structural_gates(). ALL threshold reproduction routes through it.
+  wf.py  — walk-forward: 6 monthly folds [Jan(19-31), Feb, Mar, Apr, May,
+      Jun(1-25)]. pf_from_pnls(); fold_metrics(); FOLDS. Survival-first scoring.
+  sequential_temporal.py  — the ratified F1 mask builder: pair_mask, lag_shift,
+      anchor_array. F1 seq = lag_shift(a, k) & b & lag_shift(anchor, k), anchor =
+      ST_Flip. REUSE it exactly as the F0 path reuses condition_mask.
+  analysis_engine.py + run_full_analysis.py  — F0 full-field pre-scoring engine.
+  Momentum-runner (validated TM upgrade): v = Micro_LogReturn × direction; if
+      v ≥ 0.00012 LeapFrog lag = 3 else 2 (runner trail ONLY; no look-ahead).
+
+
+═══════════════════════════════════════════════════════════════════════
+ 2. STAGE-8 DISCOVERY (how the field is generated)
+═══════════════════════════════════════════════════════════════════════
+  2.1  F0 (same-bar triples): scan the vocabulary through the oracle. Each
+       candidate = 3 conditions (variable + hi/lo adaptive extreme or state
+       equality) + direction, D2D-gated. run_full_analysis.py scores every
+       candidate through engine.run_portfolio (S.7) and wf, producing the
+       68-column per-signal record + per-day P&L vectors.
+       GATE: trades ≥ 30 AND agg_pf ≥ 2.0 AND folds_plus ≥ 4.
+       Output: signal_full_records.csv (gated F0 survivors),
+               signal_per_day_pnl.jsonl (per-signal per-day P&L vectors).
+  2.2  F1 (sequential pairs): anchor = ST_Flip, lags 1–15. Build each candidate's
+       seq mask via sequential_temporal, score through the SAME engine + wf, SAME
+       gate. Output: signal_full_records_F1.csv, signal_per_day_pnl_F1.jsonl.
+       (Verify the F1 mask round-trips: rebuild a known signal_def and match its
+       ratified trades/WR/PF exactly before trusting the field.)
+
+  DISCIPLINE: causal thresholds only (rolling-2500, day-refreshed) — no full-
+  sample percentiles. No MT4 floating-window math in exported paths. The F1 lag
+  uses only past information (leg A + anchor from k bars ago, leg B now).
+
+
+═══════════════════════════════════════════════════════════════════════
+ 3. THE ANTI-CURVE-FIT SELECTION (the method — reproduce it exactly)
+═══════════════════════════════════════════════════════════════════════
+  This is how BOOK-50 was selected from the gated field. Do not substitute a
+  different procedure; the discipline IS the product.
+
+  3.1  PERSISTENCE AT THREE SCALES. Require, simultaneously: 6/6 monthly folds
+       positive, high ISO-week positivity, and all-weekday coverage. The ≥30-trade
+       floor bars small-sample flukes. A signal that clears only one scale is not
+       persistent.
+
+  3.2  LOSS-DECORRELATION SELECTION (the core method — NOT return correlation,
+       NOT in-sample PF). Build per-day loss vectors. Greedily add the signal
+       whose addition keeps the book's worst-day highest — i.e. whose losing days
+       are most INDEPENDENT of the book so far. This rewards independence, not
+       sample-fit, and cannot be gamed by memorizing the sample.
+       SANITY: a naive union of all persistent signals collapses to PF ~1.9;
+       the loss-decorrelated book holds above 5. The edge lives in the
+       independence, not the count.
+
+  3.3  OUT-OF-SAMPLE GATE. Select on Jan–Apr; measure on unseen May–Jun. A
+       curve-fit book collapses OOS; a real one holds or strengthens. The core
+       books strengthen OOS (diamond 5.54; BOOK-40 6.54; BOOK-48 6.65). Treat OOS
+       as one input, not the sole gate — but a book that fails OOS is rejected.
+
+  3.4  LEAVE-ONE-OUT TRIM (fight overfitting actively). For each signal in a
+       widened book, remove it and re-measure the BOOK (not standalone). Cut the
+       signals whose removal RAISES book PF/OOS-PF — the loss-correlated dead
+       weight — even when their standalone PF is high. PROTECT disproportionate
+       bear-fold contributors. This is how BOOK-58 -> BOOK-48 recovered quality.
+
+  3.5  NULL-HONORING. Test against circular-shift / permutation nulls and honor
+       the result. Depth failed its null (pure-depth PF ~1.1; depth-without-
+       triples PF < 1) — excluded. The flip-trajectory model scored AUC 0.492
+       (below chance) — killed. Report your own nulls; a process that hides them
+       is manufacturing signal.
+
+  3.6  STRUCTURE COVERAGE (last, and only if it doesn't compromise the above).
+       Classify signals into the 8 DOTS structures. If a structure is missing,
+       fill it ONLY with a signal that clears persistence + clean decorrelation +
+       holds the book worst-day. The 2 F1 fills (SQUEEZE_BREAKOUT, TREND_
+       EXHAUSTION) each hold 6/6, high-weekly, streak ≤ 1, and the −$127.5
+       worst-day. Do not force a structure with a signal that stacks losses.
+
+  3.7  NULL / SHUFFLE TEST (run on the FINISHED book — the luck / curve-fit detector).
+       Break the signal->outcome link three ways, keeping the EXACT trade management
+       and trade count, 200+ iterations each, to build a null distribution:
+         (i)   direction-shuffle — real entry bars, randomize each trade's long/short.
+         (ii)  random-timing — enter on random eligible bars (same D2D gate, same
+               count) instead of real signal bars. This is the TM-ALONE test.
+         (iii) fully random — random bars AND random direction.
+       BEYOND-NULL-MAX LOGIC: a real edge sits beyond the MAXIMUM of every null (not
+       one random arrangement out of hundreds matches it); a fit / lucky book sits
+       INSIDE the null cloud. SIGNAL-vs-TM ATTRIBUTION: if random-timing through the
+       real TM already makes the money, the TM is the edge (bad); if random entries
+       lose or break even and only the real signals win, the SIGNAL is the edge (good).
+       BOOK-50: beyond the max of all three nulls (0/200), ~16σ above the
+       direction-shuffle mean and ~35σ above the random means, p < 0.005; TM-alone
+       LOST money (net −$678, PF 0.97) — the signal is the edge, not the TM. Treat any
+       book that does not clear this as a fit until proven otherwise.
+
+
+═══════════════════════════════════════════════════════════════════════
+ 4. RUNNING A BACKTEST (reproduce the BOOK-50 numbers)
+═══════════════════════════════════════════════════════════════════════
+  4.1  Load the sealed baseline; compute adaptive + structural thresholds via the
+       oracle; get the warmup floor (6900).
+  4.2  Build each signal's entry mask:
+         F0: AND the 3 condition_mask() results, then AND the D2D direction gate.
+         F1: sequential_temporal.pair_mask(a, b, k, anchor) [anchor = ST_Flip],
+             then AND the D2D direction gate.
+  4.3  Score the full 50-signal book through the ratified trade path across the
+       6 wf folds (entries restricted per fold-month; exits run to completion).
+       Aggregate per-day P&L, then to folds / ISO-weeks / weekdays.
+  4.4  TWO TM MODES:
+         S.7 base  — the ratified figure (jar). Expect 2,416 tr / PF 5.66 /
+                     net $56,663 / worst-day −$127.5 / OOS PF 5.96.
+         RUN       — S.7 + momentum-runner (lag switch on v ≥ 0.00012), jar. Expect
+                     2,409 tr / PF 5.83 / net $58,685 / worst-day −$127.5 / OOS PF 6.57.
+  4.5  CONFIRM (RUN): 2,409 tr, WR 91.9%, 6/6 folds, 22/22 ISO-weeks, 5/5 weekdays,
+       min-fold PF 5.01, March bear PF 5.47 / net $14,500, OOS WR 92.2%,
+       OOS net $18,926, max-DD −$165.6. Structure coverage 8/8.
+  4.6  SURVIVAL: worst-day −$127.5 is 19× inside the −$2,500 daily gate; max-DD
+       −$165.6 is 60× inside the −$10,000 total-DD gate. Survival-first: the
+       worst-day gate is evaluated before any profitability metric.
+
+  4.7  LIVE-RISK JAR (concurrency — model it EXACTLY as the EA runs it). Admission is
+       governed by a 6-lot live-risk jar, NOT a position-count cap. In the sim, track a
+       running live-lot counter: +1 when a position opens; −1 at the exact bar it reaches
+       break-even (SL moved to entry±step — the winner's lot leaves the jar); −1 on a
+       still-live exit (a post-BE close was already freed, no double); admit a new signal
+       ONLY when live lots < 6. This MUST match the EA bit-for-bit — a JAR-PARITY
+       requirement, the same discipline as export=live is for thresholds: if the sim's
+       admission diverges from the EA's live-lot logic, the backtest is invalid. Expect
+       2,409 tr under RUN (+74 vs the old count cap) at a hard bound of 6 live lots.
+
+  LABELLING: per-signal numbers are STANDALONE (that signal alone; F0 ->
+  signal_full_records.csv, F1 -> signal_full_records_F1.csv). Book numbers are
+  IN-BOOK PORTFOLIO. Never mix the two.
+
+
+═══════════════════════════════════════════════════════════════════════
+ 5. TIC-PROOF STANDARDS (do not skip)
+═══════════════════════════════════════════════════════════════════════
+  - Never conclude on first findings. Cross-validate every key result across the
+    OOS plateau, all folds, and ±20% perturbation before accepting it.
+  - Believe the engine, not a proxy or a correlation. engine.run_portfolio is the
+    sole ratified trade path; no alternate simulation pipelines.
+  - Every cited number self-computed from source; verify byte-identity where it
+    matters; do not trust upstream claims.
+  - A weak or negative result is a map, not a verdict. It redirects a line of
+    inquiry; it does not close the project. Re-derive from the data; do not
+    inherit a prior instance's framing.
+  - Reproduce, don't reinvent. If a run would exceed ~30 searches/steps of scope,
+    checkpoint (atomic os.replace + .done marker) and resume; use spawn-forced
+    multiprocessing for parallel scoring.
+
+  A reproduced result that clears persistence-at-three-scales, loss-decorrelation,
+  OOS, leave-one-out, and null-honoring is what "validated" means here. BOOK-50
+  clears all five. The live FTMO demo is the final test the backtest cannot run.

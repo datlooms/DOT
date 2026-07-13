@@ -1,0 +1,503 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  DOT50 — DIRECTIONAL OBSERVATION TRIGGER SYSTEM                            ║
+║  MASTER SPECIFICATION — BOOK-50  [v1 / FINAL — 8/8 STRUCTURE COVERAGE]     ║
+║                                                                            ║
+║  Instrument:  US30.cash (Dow Jones) 1-minute bars                          ║
+║  Account:     FTMO $100K swing   |   Scale: TRUE $1 per point per 1.0 lot  ║
+║  Signals:     50 = 48 F0 same-bar triples + 2 F1 sequential fills (37L/13S)║
+║  Gate:        ≥2 concurrent qualifying OR solo + Volume ≥ 300 ticks        ║
+║  Eligibility: ADX_Value ≥ 15 AND Volume > 50                               ║
+║  Thresholds:  ADAPTIVE rolling-2500 pctile (hi=p80/lo=p20), day-refreshed; ║
+║               + structural (VWAP_Z ±2, OR_Position .80/.20)                ║
+║  Init: 6,900 bars | Buffer: 2,500 | Live-risk jar: 6 lots | Spread: 3.0    ║
+║  D2D Filter:  ALL signals require D2D_Trend_Dir confirmation               ║
+║                                                                            ║
+║  EXIT: S.7 DYNAMIC SL + MOMENTUM-RUNNER upgrade (runner trail only)        ║
+║    SL min(ATR×2,150) | BE +1 step | LeapFrog 0.30×risk activate tier 3     ║
+║    RUN: lag=3 if (Micro_LogReturn×dir ≥ 0.00012) else 2 | Fri 16:45 close  ║
+║                                                                            ║
+║  BACKTEST — IN-BOOK PORTFOLIO (50 together, ~105 days, Jan19-Jun25):       ║
+║    RUN: 2409 tr | WR 91.9% | PF 5.83 | net $58,685                         ║
+║    S.7: 2416 tr | WR 91.9% | PF 5.66 | net $56,663 (ratified base)         ║
+║    Worst day -$127.5 (19× inside gate) | Max-DD -$165.6 (60× inside)       ║
+║    6/6 folds | 22/22 ISO-weeks | 5/5 weekdays | min-fold PF 5.01           ║
+║    March BEAR (US-Iran war ~-10%): PF 5.47 / net $14,500                   ║
+║    OOS (May-Jun) RUN: PF 6.57 | WR 92.2% | net $18,926                     ║
+║    OOS S.7: PF 5.96    |    Structure coverage: 8/8 (no absent modes)      ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+  LINEAGE
+══════════════════════════════════════════════════════════════════════════════
+  diamond-35 -> +5 F0 co-firers (40) -> +18 F0 structure fillers (58)
+  -> leave-one-out trim to 48 -> +2 F1 sequential structure-fills -> BOOK-50 (8/8).
+
+  MOMENTUM-CONDITIONAL RUNNER  [VALIDATED RESEARCH — PENDING EA IMPLEMENTATION]
+══════════════════════════════════════════════════════════════════════════════
+  Scope: LeapFrog runner trail ONLY. SL/BE/tier/Friday/entries = S.7. No look-ahead.
+  Input: Micro_LogReturn (EA-computed), directional v = value * direction.
+  Rule:  at entry, if v >= 0.00012 -> LeapFrog lag = 3 ; else lag = 2.
+  Effect (BOOK-50, jar, S.7 -> RUN): PF 5.66 -> 5.83 | net $56,663 -> $58,685 | OOS PF 5.96 -> 6.57
+
+  LABELLING RULE
+══════════════════════════════════════════════════════════════════════════════
+  Per-signal stats are STANDALONE (F0: signal_full_records.csv; F1: signal_full_records_F1.csv).
+  Banner backtest is IN-BOOK PORTFOLIO. Never mix.
+
+  UNIVERSAL EXIT / ENTRY SPECIFICATION — ALL 50 SIGNALS
+══════════════════════════════════════════════════════════════════════════════
+  0. ENTRY GATE: ≥2 qualify → any may enter; 1 & Vol≥300 → solo; 1 & Vol<300 → blocked
+  0A. ELIGIBILITY: ADX_Value ≥ 15 AND Volume > 50
+  0B. D2D: LONG D2D_Trend_Dir==+1 ; SHORT D2D_Trend_Dir==-1
+  0C. CONCURRENCY — 6-LOT LIVE-RISK JAR (replaces the MAX_POSITIONS=6 count cap):
+      The jar holds 6 lots of LIVE (pre-break-even) risk. Each trade = 1 lot = 1 jar slot.
+      A new signal opens (1 lot) ONLY when live lots < 6 (room in the jar); else it is skipped.
+      When a position reaches BREAK-EVEN (step 3, SL at/above entry -> can no longer lose), its
+      1 lot LEAVES the jar and frees a slot. No fractional sizing. Hard bound = 6 LIVE lots, never
+      exceeded (worst-case correlated stop-out = 6 lots x SL; at $150 max-SL = -$900, inside the
+      -$2,500 FTMO daily gate). Counts RISK, not bodies: break-even'd winners no longer block new
+      entries, so more trades are admitted over the session at the identical hard bound.
+  1. SL: initial_risk=MathMin(ATR_1M×2.0,150.0); SL=entry±risk
+  2. STEP 0.30×risk  3. BE: profit≥1×step → SL=entry±step (printed only)
+  4. TIERS: entry±N×step → TiersReached=N  5. LEAPFROG Tiers≥3 → SL=entry±(Tiers-lag)×step
+     lag=3 if Micro_LogReturn×dir≥0.00012 else 2   6. FRIDAY 16:45 EST close ALL
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  PART I — THE 48 F0 SAME-BAR TRIPLE-CONVERGENCE SIGNALS                    ║
+║  (three conditions AND-ed on the same bar; stateless one-bar check)        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+  ■ TREND_CONTINUATION — Riding a persistent established trend (buy the pullback / sell the rally)  (15 F0 signals)
+  ──────────────────────────────────────────────────────────────────────────
+  SIGNAL 30/50 [F0] | LONG | TC_SlpEMA_L | TREND_CONTINUATION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: Slope_EMA_ST < -0.000000  [ADAPTIVE]
+    CondB: Micro_HLAsymmetry > 14.000000  [ADAPTIVE]
+    CondC: Micro_Rejection < -0.281200  [ADAPTIVE]
+    STANDALONE: Trades 35 | WR 97.1% | PF 22.68 | Avg +32.2 | Total +1127.5 | Folds 6/6
+      Exits SL 1/BE 29/LF 5/FC 0 | ISO-wks 13/13+ | worst-wk 19.0 | streak 1
+
+  SIGNAL 31/50 [F0] | LONG | TC_SlpEMA_L | TREND_CONTINUATION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: Slope_EMA_ST < -0.000000  [ADAPTIVE]
+    CondB: Micro_HLAsymmetry > 14.000000  [ADAPTIVE]
+    CondC: Micro_OrderFlowDelta < -81.370400  [ADAPTIVE]
+    STANDALONE: Trades 32 | WR 96.9% | PF 17.52 | Avg +26.8 | Total +858.9 | Folds 6/6
+      Exits SL 1/BE 26/LF 5/FC 0 | ISO-wks 13/13+ | worst-wk 9.9 | streak 1
+
+  SIGNAL 32/50 [F0] | LONG | TC_SlpEMA_L | TREND_CONTINUATION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: Slope_EMA_ST < -0.000000  [ADAPTIVE]
+    CondB: Micro_RangeVelocity > 6.000000  [ADAPTIVE]
+    CondC: D2D_DirStep == -1  [STATE]
+    STANDALONE: Trades 33 | WR 97.0% | PF 14.69 | Avg +38.9 | Total +1282.7 | Folds 6/6
+      Exits SL 1/BE 26/LF 6/FC 0 | ISO-wks 15/16+ | worst-wk -93.7 | streak 1
+
+  SIGNAL 33/50 [F0] | LONG | TC_SlopeAc_L | TREND_CONTINUATION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: Slope_Accel_LT > 0.000000  [ADAPTIVE]
+    CondB: Sqz_State == 1  [STATE]
+    CondC: RangeOsc_State == -2  [STATE]
+    STANDALONE: Trades 35 | WR 97.1% | PF 12.46 | Avg +26.3 | Total +919.4 | Folds 6/6
+      Exits SL 1/BE 29/LF 5/FC 0 | ISO-wks 13/13+ | worst-wk 21.7 | streak 1
+
+  SIGNAL 34/50 [F0] | LONG | TC_SlpEMA_L | TREND_CONTINUATION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: Slope_EMA_ST > 0.000000  [ADAPTIVE]
+    CondB: Micro_Rejection < -0.281200  [ADAPTIVE]
+    CondC: Session_Low_Dist_ATR < 3.275600  [ADAPTIVE]
+    STANDALONE: Trades 51 | WR 94.1% | PF 9.34 | Avg +35.2 | Total +1793.6 | Folds 6/6
+      Exits SL 3/BE 41/LF 7/FC 0 | ISO-wks 15/16+ | worst-wk -48.9 | streak 1
+
+  SIGNAL 35/50 [F0] | LONG | TC_SlopeAc_L | TREND_CONTINUATION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: Slope_Accel_LT > 0.000000  [ADAPTIVE]
+    CondB: Micro_TickIntensity > 12.588200  [ADAPTIVE]
+    CondC: PrevDay_Low_Side == -1  [STATE]
+    STANDALONE: Trades 48 | WR 91.7% | PF 8.28 | Avg +32.8 | Total +1576.3 | Folds 6/6
+      Exits SL 4/BE 30/LF 14/FC 0 | ISO-wks 11/11+ | worst-wk 15.8 | streak 1
+
+  SIGNAL 36/50 [F0] | LONG | TC_ATSlp_L | TREND_CONTINUATION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: AT_Slope_ST < -0.000100  [ADAPTIVE]
+    CondB: Micro_AutoCorr > 0.160700  [ADAPTIVE]
+    CondC: D2D_DirStep == 1  [STATE]
+    STANDALONE: Trades 30 | WR 93.3% | PF 7.61 | Avg +37.2 | Total +1114.8 | Folds 6/6
+      Exits SL 2/BE 21/LF 7/FC 0 | ISO-wks 13/14+ | worst-wk -119.0 | streak 1
+
+  SIGNAL 37/50 [F0] | LONG | TC_ATSlp_L | TREND_CONTINUATION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: AT_Slope_ST < -0.000100  [ADAPTIVE]
+    CondB: Momentum_Value > 100.069500  [ADAPTIVE]
+    CondC: AT_Regime_ST == 1  [STATE]
+    STANDALONE: Trades 31 | WR 90.3% | PF 6.67 | Avg +33.3 | Total +1032.3 | Folds 6/6
+      Exits SL 3/BE 20/LF 8/FC 0 | ISO-wks 13/13+ | worst-wk 22.3 | streak 1
+
+  SIGNAL 38/50 [F0] | LONG | TC_ATSlp_L | TREND_CONTINUATION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: AT_Slope_ST < -0.000100  [ADAPTIVE]
+    CondB: Micro_RollProxy > 49.500000  [ADAPTIVE]
+    CondC: RangeOsc_State == -1  [STATE]
+    STANDALONE: Trades 33 | WR 90.9% | PF 4.87 | Avg +26.3 | Total +866.9 | Folds 6/6
+      Exits SL 3/BE 25/LF 5/FC 0 | ISO-wks 12/13+ | worst-wk -96.7 | streak 2
+
+  SIGNAL 39/50 [F0] | LONG | TC_ATSlp_L | TREND_CONTINUATION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: AT_Slope_ST < -0.000100  [ADAPTIVE]
+    CondB: Micro_VolOfVol > 0.450000  [ADAPTIVE]
+    CondC: Volume > 237.000000  [ADAPTIVE]
+    STANDALONE: Trades 41 | WR 92.7% | PF 3.96 | Avg +23.7 | Total +970.1 | Folds 6/6
+      Exits SL 3/BE 32/LF 6/FC 0 | ISO-wks 11/12+ | worst-wk -31.8 | streak 1
+
+  SIGNAL 40/50 [F0] | SHORT | TC_SlopeAc_S | TREND_CONTINUATION
+    ENTRY (all simultaneously): D2D_Trend_Dir == -1
+    CondA: Slope_Accel_LT < 0.000000  [ADAPTIVE]
+    CondB: Sqz_Val > 20.517100  [ADAPTIVE]
+    CondC: Micro_CSSpread < 0.689400  [ADAPTIVE]
+    STANDALONE: Trades 30 | WR 100.0% | PF 999.0 | Avg +22.1 | Total +663.8 | Folds 6/6
+      Exits SL 0/BE 23/LF 7/FC 0 | ISO-wks 12/12+ | worst-wk 11.7 | streak 0
+
+  SIGNAL 41/50 [F0] | SHORT | TC_SlopeAc_S | TREND_CONTINUATION
+    ENTRY (all simultaneously): D2D_Trend_Dir == -1
+    CondA: Slope_Accel_LT < 0.000000  [ADAPTIVE]
+    CondB: Micro_OrderFlowDelta > 82.890900  [ADAPTIVE]
+    CondC: PoC_Side == 0  [STATE]
+    STANDALONE: Trades 35 | WR 94.3% | PF 8.30 | Avg +22.9 | Total +802.8 | Folds 6/6
+      Exits SL 2/BE 29/LF 4/FC 0 | ISO-wks 12/12+ | worst-wk 12.6 | streak 1
+
+  SIGNAL 42/50 [F0] | SHORT | TC_ATSlp_S | TREND_CONTINUATION
+    ENTRY (all simultaneously): D2D_Trend_Dir == -1
+    CondA: AT_Slope_ST < -0.000100  [ADAPTIVE]
+    CondB: Sqz_Val > 20.517100  [ADAPTIVE]
+    CondC: Micro_CSSpread < 0.689400  [ADAPTIVE]
+    STANDALONE: Trades 34 | WR 94.1% | PF 6.08 | Avg +21.1 | Total +718.5 | Folds 6/6
+      Exits SL 2/BE 23/LF 9/FC 0 | ISO-wks 12/14+ | worst-wk -53.6 | streak 1
+
+  SIGNAL 43/50 [F0] | SHORT | TC_SlpEMA_S | TREND_CONTINUATION
+    ENTRY (all simultaneously): D2D_Trend_Dir == -1
+    CondA: Slope_EMA_ST < -0.000000  [ADAPTIVE]
+    CondB: Micro_ThrustEff > 0.339600  [ADAPTIVE]
+    CondC: ADX_Value < 18.740000  [ADAPTIVE]
+    STANDALONE: Trades 33 | WR 90.9% | PF 3.79 | Avg +15.9 | Total +523.6 | Folds 6/6
+      Exits SL 3/BE 28/LF 2/FC 0 | ISO-wks 13/13+ | worst-wk 6.8 | streak 1
+
+  SIGNAL 44/50 [F0] | SHORT | TC_ATSlp_S | TREND_CONTINUATION
+    ENTRY (all simultaneously): D2D_Trend_Dir == -1
+    CondA: AT_Slope_ST > 0.000000  [ADAPTIVE]
+    CondB: Micro_MicroGap < -1.000000  [ADAPTIVE]
+    CondC: Upper_Wick > 6.500000  [ADAPTIVE]
+    STANDALONE: Trades 32 | WR 90.6% | PF 3.47 | Avg +15.8 | Total +504.8 | Folds 6/6
+      Exits SL 2/BE 26/LF 3/FC 1 | ISO-wks 11/12+ | worst-wk -32.8 | streak 1
+
+
+  ■ MOMENTUM_IGNITION — OBV / KAMA / flow confirming a fresh momentum ignition  (14 F0 signals)
+  ──────────────────────────────────────────────────────────────────────────
+  SIGNAL 2/50 [F0] | LONG | MI_KDist_L | MOMENTUM_IGNITION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: KAMA_Dist < -31.941100  [ADAPTIVE]
+    CondB: Micro_WickImbalance > 13.450000  [ADAPTIVE]
+    CondC: OR_High_Side == -1  [STATE]
+    STANDALONE: Trades 31 | WR 100.0% | PF 999.0 | Avg +46.5 | Total +1441.0 | Folds 6/6
+      Exits SL 0/BE 25/LF 6/FC 0 | ISO-wks 10/10+ | worst-wk 15.5 | streak 0
+
+  SIGNAL 3/50 [F0] | LONG | MI_MomoTra_L | MOMENTUM_IGNITION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: Micro_MomoTransfer > 1.397600  [ADAPTIVE]
+    CondB: Micro_RangeAccel < -10.000000  [ADAPTIVE]
+    CondC: AT_Regime_LT == 1  [STATE]
+    STANDALONE: Trades 38 | WR 97.4% | PF 30.94 | Avg +46.8 | Total +1778.4 | Folds 6/6
+      Exits SL 1/BE 27/LF 10/FC 0 | ISO-wks 14/14+ | worst-wk 13.9 | streak 1
+
+  SIGNAL 4/50 [F0] | LONG | MI_KDist_L | MOMENTUM_IGNITION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: KAMA_Dist < -31.941100  [ADAPTIVE]
+    CondB: Micro_WickImbalance > 13.450000  [ADAPTIVE]
+    CondC: PrevDay_High_Side == -1  [STATE]
+    STANDALONE: Trades 31 | WR 96.8% | PF 13.67 | Avg +37.8 | Total +1171.9 | Folds 6/6
+      Exits SL 1/BE 25/LF 5/FC 0 | ISO-wks 12/13+ | worst-wk -92.5 | streak 1
+
+  SIGNAL 5/50 [F0] | LONG | MI_VPIN_L | MOMENTUM_IGNITION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: Micro_VPIN < 0.055400  [ADAPTIVE]
+    CondB: Volume > 237.000000  [ADAPTIVE]
+    CondC: ST_Flip_Event == -1  [STATE]
+    STANDALONE: Trades 32 | WR 96.9% | PF 9.39 | Avg +23.6 | Total +753.7 | Folds 6/6
+      Exits SL 1/BE 27/LF 4/FC 0 | ISO-wks 14/15+ | worst-wk -14.4 | streak 1
+
+  SIGNAL 6/50 [F0] | LONG | MI_OBVMacd_L | MOMENTUM_IGNITION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: OBV_Macd < -298.610100  [ADAPTIVE]
+    CondB: Sqz_State == 1  [STATE]
+    CondC: RangeOsc_State == -2  [STATE]
+    STANDALONE: Trades 37 | WR 94.6% | PF 8.99 | Avg +45.0 | Total +1664.6 | Folds 6/6
+      Exits SL 2/BE 29/LF 6/FC 0 | ISO-wks 14/15+ | worst-wk -25.9 | streak 1
+
+  SIGNAL 7/50 [F0] | LONG | MI_OFDelta_L | MOMENTUM_IGNITION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: Micro_OrderFlowDelta < -81.370400  [ADAPTIVE]
+    CondB: Session_Low_Dist_ATR < 3.275600  [ADAPTIVE]
+    CondC: ADX_Value > 34.380100  [ADAPTIVE]
+    STANDALONE: Trades 35 | WR 94.3% | PF 6.95 | Avg +32.1 | Total +1124.0 | Folds 6/6
+      Exits SL 2/BE 27/LF 6/FC 0 | ISO-wks 13/15+ | worst-wk -84.0 | streak 1
+
+  SIGNAL 8/50 [F0] | LONG | MI_OBVMacd_L | MOMENTUM_IGNITION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: OBV_Macd < -298.610100  [ADAPTIVE]
+    CondB: Micro_LogReturn < -0.000200  [ADAPTIVE]
+    CondC: Micro_Rejection < -0.281200  [ADAPTIVE]
+    STANDALONE: Trades 41 | WR 95.1% | PF 5.90 | Avg +30.4 | Total +1247.4 | Folds 6/6
+      Exits SL 2/BE 29/LF 10/FC 0 | ISO-wks 18/18+ | worst-wk 17.1 | streak 1
+
+  SIGNAL 9/50 [F0] | LONG | MI_OBVMacd_L | MOMENTUM_IGNITION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: OBV_Macd < -298.610100  [ADAPTIVE]
+    CondB: Micro_MicroGap > 1.000000  [ADAPTIVE]
+    CondC: Micro_RollProxy > 49.500000  [ADAPTIVE]
+    STANDALONE: Trades 41 | WR 90.2% | PF 4.91 | Avg +35.0 | Total +1433.8 | Folds 6/6
+      Exits SL 4/BE 33/LF 4/FC 0 | ISO-wks 12/14+ | worst-wk -80.4 | streak 1
+
+  SIGNAL 10/50 [F0] | LONG | MI_IBSP_L | MOMENTUM_IGNITION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: Micro_IBSP < 0.153800  [ADAPTIVE]
+    CondB: VWAP_Sigma < 45.153400  [ADAPTIVE]
+    CondC: Volume > 237.000000  [ADAPTIVE]
+    STANDALONE: Trades 35 | WR 88.6% | PF 4.74 | Avg +27.1 | Total +947.2 | Folds 6/6
+      Exits SL 4/BE 26/LF 5/FC 0 | ISO-wks 11/11+ | worst-wk 27.9 | streak 1
+
+  SIGNAL 11/50 [F0] | LONG | MI_OBVMacd_L | MOMENTUM_IGNITION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: OBV_Macd < -298.610100  [ADAPTIVE]
+    CondB: Micro_Lambda < 0.018700  [ADAPTIVE]
+    CondC: Micro_RollProxy > 49.500000  [ADAPTIVE]
+    STANDALONE: Trades 34 | WR 88.2% | PF 4.29 | Avg +25.7 | Total +873.6 | Folds 6/6
+      Exits SL 4/BE 26/LF 4/FC 0 | ISO-wks 12/15+ | worst-wk -50.4 | streak 1
+
+  SIGNAL 12/50 [F0] | SHORT | MI_OBVfDir_S | MOMENTUM_IGNITION
+    ENTRY (all simultaneously): D2D_Trend_Dir == -1
+    CondA: OBVf_DirStepCount > 14.000000  [ADAPTIVE]
+    CondB: VAL_Side == 0  [STATE]
+    CondC: WeeklyOpen_Side == -1  [STATE]
+    STANDALONE: Trades 30 | WR 93.3% | PF 7.00 | Avg +25.9 | Total +778.5 | Folds 6/6
+      Exits SL 2/BE 24/LF 4/FC 0 | ISO-wks 10/11+ | worst-wk -63.3 | streak 1
+
+  SIGNAL 13/50 [F0] | SHORT | MI_IBSP_S | MOMENTUM_IGNITION
+    ENTRY (all simultaneously): D2D_Trend_Dir == -1
+    CondA: Micro_IBSP > 0.842100  [ADAPTIVE]
+    CondB: Micro_VolAccel > 38.000000  [ADAPTIVE]
+    CondC: VWAP_Z < -2.000000  [STRUCTURAL]
+    STANDALONE: Trades 37 | WR 91.9% | PF 6.21 | Avg +22.7 | Total +838.7 | Folds 6/6
+      Exits SL 3/BE 30/LF 4/FC 0 | ISO-wks 14/15+ | worst-wk -62.2 | streak 1
+
+  SIGNAL 14/50 [F0] | SHORT | MI_EMAosc_S | MOMENTUM_IGNITION
+    ENTRY (all simultaneously): D2D_Trend_Dir == -1
+    CondA: EMA_Oscillator < -11.163800  [ADAPTIVE]
+    CondB: Micro_Hurst > 0.493900  [ADAPTIVE]
+    CondC: ADX_Value < 18.740000  [ADAPTIVE]
+    STANDALONE: Trades 58 | WR 89.7% | PF 5.21 | Avg +25.0 | Total +1447.4 | Folds 6/6
+      Exits SL 6/BE 38/LF 14/FC 0 | ISO-wks 18/19+ | worst-wk -74.5 | streak 1
+
+  SIGNAL 15/50 [F0] | SHORT | MI_EffRat_S | MOMENTUM_IGNITION
+    ENTRY (all simultaneously): D2D_Trend_Dir == -1
+    CondA: Efficiency_Ratio > 0.554400  [ADAPTIVE]
+    CondB: Micro_BarEntropy > 0.902900  [ADAPTIVE]
+    CondC: Body_Size > 14.000000  [ADAPTIVE]
+    STANDALONE: Trades 67 | WR 91.0% | PF 4.63 | Avg +28.7 | Total +1920.0 | Folds 6/6
+      Exits SL 6/BE 50/LF 11/FC 0 | ISO-wks 19/20+ | worst-wk -266.4 | streak 1
+
+
+  ■ STRUCTURAL_ENTRY — Entry off D2D structural state / value-area / level positioning  (6 F0 signals)
+  ──────────────────────────────────────────────────────────────────────────
+  SIGNAL 24/50 [F0] | LONG | SE_VWAPDis_L | STRUCTURAL_ENTRY
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: VWAP_Dist_ATR < 2.112900  [ADAPTIVE]
+    CondB: D2D_Signal == 1  [STATE]
+    CondC: VWAP_Side == 1  [STATE]
+    STANDALONE: Trades 34 | WR 97.1% | PF 25.56 | Avg +49.0 | Total +1665.3 | Folds 6/6
+      Exits SL 1/BE 25/LF 8/FC 0 | ISO-wks 17/18+ | worst-wk -38.4 | streak 1
+
+  SIGNAL 25/50 [F0] | LONG | SE_BarsSin_L | STRUCTURAL_ENTRY
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: Bars_Since_Flip > 45.000000  [ADAPTIVE]
+    CondB: PrevDay_Low_Dist_ATR < 6.244000  [ADAPTIVE]
+    CondC: OR_Low_Side == -1  [STATE]
+    STANDALONE: Trades 33 | WR 93.9% | PF 13.01 | Avg +34.1 | Total +1124.1 | Folds 6/6
+      Exits SL 2/BE 21/LF 10/FC 0 | ISO-wks 8/9+ | worst-wk -27.3 | streak 1
+
+  SIGNAL 26/50 [F0] | LONG | SE_BarsSin_L | STRUCTURAL_ENTRY
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: Bars_Since_Flip > 45.000000  [ADAPTIVE]
+    CondB: Volume_Avg_10 > 237.300000  [ADAPTIVE]
+    CondC: Session_Low_Dist_ATR < 3.275600  [ADAPTIVE]
+    STANDALONE: Trades 36 | WR 94.4% | PF 10.37 | Avg +30.6 | Total +1101.6 | Folds 6/6
+      Exits SL 2/BE 32/LF 2/FC 0 | ISO-wks 14/14+ | worst-wk 11.5 | streak 1
+
+  SIGNAL 27/50 [F0] | LONG | SE_BarsSin_L | STRUCTURAL_ENTRY
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: Bars_Since_Flip > 45.000000  [ADAPTIVE]
+    CondB: Slope_Accel_LT > 0.000000  [ADAPTIVE]
+    CondC: Micro_VPIN < 0.055400  [ADAPTIVE]
+    STANDALONE: Trades 42 | WR 92.9% | PF 7.83 | Avg +33.2 | Total +1393.3 | Folds 6/6
+      Exits SL 3/BE 29/LF 10/FC 0 | ISO-wks 11/13+ | worst-wk -86.2 | streak 1
+
+  SIGNAL 28/50 [F0] | LONG | SE_Round50_L | STRUCTURAL_ENTRY
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: Round_500_Dist_ATR < 2.750600  [ADAPTIVE]
+    CondB: DailyOpen_Side == 1  [STATE]
+    CondC: OR_Low_Side == -1  [STATE]
+    STANDALONE: Trades 50 | WR 90.0% | PF 3.90 | Avg +19.0 | Total +949.5 | Folds 6/6
+      Exits SL 5/BE 39/LF 6/FC 0 | ISO-wks 11/12+ | worst-wk -124.4 | streak 2
+
+  SIGNAL 29/50 [F0] | SHORT | SE_D2DDyna_S | STRUCTURAL_ENTRY
+    ENTRY (all simultaneously): D2D_Trend_Dir == -1
+    CondA: D2D_Dynamic_Sensitivity < 1.800000  [ADAPTIVE]
+    CondB: Upper_Wick > 6.500000  [ADAPTIVE]
+    CondC: VAH_Side == -1  [STATE]
+    STANDALONE: Trades 31 | WR 96.8% | PF 7.71 | Avg +33.1 | Total +1027.3 | Folds 6/6
+      Exits SL 1/BE 23/LF 7/FC 0 | ISO-wks 17/18+ | worst-wk -3.1 | streak 1
+
+
+  ■ BREAKOUT_EXPANSION — Range expanding, volatility released  (8 F0 signals)
+  ──────────────────────────────────────────────────────────────────────────
+  SIGNAL 16/50 [F0] | LONG | BX_BarRng_L | BREAKOUT_EXPANSION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: Bar_Range > 24.000000  [ADAPTIVE]
+    CondB: Micro_Lambda < 0.018700  [ADAPTIVE]
+    CondC: RangeOsc_State == 2  [STATE]
+    STANDALONE: Trades 75 | WR 94.7% | PF 10.09 | Avg +29.6 | Total +2217.6 | Folds 6/6
+      Exits SL 4/BE 58/LF 13/FC 0 | ISO-wks 18/21+ | worst-wk -51.1 | streak 2
+
+  SIGNAL 17/50 [F0] | LONG | BX_D2DATR_L | BREAKOUT_EXPANSION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: D2D_ATR > 23.992600  [ADAPTIVE]
+    CondB: AT_Slope_ST < -0.000100  [ADAPTIVE]
+    CondC: Bars_Since_Flip > 45.000000  [ADAPTIVE]
+    STANDALONE: Trades 32 | WR 93.8% | PF 8.38 | Avg +28.2 | Total +902.8 | Folds 6/6
+      Exits SL 2/BE 23/LF 7/FC 0 | ISO-wks 10/10+ | worst-wk 22.3 | streak 1
+
+  SIGNAL 18/50 [F0] | LONG | BX_ATLookb_L | BREAKOUT_EXPANSION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: AT_Lookback_ST > 40.000000  [ADAPTIVE]
+    CondB: AT_Slope_ST < -0.000100  [ADAPTIVE]
+    CondC: Micro_RollProxy > 49.500000  [ADAPTIVE]
+    STANDALONE: Trades 33 | WR 93.9% | PF 6.24 | Avg +27.4 | Total +904.6 | Folds 6/6
+      Exits SL 2/BE 26/LF 5/FC 0 | ISO-wks 12/13+ | worst-wk -77.0 | streak 1
+
+  SIGNAL 19/50 [F0] | LONG | BX_VolOfVo_L | BREAKOUT_EXPANSION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: Micro_VolOfVol > 0.450000  [ADAPTIVE]
+    CondB: AT_Regime_ST == 1  [STATE]
+    CondC: OR_Low_Side == -1  [STATE]
+    STANDALONE: Trades 59 | WR 93.2% | PF 5.57 | Avg +26.2 | Total +1543.1 | Folds 6/6
+      Exits SL 4/BE 48/LF 7/FC 0 | ISO-wks 14/15+ | worst-wk -10.1 | streak 1
+
+  SIGNAL 20/50 [F0] | LONG | BX_D2DATRM_L | BREAKOUT_EXPANSION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: D2D_ATR_MA > 24.158200  [ADAPTIVE]
+    CondB: AT_Slope_ST < -0.000100  [ADAPTIVE]
+    CondC: Micro_VolOfVol > 0.450000  [ADAPTIVE]
+    STANDALONE: Trades 38 | WR 92.1% | PF 3.76 | Avg +23.8 | Total +903.5 | Folds 6/6
+      Exits SL 3/BE 30/LF 5/FC 0 | ISO-wks 9/10+ | worst-wk -31.8 | streak 1
+
+  SIGNAL 21/50 [F0] | LONG | BX_BarRng_L | BREAKOUT_EXPANSION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: Bar_Range > 24.000000  [ADAPTIVE]
+    CondB: Micro_MomoTransfer > 1.397600  [ADAPTIVE]
+    CondC: Micro_TickIntensity > 12.588200  [ADAPTIVE]
+    STANDALONE: Trades 34 | WR 85.3% | PF 3.39 | Avg +17.6 | Total +598.4 | Folds 6/6
+      Exits SL 5/BE 22/LF 7/FC 0 | ISO-wks 10/13+ | worst-wk -44.3 | streak 2
+
+  SIGNAL 22/50 [F0] | LONG | BX_BarRng_L | BREAKOUT_EXPANSION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: Bar_Range > 24.000000  [ADAPTIVE]
+    CondB: OBV_Macd < -298.610100  [ADAPTIVE]
+    CondC: Micro_TickIntensity > 12.588200  [ADAPTIVE]
+    STANDALONE: Trades 46 | WR 84.8% | PF 3.02 | Avg +23.3 | Total +1069.6 | Folds 6/6
+      Exits SL 7/BE 30/LF 9/FC 0 | ISO-wks 13/15+ | worst-wk -115.8 | streak 2
+
+  SIGNAL 23/50 [F0] | SHORT | BX_ATLookb_S | BREAKOUT_EXPANSION
+    ENTRY (all simultaneously): D2D_Trend_Dir == -1
+    CondA: AT_Lookback_ST > 40.000000  [ADAPTIVE]
+    CondB: Sqz_Val > 20.517100  [ADAPTIVE]
+    CondC: Micro_TickIntensity > 12.588200  [ADAPTIVE]
+    STANDALONE: Trades 45 | WR 93.3% | PF 5.71 | Avg +17.3 | Total +779.4 | Folds 6/6
+      Exits SL 3/BE 34/LF 8/FC 0 | ISO-wks 16/18+ | worst-wk -58.8 | streak 1
+
+
+  ■ PRICE_ACTION — Wick / body / impulse micro-structure  (4 F0 signals)
+  ──────────────────────────────────────────────────────────────────────────
+  SIGNAL 45/50 [F0] | LONG | PA_Rejecti_L | PRICE_ACTION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: Micro_Rejection < -0.281200  [ADAPTIVE]
+    CondB: AT_Regime_ST == 1  [STATE]
+    CondC: PrevDay_Low_Side == -1  [STATE]
+    STANDALONE: Trades 32 | WR 90.6% | PF 15.67 | Avg +61.8 | Total +1977.4 | Folds 6/6
+      Exits SL 2/BE 21/LF 8/FC 1 | ISO-wks 11/11+ | worst-wk 14.0 | streak 1
+
+  SIGNAL 46/50 [F0] | LONG | PA_MicroGa_L | PRICE_ACTION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: Micro_MicroGap < -1.000000  [ADAPTIVE]
+    CondB: AT_Regime_ST == 1  [STATE]
+    CondC: OR_Low_Side == -1  [STATE]
+    STANDALONE: Trades 32 | WR 96.9% | PF 14.18 | Avg +24.5 | Total +784.1 | Folds 6/6
+      Exits SL 1/BE 27/LF 4/FC 0 | ISO-wks 13/14+ | worst-wk -29.9 | streak 1
+
+  SIGNAL 47/50 [F0] | LONG | PA_Entropy_L | PRICE_ACTION
+    ENTRY (all simultaneously): D2D_Trend_Dir == +1
+    CondA: Micro_Entropy < 0.817300  [ADAPTIVE]
+    CondB: Micro_HLAsymmetry < -13.500000  [ADAPTIVE]
+    CondC: OR_Low_Side == -1  [STATE]
+    STANDALONE: Trades 39 | WR 94.9% | PF 9.57 | Avg +27.2 | Total +1060.9 | Folds 6/6
+      Exits SL 2/BE 28/LF 9/FC 0 | ISO-wks 14/15+ | worst-wk -38.4 | streak 1
+
+  SIGNAL 48/50 [F0] | SHORT | PA_VolAcce_S | PRICE_ACTION
+    ENTRY (all simultaneously): D2D_Trend_Dir == -1
+    CondA: Micro_VolAccel > 38.000000  [ADAPTIVE]
+    CondB: Body_Size < 2.010000  [ADAPTIVE]
+    CondC: OR_Low_Side == -1  [STATE]
+    STANDALONE: Trades 42 | WR 97.6% | PF 13.39 | Avg +15.4 | Total +645.8 | Folds 6/6
+      Exits SL 1/BE 36/LF 5/FC 0 | ISO-wks 16/17+ | worst-wk -22.5 | streak 1
+
+
+  ■ VOLUME_CONFIRMED — Volume confirms the directional setup  (1 F0 signals)
+  ──────────────────────────────────────────────────────────────────────────
+  SIGNAL 49/50 [F0] | SHORT | VC_VolumeR_S | VOLUME_CONFIRMED
+    ENTRY (all simultaneously): D2D_Trend_Dir == -1
+    CondA: Volume_Ratio_10 < 0.851200  [ADAPTIVE]
+    CondB: Micro_RollProxy < -51.000000  [ADAPTIVE]
+    CondC: Volume > 237.000000  [ADAPTIVE]
+    STANDALONE: Trades 31 | WR 96.8% | PF 7.63 | Avg +16.8 | Total +520.6 | Folds 6/6
+      Exits SL 1/BE 29/LF 1/FC 0 | ISO-wks 16/17+ | worst-wk -46.8 | streak 1
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║  PART II — THE 2 F1 SEQUENTIAL STRUCTURE-FILLS                             ║
+║  (DIFFERENT TRIGGER GRAMMAR: leg A fires, then k bars later leg B fires,   ║
+║   latched on an ST_Flip anchor — a bounded lagged check, not a triple)     ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+  ■ SQUEEZE_BREAKOUT — Volatility compression resolving into a directional break  [F1 SEQUENTIAL FILL]
+  ──────────────────────────────────────────────────────────────────────────
+  SIGNAL 1/50 [F1-seq] | LONG | SB_SqzVal_L | SQUEEZE_BREAKOUT
+    SEQUENTIAL TRIGGER MECHANIC:
+      1) leg A fires:  Sqz_Val > 20.517100  [ADAPTIVE]
+      2) at that bar an ST_Flip event is present (anchor)
+      3) exactly 13 bars later, leg B fires:  Micro_OrderFlowDelta < -81.370400  [ADAPTIVE]
+      4) D2D_Trend_Dir == +1  →  ENTER LONG
+    EA STATE: latch (legA-extreme AND ST_Flip) into a ring buffer (≤13 bars);
+              fire when legB prints and the latch from 13 bars ago is set.
+    STANDALONE: Trades 33 | WR 93.9% | PF 9.69 | Avg +26.2 | Total +864.7 | Folds 6/6
+      ISO-weeks 20/20 positive | worst-week 10.4 | streak 1 | March bear +$184
+      Admitted because: 6/6 folds + strong weekly + streak≤1 + holds the book -$127.5 worst-day (same bar as the F0 signals).
+
+
+  ■ TREND_EXHAUSTION — Trend momentum fading / flattening, reversal building  [F1 SEQUENTIAL FILL]
+  ──────────────────────────────────────────────────────────────────────────
+  SIGNAL 50/50 [F1-seq] | LONG | TE_ADXris_L | TREND_EXHAUSTION
+    SEQUENTIAL TRIGGER MECHANIC:
+      1) leg A fires:  ADX_Rising == 0  [STATE]
+      2) at that bar an ST_Flip event is present (anchor)
+      3) exactly 8 bars later, leg B fires:  D2D_DirStep == -1  [STATE]
+      4) D2D_Trend_Dir == +1  →  ENTER LONG
+    EA STATE: latch (legA-extreme AND ST_Flip) into a ring buffer (≤8 bars);
+              fire when legB prints and the latch from 8 bars ago is set.
+    STANDALONE: Trades 42 | WR 92.9% | PF 4.75 | Avg +23.6 | Total +992.8 | Folds 6/6
+      ISO-weeks 18/21 positive | worst-week -71.8 | streak 1 | March bear +$379
+      Admitted because: 6/6 folds + strong weekly + streak≤1 + holds the book -$127.5 worst-day (same bar as the F0 signals).

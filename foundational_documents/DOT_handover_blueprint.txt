@@ -1,0 +1,288 @@
+================================================================================
+  equiDOT HANDOVER BLUEPRINT
+  BOOK-50 — Final Validated Signal Set + Forward Development Path
+  The "start here" document for a new AI or developer
+================================================================================
+
+This document is the complete handover for equiDOT, the automated Directional
+Observation Trigger System built for US30.cash (Dow Jones CFD) on MetaTrader 4,
+running on a FTMO $100K swing account. It contains everything a new instance or
+developer needs to continue the work: why the project exists, the full research
+journey, what is validated, the anti-curve-fit methodology, and exactly what
+remains to be built.
+
+Read this first. Then read, in order: the non_negotiables_*.txt (the laws),
+equiDOT_progress_and_rd_plan.md (live state), equiDOT_execution_sequence.md
+(the ordered path to live). Do not trust summaries or memory over those files.
+
+
+===========================================================================
+ 1. WHY THIS PROJECT EXISTS
+===========================================================================
+
+The operator (Anthony) trades US30 on a FTMO $100K prop-firm account. The goal
+is a fully automated signal engine that identifies high-probability directional
+setups and enters trades with no screen time, while the EA's proven dynamic
+stop management handles exits — and that survives FTMO's hard risk gates
+(−$2,500 daily loss, −$10,000 total drawdown) with wide margin.
+
+The solution is equiDOT: a portfolio of convergence signals that fire only when
+several market variables reach distributional extremes simultaneously (or in a
+short lagged sequence) in the same direction, while the D2D SuperTrend confirms
+the bias. When multiple independent measures all agree at the same moment AND
+the trend framework confirms, the probability of a clean directional move is
+high. The system is survival-first: the daily-loss ceiling is honored before
+any profitability metric.
+
+
+===========================================================================
+ 2. THE FULL RESEARCH JOURNEY (how BOOK-50 was reached)
+===========================================================================
+
+This is the honest history, including the wrong turns, because the wrong turns
+are where the method was forged.
+
+  (a) THE 766K DISCOVERY ON BROKEN DATA.
+      An early full-scope convergence discovery ran ~766K candidate signals on
+      a dataset that turned out to be corrupt — a state-column shift and a
+      cold-start feature break. The discovery still "worked" in the sense that
+      it surfaced structure, but the numbers were unusable. The failure was a
+      map, not a verdict: it exposed the data break, a feature-overlap problem,
+      and the need for new variables. The dataset was rebuilt from source
+      (core.py), Auditor-ratified, parity 88/88 at 6 decimals.
+
+  (b) THE 100x UNITS BUG.
+      Every dollar figure in the early era was inflated 100×: USD_PER_POINT_
+      PER_LOT was set to 100.0 when FTMO US30.cash is $1/point/1.0 lot. This
+      distorted worst-days and P&L across the board and caused good systems to
+      be wrongly dismissed on apparently catastrophic worst-days. Fixing it to
+      1.0 superseded all prior figures. LESSON: distortion in the accounting
+      layer poisons every downstream judgment. Every number in BOOK-50 is at
+      true $1/pt.
+
+  (c) TIC-PROOF RE-ANALYSIS.
+      After the fixes, the field was re-scored through the ratified engine on a
+      sealed baseline (152,983 rows, Jan 19 – Jun 25 2026, 6,900-bar warmup),
+      with every per-signal number traceable to source (signal_full_records.csv)
+      and every per-day P&L to signal_per_day_pnl.jsonl. No re-derivation, no
+      proxies — the engine of record is the arbiter.
+
+  (d) THE DIAMOND, AND THE BOOK LINEAGE.
+      diamond-35   — the loss-decorrelated F0 core (35 triple-convergence
+                     signals selected on independent losing days, OOS-clean).
+      -> BOOK-40   — + 5 within-vocabulary co-firers. These RAISED OOS PF
+                     (5.54 -> 6.54) and improved worst-day — a clean add.
+      -> BOOK-58   — + 18 structure-balanced persistent fillers. These raised
+                     net and, critically, BEAR net (the March crash), but
+                     diluted OOS PF. Real value, wrong-density.
+      -> BOOK-48   — leave-one-out trim of the 10 worst book-level eroders
+                     (bear-net contributors protected). This RECOVERED per-trade
+                     quality: OOS PF back to 6.65, the highest on record, while
+                     keeping 85% of BOOK-58's net and 81% of its bear net.
+                     BOOK-48 is the F0 OOS-PF ceiling.
+      -> BOOK-50   — + 2 F1 sequential structure-fills. These close the only two
+                     market structures F0 could not decorrelate into the book
+                     (SQUEEZE_BREAKOUT, TREND_EXHAUSTION), at worst-day held
+                     (−$127.5) and a small OOS-PF give-back (6.65 -> 6.54).
+                     BOOK-50 is the structure-complete final engine of record.
+
+  (e) THREE FAMILIES TESTED AND JUDGED ON EVIDENCE.
+      +18 structure fillers — reopened after a crude dismissal; found to carry
+        the bear. RECOVERED (they seeded BOOK-58 -> trimmed into BOOK-48).
+      concurrence DEPTH — reopened cleanly and engine-scored; pure depth WR ~76%
+        / PF ~1.1, and depth-without-named-triples PF < 1 (net-losing). GENUINE
+        NULL. Correctly excluded. (The original ~89% was a units-distortion/
+        small-sample artifact.)
+      F1 SEQUENTIAL family — a different (lagged) trigger. Tested with the same
+        discipline: real and persistent but a weaker parallel engine; redundant
+        for NET (more F0 does it cheaper and safer), but UNIQUELY able to fill
+        the 2 missing structures. Two F1 signals earned a place for coverage.
+
+  (f) THE CONCURRENCY INVESTIGATION (position-count cap -> live-risk jar).
+      With the book frozen, the concurrency control itself was re-examined. Three
+      findings, each decided by the engine, not intuition:
+        DEPTH IS A REAL CAUSAL QUALITY GRADIENT. Recomputing each trade's entry-depth
+          from ONLY positions open at-or-before its entry bar (strictly causal, known
+          at entry), the loss rate falls monotonically — 8.6% at depth 1-3, 4.5% at
+          4-7, 0.0% at depth 8+ — PF climbing 5.0 -> infinity. Deeper concurrence is a
+          genuinely better trade, and it is knowable at the moment of entry.
+        SIZING UP DEEP STACKS IS A CORRELATED-TAIL LANDMINE. Deep stacks are
+          same-direction and clustered, so up-sizing them concentrates risk exactly
+          when the most positions are open; one violent reversal mid-stack stops the
+          cluster together. Aggressive depth-up schedules blew the drawdown ceiling
+          15-24x under that correlated stress (−$10k to −$17k). Correctly rejected.
+        THE BE-AWARE LIVE-RISK JAR IS THE RESOLUTION. The insight that reopened it: a
+          position at break-even carries ZERO further risk (stop at entry), so it must
+          neither block a new entry nor count toward the risk bound. The jar bounds
+          LIVE (pre-BE) risk to 6 lots — each trade takes 1 lot, a break-even'd winner
+          frees its lot, a new signal opens only with room. It counts RISK, not bodies.
+          Validated: +74 trades, +$1,418 net, at the IDENTICAL 6-lot hard bound, same
+          worst-day and max-DD — a strict improvement over the position-count cap.
+
+  The recurring lesson across all three: a weak or negative result is a data
+  point that redirects, not a verdict that closes a door. Depth stayed closed
+  because the clean test said so; the +18 and F1 opened because the clean test
+  said so. Same rigor, outcomes decided by evidence.
+
+
+===========================================================================
+ 3. WHAT BOOK-50 IS (the validated object)
+===========================================================================
+
+  50 signals = 48 F0 same-bar triple-convergence (35L/13S)
+             +  2 F1 sequential structure-fills (2L)   =  37L / 13S
+
+  THE 2 F1 FILLS (different trigger grammar: A fires, then k bars later B fires,
+  latched on an ST_Flip anchor):
+    SQUEEZE_BREAKOUT: Sqz_Val:hi ->13-> Micro_OrderFlowDelta:lo  [LONG]
+        33 tr, WR 93.9%, PF 9.69, 6/6, 20/20 wks, 5/5 days, streak 1, Mar +$184
+    TREND_EXHAUSTION: ADX_Rising:==0 ->8-> D2D_DirStep:==-1       [LONG]
+        42 tr, WR 92.9%, PF 4.75, 6/6, 18/21 wks, 5/5 days, streak 1, Mar +$379
+
+  IN-BOOK, RUN TM (S.7 + momentum-runner), 6-lot live-risk jar, true $1/pt:
+    2,409 tr | WR 91.9% | PF 5.83 | net $58,685/6mo @1lot | worst-day −$127.5
+    max-DD −$165.6 | 6/6 folds | 22/22 ISO-weeks | 5/5 weekdays
+    min-fold PF 5.01 | March bear PF 5.47 / net $14,500
+    OOS PF 6.57 | OOS WR 92.2% | OOS net $18,926
+  S.7 BASE (ratified): 2,416 tr | PF 5.66 | net $56,663 | worst-day −$127.5 | OOS PF 5.96
+
+  STRUCTURE COVERAGE 8/8:
+    TREND_CONTINUATION 15, MOMENTUM_IGNITION 14, BREAKOUT_EXPANSION 8,
+    STRUCTURAL_ENTRY 6, PRICE_ACTION 4, SQUEEZE_BREAKOUT 1, TREND_EXHAUSTION 1,
+    VOLUME_CONFIRMED 1.
+
+  TRADE MANAGEMENT (S.7, locked): SPREAD 3.0, RISK_MULT 2.0, MAX_RISK 150.0,
+    STEP_PCT 0.30; BE nudge locks +1 step; LeapFrog activates tier ≥ 3; Friday
+    16:45 EST force close. CONCURRENCY: the 6-lot LIVE-RISK JAR replaces
+    MAX_POSITIONS=6 — bounds live (pre-BE) risk to 6 lots; a break-even'd winner
+    frees its lot; a new signal opens only when live lots < 6.
+  MOMENTUM-RUNNER (validated upgrade, runner trail ONLY): v = Micro_LogReturn ×
+    direction; if v ≥ 0.00012 LeapFrog lag = 3 else 2. No look-ahead; SL/BE/tier/
+    Friday/entries all = S.7.
+
+
+===========================================================================
+ 4. THE ANTI-CURVE-FIT METHODOLOGY (why the edge is believed real)
+===========================================================================
+
+  1. TRUE-SCALE ACCOUNTING. Every figure is $1/point/1.0 lot. No inflated units.
+  2. TIC-PROOF DATA. Per-signal numbers trace to signal_full_records.csv; per-day
+     P&L to signal_per_day_pnl.jsonl. No re-derivation drift.
+  3. LOSS-DECORRELATION SELECTION. Signals chosen for INDEPENDENT losing days
+     (per-day loss vectors, greedy add keeping the worst-day highest), NOT for
+     in-sample PF. This is the opposite objective from fitting and cannot be
+     gamed by memorizing the sample. Naive union of all 254 = PF 1.89;
+     decorrelated = PF 6+.
+  4. PERSISTENCE AT THREE SCALES. 6/6 monthly folds AND ISO-week positivity AND
+     all-weekday coverage — simultaneously. A ≥30-trade floor bars small-sample
+     flukes.
+  5. OUT-OF-SAMPLE GATE. Select on Jan–Apr, measure on unseen May–Jun. The core
+     books hold or STRENGTHEN OOS (diamond 5.54, BOOK-40 6.54). Overfitting
+     cannot strengthen OOS.
+  6. LEAVE-ONE-OUT TRIM THAT FIGHTS FIT. The trim REMOVED signals with high
+     standalone PF (up to 21.7) because their losses were book-correlated —
+     optimizing against the seductive in-sample numbers.
+  7. NULL-HONORING. Lines that failed their nulls were killed: the depth signal
+     (circular-shift null failed), the flip-trajectory model (AUC 0.492, below
+     chance). A process that reports its own nulls is not manufacturing signal.
+  8. A REAL BEAR IN THE SAMPLE. The March −10% war crash is inside the data; the
+     book stays green through it.
+  9. NULL / SHUFFLE TEST. The finished book was tested against three shuffles that
+     break the signal->outcome link while keeping the EXACT trade management and
+     trade count, 200+ iterations each: direction-shuffle (randomize each trade's
+     side), random-timing (enter on random eligible bars — the TM-alone test), and
+     fully random. The real book landed BEYOND THE MAXIMUM of all three nulls
+     (0/200), ~16σ above the direction-shuffle mean and ~35σ above the random means
+     (p < 0.005 on all three). Critically, random-timing through the real TM LOST
+     money (net −$678, PF 0.97) — proving the edge is the SIGNAL, not the trade
+     management. With OOS strengthening on top, the result is decisive.
+
+  THE HONEST RESIDUAL: six months is one sample. It contains a crash-and-recover
+  but no grinding sustained bear, no prolonged sideways chop, no rate-shock. The
+  edge is proven IN the sampled regimes and OOS-validated within them; regimes
+  not sampled are unproven, not disproven. Execution parity (real spread beyond
+  the modeled 3.0 pts, fills, 1-minute slippage) is a live question, not a
+  backtest one. This is the normal boundary between a validated backtest and
+  live capital — not a flaw in the work. The demo is the true final test.
+
+
+===========================================================================
+ 5. WHAT IS SACRED (do not modify without documented human authorization)
+===========================================================================
+
+  A behavior-changing edit to any of these without documented human approval is
+  INVALID regardless of merit (see non_negotiables Section B2):
+
+    - The adaptive calibration layer (self-computing variable values).
+    - The unified threshold mechanisms: D (rolling-2500 floor-index percentile,
+      day-refreshed) + structural (VWAP_Z ±2, OR_Position .80/.20). Mechanisms
+      A/B/C are retired and must not return.
+    - dots_thresholds.py — the threshold oracle (sha 518862bf…).
+    - The KAMA warm-start persistence layer (file write/read/validate/anchor;
+      export cold-guard save/restore; signal suppression on cold starts).
+    - The cold-start correctness fixes (HarmVol EMA seed, KAMA anchor-seed,
+      PoC day-boundary, RebuildStateForExport δ=0).
+    - The export schema (171/172 columns) and the sealed baseline.
+    - The locked depth tunables: Dots_RollingBufferSize = 2500,
+      Dots_InitBars = 6900.
+    - The locked S.7 trade management constants.
+    - ResizeAndSmartShift as the sole shift authority (one shift per bar).
+
+
+===========================================================================
+ 6. WHAT REMAINS (Stage 9 — the EA build)
+===========================================================================
+
+  The signal set and trade management are validated and frozen. The remaining
+  work takes the CURRENT equiDOT.cs (frozen, compiles 0/0) to BOOK-50 through
+  the full pipeline (Developer -> Supervisor -> Auditor -> human confirm +
+  MetaEditor 0/0). FOUR changes, no more:
+
+    (a) MOMENTUM-RUNNER TM BRANCH. In the LeapFrog trail only, switch lag = 3
+        when the entry bar's Micro_LogReturn × direction ≥ 0.00012, else 2.
+        Everything else in S.7 is untouched.
+
+    (b) SEQUENTIAL-LATCH SUBSYSTEM for the 2 F1 signals. Two small ring buffers
+        (≤15 bars) latch (leg-A-extreme AND ST_Flip) for Sqz_Val and ADX_Rising;
+        on each bar, a lagged lookup (buffer[bar − k]) AND-ed with the current
+        leg-B condition fires the signal. Reuses existing FEAT computations and
+        the already-tracked ST_Flip anchor. This is a bounded state add — NOT a
+        second engine.
+
+    (c) 50-SIGNAL SWAP. Replace the current signal set with the BOOK-50 panel
+        (48 F0 triples + 2 F1 sequential), grouped by the 8 structures.
+
+    (d) LIVE-RISK JAR. Replace the MAX_POSITIONS=6 count cap with a 6-lot live-risk
+        jar: a running live-lot counter (+1 on open; −1 at break-even, when the
+        winner's lot leaves the jar; admit a new signal only when live lots < 6).
+        It counts live risk, not open positions — break-even'd winners no longer
+        block new entries. Causal (the live-lot count is known at entry). A
+        sacred/S.7 change; human authorization granted.
+
+  Then: MetaEditor 0/0 compile, Strategy Tester alignment to the reference
+  numbers, and the live FTMO demo.
+
+  See DOT_dev_plan.txt (technical steps), DOT_linear_development_schedule.txt
+  (build order), DOT_post_update_checklist.txt (verification), DOT_codebase_
+  map.md (where the changes land), DOT_backtest_guide.txt (reproduce the
+  findings).
+
+
+===========================================================================
+ 7. TOOLS OF RECORD
+===========================================================================
+
+  portfolio_simulation_engine.py — sole ratified trade path (S.7). run_portfolio().
+  dots_thresholds.py             — threshold oracle (SACRED).
+  wf.py                          — 6 monthly folds walk-forward, survival-first.
+  sequential_temporal.py         — ratified F1 mask builder (pair_mask/lag_shift/
+                                   anchor_array); reuse, never reconstruct.
+  analysis_engine.py + run_full_analysis.py — F0 full-field pre-scoring engine.
+  core.py                        — reconstruction pipeline (sealed baseline).
+  equiDOT.cs                     — the live EA (FROZEN). DOTS.cs — legacy reference.
+  Sealed baseline: equiDOT_recon171_step7_part1..8.csv (152,983 × 171).
+  signal_full_records.csv (48 F0), signal_full_records_F1.csv (F1),
+  signal_per_day_pnl(.jsonl / _F1.jsonl) — per-day vectors.
+
+Start from the source-of-truth files and the raw data. Re-derive; do not inherit
+a prior instance's framing. The next step always exists.

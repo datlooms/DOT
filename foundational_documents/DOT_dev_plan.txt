@@ -1,0 +1,230 @@
+================================================================================
+  equiDOT — BOOK-50 EA DEVELOPMENT PLAN
+  Directional Observation Trigger System
+  Take the CURRENT equiDOT.cs (FROZEN, 0/0) to the validated BOOK-50 engine
+================================================================================
+
+  Source:  equiDOT.cs (the live EA — frozen, compiles 0 errors / 0 warnings)
+  Target:  BOOK-50 — 48 F0 same-bar triple-convergence signals + 2 F1 sequential
+           structure-fills (37L / 13S), momentum-runner trail, 8/8 structures
+  Specs:   DOT_rule_master_spec.txt          (the 50 rules + gates + exits)
+           DOT_performance_record.xlsx        (target numbers, RUN + S.7)
+           DOT_signal_dictionary.xlsx         (per-signal ELI5 + variables)
+           DOT_backtest_guide.txt             (how to reproduce the findings)
+           non_negotiables_developer.txt        (coding laws)
+           non_negotiables_supervisor.txt       (architectural laws + audit rules)
+
+  SCOPE — EXACTLY FOUR CHANGES, NOTHING MORE:
+    (a) Momentum-conditional runner in the LeapFrog trail (runner trail only).
+    (b) Sequential-latch subsystem for the 2 F1 signals (bounded state add).
+    (c) Replace the current signal set with the BOOK-50 50-signal panel.
+    (d) Replace the MAX_POSITIONS=6 count cap with the 6-LOT LIVE-RISK JAR
+        (ratified S.7 change; human authorization GRANTED).
+
+  Every change goes through the full pipeline: Developer -> Supervisor ->
+  Auditor -> human confirm, with a MetaEditor 0/0 compile at each deliverable.
+  Deliver complete sections (header to header), never snippets. No inline //
+  comments. Match existing formatting exactly. Macro #defines must precede first
+  use (the MQL4 preprocessor is positional).
+
+  ────────────────────────────────────────────────────────────────────────────
+  SACRED — UNCHANGED BY THIS PLAN (behavior-changing edits are INVALID without
+  documented human authorization; see non_negotiables B2):
+    - Adaptive calibration + unified thresholds (Mechanism D + structural).
+    - dots_thresholds.py oracle. KAMA warm-start persistence layer.
+    - Cold-start correctness fixes. Export schema (171/172 cols). Sealed baseline.
+    - Dots_RollingBufferSize = 2500, Dots_InitBars = 6900 (locked depth tunables).
+    - S.7 trade-management constants (SPREAD 3.0, RISK_MULT 2.0, MAX_RISK 150.0,
+      STEP_PCT 0.30). BE nudge = +1 step. Tier-3 LeapFrog activate. The S.7 SL / BE /
+      tier / runner base is UNTOUCHED; MAX_POSITIONS=6 is the ONE authorized S.7 change,
+      REPLACED by the 6-lot live-risk jar (change d).
+    - ResizeAndSmartShift as sole shift authority; sacred calculation pass order.
+  ────────────────────────────────────────────────────────────────────────────
+
+
+================================================================================
+ PHASE 1 — MOMENTUM-CONDITIONAL RUNNER (change a)
+ Target section: 8.1 ADVANCED TRADE MANAGEMENT (LeapFrog trail). Runner ONLY.
+================================================================================
+
+  Step 1.  Confirm Micro_LogReturn is available at entry per open Dots position.
+           It is already computed each bar in SECTION 6.5 (Calc_Microstructure_
+           OnBar) and exported. At the moment a Dots trade opens, capture the
+           entry-bar Micro_LogReturn and the trade direction into the position's
+           management state (a new per-position double, e.g. entryLogReturn, and
+           an int leapFrogLag). No new indicator, no history lookup — the bar is
+           closed, so this is causal.
+
+  Step 2.  Compute the directional velocity at entry:  v = entryLogReturn * dir
+           (dir = +1 long, −1 short). Set the position's LeapFrog lag:
+               leapFrogLag = (v >= 0.00012) ? 3 : 2;
+           Store it on the position. This is a one-time assignment at entry.
+
+  Step 3.  In the LeapFrog trailing block ONLY, replace the fixed lag with the
+           per-position leapFrogLag:
+               trailSL = entry ± (TiersReached − leapFrogLag) * step   (dir-signed)
+           applied only when TiersReached >= 3, exactly as S.7, moving the SL
+           only in the favorable direction (never loosening).
+
+  Step 4.  DO NOT TOUCH: initial SL (min(ATR×2, 150)), the BE nudge (+1 step),
+           tier detection, Friday 16:45 close, entry logic. The runner change is
+           confined to the trail arithmetic.
+
+  Step 5.  Verify against the record: S.7 -> RUN should move the book from
+           PF 5.60 / net $55,240 to PF 5.78 / net $57,419, OOS PF 5.90 -> 6.54,
+           with worst-day and win rate essentially unchanged. The gain is pure
+           LeapFrog-tail extension.
+
+
+================================================================================
+ PHASE 2 — SEQUENTIAL-LATCH SUBSYSTEM (change b)
+ The 2 F1 signals only. A bounded lagged check — NOT a second engine.
+ Target sections: 3.0 (state), 6.8 (rule table), 6.9 (signal evaluation).
+================================================================================
+
+  BACKGROUND. An F1 signal is "leg A fires, then k bars later leg B fires, with
+  an ST_Flip event present at the leg-A bar." The EA already computes every
+  variable involved and already tracks ST_Flip (ST_Flip_Event / Bars_Since_Flip).
+  The only new machinery is a small rolling memory of the leg-A latch.
+
+  THE 2 F1 SIGNALS:
+    F1-SB: Sqz_Val:hi ->13-> Micro_OrderFlowDelta:lo  [LONG]
+    F1-TE: ADX_Rising:==0 ->8-> D2D_DirStep:==-1       [LONG]
+  Shared leg-A families: Sqz_Val (for SB) and ADX_Rising (for TE). The ST_Flip
+  anchor is shared by both.
+
+  Step 6.  STATE (SECTION 3.0). Add two fixed-length ring buffers of booleans,
+           length 16 (covers lag ≤ 15 with margin), one per F1 leg-A latch:
+               bool latchBuf_SqzHiFlip[16];    // (Sqz_Val:hi AND ST_Flip) latch
+               bool latchBuf_ADXris0Flip[16];  // (ADX_Rising==0 AND ST_Flip) latch
+           plus a single rolling write-index. These are the ONLY new persistent
+           state. They resize/shift under ResizeAndSmartShift discipline like all
+           per-bar state (one shift per bar; no terminal overrides).
+
+  Step 7.  LATCH WRITE (once per bar, in the DOTS derived/eval pass, SECTION 6.9
+           entry point, AFTER the variables and ST_Flip_Event for the bar are
+           final). On bar i:
+               latchBuf_SqzHiFlip[idx]   = (Sqz_Val >= thr_SqzVal_hi) && (ST_Flip_Event != 0);
+               latchBuf_ADXris0Flip[idx] = (ADX_Rising == 0)          && (ST_Flip_Event != 0);
+           where thr_SqzVal_hi is the SAME adaptive threshold the F0 path uses
+           for Sqz_Val:hi (route through the existing threshold table — do NOT
+           introduce a new threshold source). Advance idx = (idx + 1) % 16.
+
+  Step 8.  LAGGED FIRE (same pass, using the CURRENT bar's leg-B conditions).
+           For F1-SB (lag 13):
+               legA13 = latchBuf_SqzHiFlip[(idx - 13 + 16) % 16];
+               legB   = (Micro_OrderFlowDelta <= thr_OFDelta_lo);
+               fireSB = legA13 && legB && (D2D_Trend_Dir == +1);
+           For F1-TE (lag 8):
+               legA8  = latchBuf_ADXris0Flip[(idx - 8 + 16) % 16];
+               legB   = (D2D_DirStep == -1);
+               fireTE = legA8 && legB && (D2D_Trend_Dir == +1);
+           Route thr_OFDelta_lo through the existing adaptive threshold table.
+           ADX_Rising==0 and D2D_DirStep==−1 are direct state equalities on
+           existing variables (no threshold).
+
+  Step 9.  RULE TABLE (SECTION 6.8, InitDotsRuleTable). Register the 2 F1 signals
+           as entries of a new trigger TYPE (a triggerKind flag: F0_TRIPLE vs
+           F1_SEQ) so the panel and the signal-evaluation dispatcher treat them
+           correctly. Their direction is LONG; their structures SQUEEZE_BREAKOUT
+           and TREND_EXHAUSTION. They feed the SAME entry gate (≥2 concurrent OR
+           solo+Vol≥300) and the SAME S.7/runner exit as every F0 signal.
+
+  Step 10. NO NEW EXIT, NO NEW GATE, NO SECOND LOOP. Once an F1 signal fires, it
+           is an ordinary Dots entry. The subsystem is purely the latch buffers +
+           lagged lookups feeding the existing evaluation/dispatch path.
+
+
+================================================================================
+ PHASE 3 — THE 50-SIGNAL SWAP (change c)
+ Target sections: 6.7 (constants, if any new leg thresholds), 6.8 (rule table),
+ 7.10 (panel).
+================================================================================
+
+  Step 11. Build the F0 rule table from DOT_rule_master_spec.txt PART I: the
+           48 same-bar triples, each = 3 conditions (variable + adaptive/state
+           threshold) + direction + D2D gate. Every threshold routes through the
+           existing adaptive table (Mechanism D + structural) — no hardcoded
+           values, no retired mechanisms.
+
+  Step 12. Add the 2 F1 entries from PART II (Phase 2). Total 50 (37L / 13S).
+
+  Step 13. PANEL (SECTION 7.10). Extend the Dots visual panel to 50 rows,
+           grouped by the 8 structures, with the F0/F1 trigger type shown for
+           the 2 sequential fills. Confirm the L/S split (37/13) renders.
+
+  Step 14. MACRO-ORDERING AUDIT. If any #define constants are introduced for the
+           new leg thresholds or the F1 buffers, verify they appear before first
+           use across ALL sections (the preprocessor is positional; section-level
+           byte checks cannot catch cross-section macro dependencies).
+
+
+================================================================================
+ PHASE 4 — 6-LOT LIVE-RISK JAR (change d)
+ Replace the MAX_POSITIONS=6 count cap with a 6-lot LIVE-risk budget.
+ It counts RISK, not bodies: break-even'd winners free their lot and no longer block.
+ Target sections: 3.0 (state), 8.6 (Dots entry/admission), 8.1 (BE transition).
+================================================================================
+
+  BACKGROUND. The old control blocked a 7th position whenever 6 were open — even if
+  all 6 were already winning and at break-even (zero further risk). The jar instead
+  bounds LIVE (pre-break-even) risk to 6 lots. Every trade is a whole 1 lot; a position
+  at break-even carries no risk, so its lot leaves the jar and a new signal may take it.
+  Validated (1 lot): 2,409 tr (+74), net $58,685 (+$1,418), PF 5.83, WR 91.9%, worst-day
+  -$127.5 and max-DD -$165.6 IDENTICAL to the count cap, 6/6 folds, 22/22 weeks, OOS 6.57.
+  Strict improvement at the IDENTICAL 6-lot hard bound.
+
+  Step 15. STATE (SECTION 3.0). Add a single running live-lot counter, e.g.
+           int g_dots_live_lots = 0; It holds the number of open Dots positions NOT yet
+           at break-even (each = 1 lot). This is the ONLY new persistent state for the jar.
+
+  Step 16. ADMISSION (SECTION 8.6, Dots entry). REPLACE the MAX_POSITIONS count check
+           with the jar check: a new Dots signal may open ONLY IF g_dots_live_lots < 6.
+           If the jar is full of live risk (== 6), the signal is NOT taken (it is skipped,
+           exactly as the count cap skipped). No fractional sizing — always 1 lot.
+
+  Step 17. INCREMENT (SECTION 8.6, on open). When a Dots position opens, g_dots_live_lots
+           += 1 (it enters the jar as live risk).
+
+  Step 18. BE-FREE (SECTION 8.1, the BE transition). At the exact bar a Dots position first
+           reaches break-even (its SL is moved to entry±step — step 3, it can no longer
+           lose), g_dots_live_lots -= 1. This is the BE-freeing mechanic: the winner's lot
+           leaves the jar. Decrement EXACTLY ONCE, on the pre-BE -> BE transition (guard on
+           the same be flag that gates the one-time BE nudge, so no double-decrement).
+
+  Step 19. EXIT (SECTION 8.6 / 8.1, on close). When a Dots position CLOSES while still LIVE
+           (exited before ever reaching break-even — an SL hit), g_dots_live_lots -= 1. A
+           position that closes AFTER break-even was ALREADY decremented at Step 18 — do NOT
+           decrement again. Net invariant: g_dots_live_lots == count of open, not-yet-BE Dots
+           positions, and NEVER exceeds 6.
+
+  DO NOT TOUCH: SL / step / BE nudge / tier / LeapFrog / runner / Friday close / entry gate /
+  eligibility — all remain S.7. The jar changes ADMISSION only, keyed on live-lot count.
+
+================================================================================
+ PHASE 5 — VERIFICATION (before any deconstruction)
+================================================================================
+
+  Step 20. MetaEditor compile: 0 errors / 0 warnings.
+  Step 21. Run DOT_post_update_checklist.txt in full — every item PASS.
+  Step 22. Strategy Tester alignment: reproduce the reference RUN numbers under the
+           jar (WR 91.9%, PF 5.83, net $58,685 @1lot, worst-day −$127.5, 6/6 folds,
+           22/22 weeks, OOS PF 6.57) within tolerance. Confirm both F1 signals fire, the
+           momentum-runner lag switches on v ≥ 0.00012, and the live-lot jar never exceeds
+           6 (BE frees a lot; +74 trades vs the old count cap).
+  Step 23. A2.7 DIRECTIVE RECONCILIATION: verify the COMPLETE system still
+           satisfies completeness (8/8 structures present), adaptivity (all
+           thresholds through the oracle), parity (export = live), and
+           consistency (sacred layer untouched; jar bounds live risk at 6 lots) — not merely
+           that the 4 changes were executed.
+
+  ONLY AFTER all of the above pass does any old-code removal proceed
+  (build-first, deconstruct-second — see DOT_linear_development_schedule.txt).
+
+
+  NET EFFECT: four bounded changes. The runner touches one arithmetic line in
+  the trail; the F1 subsystem adds two 16-slot boolean buffers + lagged lookups
+  on already-computed conditions; the signal set becomes the validated 50; and the
+  live-risk jar replaces the count cap with a single live-lot counter that BE frees.
+  The heavy machinery (adaptive calibration, KAMA warm-start, export, thresholds,
+  memory chain) is sacred and untouched.
