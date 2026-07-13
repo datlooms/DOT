@@ -1,0 +1,10 @@
+$p = "C:\Users\d\AppData\Roaming\MetaQuotes\Terminal\9303753997FFC7FE093FBA504590C18A\MQL4\Files"
+$all = Get-Content "$p\65K.csv"
+$h = $all[0]
+$lines = $all[1..($all.Length-1)]
+$c = [math]::Floor($lines.Length / 4)
+Set-Content "$p\64_256_first.csv" (@($h) + $lines[0..($c-1)])
+Set-Content "$p\64_256_second.csv" $lines[$c..(2*$c-1)]
+Set-Content "$p\64_256_third.csv" $lines[(2*$c)..(3*$c-1)]
+Set-Content "$p\64_256_fourth.csv" $lines[(3*$c)..($lines.Length-1)]
+Write-Host "first: $c  second: $c  third: $c  fourth: $($lines.Length - 3*$c)  total: $($lines.Length)"
