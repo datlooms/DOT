@@ -1,10 +1,8 @@
-# DOT
-Eliminating the Unknown via Childish Artistry
-# equiDOT — Directional Observation Trigger System (BOOK-50)
+# DOT — Distributional Observation Triggers (BOOK-50)
 
 **An automated convergence-signal engine for US30.cash (Dow Jones) on MetaTrader 4, running on a FTMO $100K funded account.**
 
-equiDOT watches 171 variables of the market every minute — how price is moving, how volatile it is, where volume and order-flow are pointing, whether the trend is igniting, continuing, or exhausting — and enters a trade only when several of them line up at distributional extremes in the same direction, with the D2D SuperTrend confirming the bias. It runs the trading week with no human intervention; the EA's proven dynamic stop management handles every exit.
+DOT watches 171 variables of the market every minute — how price is moving, how volatile it is, where volume and order-flow are pointing, whether the trend is igniting, continuing, or exhausting — and enters a trade only when several of them line up at distributional extremes in the same direction, with the D2D SuperTrend confirming the bias. It runs the trading week with no human intervention; the EA's proven dynamic stop management handles every exit.
 
 BOOK-50 is the final, validated signal set: **50 signals — 48 same-bar triple-convergence signals plus 2 sequential structure-fills — covering all 8 market structures.**
 
