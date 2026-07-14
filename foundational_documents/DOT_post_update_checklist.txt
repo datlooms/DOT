@@ -143,33 +143,49 @@
 
 
 ═══════════════════════════════════════════════════════════════════════════
- PHASE H: STRATEGY TESTER ALIGNMENT
+ PHASE H: MOMENTUM-CONDITIONAL INITIAL SL (change f)
 ═══════════════════════════════════════════════════════════════════════════
-[ ] H.1  RUN book reproduces within tolerance: WR 91.9%, PF 5.83, net $58,685
+[ ] H.1  on entry, if lr×dir (Micro_LogReturn × dir) >= 0.00012 the initial risk uses
+         min(ATR×4, 150); non-momentum entries use min(ATR×2, 150) unchanged.
+[ ] H.2  NO trade’s initial risk EVER exceeds 150 at any ATR — the $150 cap (Dots_SL_Cap)
+         is inviolate; nothing risks more than $150 + spread.
+[ ] H.3  the momentum gate reuses the SAME lr×dir value the runner uses (change a / S.12)
+         — NO new variable, NO new buffer.
+[ ] H.4  RISK_MULT / Dots_SL_Mult = 2.0 stays the base constant (S.17 unaltered); STEP / BE /
+         tier / trail continue to derive from initial_risk as-is.
+[ ] H.5  backtest reproduces the momentum-SL book (166 SL, net $58,249, WR 92.8%, PF 6.12,
+         OOS PF 6.99, min-fold 5.49) confirming the rule; runner LF count/net unchanged.
+[ ] H.6  worst-day still −127.5 and max-DD −165.6 (the survival floor is HELD).
+
+
+═══════════════════════════════════════════════════════════════════════════
+ PHASE I: STRATEGY TESTER ALIGNMENT
+═══════════════════════════════════════════════════════════════════════════
+[ ] I.1  RUN book reproduces within tolerance: WR 91.9%, PF 5.83, net $58,685
          @1lot, worst-day −$127.5, max-DD −$165.6.
-[ ] H.2  Persistence reproduces: 6/6 folds, 22/22 ISO-weeks, 5/5 weekdays,
+[ ] I.2  Persistence reproduces: 6/6 folds, 22/22 ISO-weeks, 5/5 weekdays,
          min-fold PF 5.01.
-[ ] H.3  March bear fold reproduces: PF 5.47 / net $14,500 (positive through the
+[ ] I.3  March bear fold reproduces: PF 5.47 / net $14,500 (positive through the
          −10% crash).
-[ ] H.4  OOS (May–Jun) reproduces: PF 6.57, WR 92.2%, net $18,926.
-[ ] H.5  Survival margins hold: worst-day 19× inside −$2,500; max-DD 60× inside
+[ ] I.4  OOS (May–Jun) reproduces: PF 6.57, WR 92.2%, net $18,926.
+[ ] I.5  Survival margins hold: worst-day 19× inside −$2,500; max-DD 60× inside
          −$10,000.
-[ ] H.6  Both F1 signals contribute trades in the tester run; the runner lag
+[ ] I.6  Both F1 signals contribute trades in the tester run; the runner lag
          switch is observed on high-velocity entries.
 
 
 ═══════════════════════════════════════════════════════════════════════════
- PHASE I: DIRECTIVE RECONCILIATION (A2.7) & PARITY
+ PHASE J: DIRECTIVE RECONCILIATION (A2.7) & PARITY
 ═══════════════════════════════════════════════════════════════════════════
-[ ] I.1  COMPLETENESS: all 8 structures present; all 50 signals live.
-[ ] I.2  ADAPTIVITY: every threshold self-computes through the oracle regardless
+[ ] J.1  COMPLETENESS: all 8 structures present; all 50 signals live.
+[ ] J.2  ADAPTIVITY: every threshold self-computes through the oracle regardless
          of chart history.
-[ ] I.3  PARITY: fresh export reproduced bit-for-bit by dots_thresholds.py
+[ ] J.3  PARITY: fresh export reproduced bit-for-bit by dots_thresholds.py
          (export = live). No look-ahead anywhere, including the F1 latch. Per-bar SL
          management reproduces portfolio_simulation_engine.py trade-for-trade (parity run).
-[ ] I.4  CONSISTENCY: the sacred layer is byte-identical except the 5 authorized
+[ ] J.4  CONSISTENCY: the sacred layer is byte-identical except the 6 authorized
          changes; no retired mechanism returned.
-[ ] I.5  The complete system — not just the 5 edits — satisfies all standing
+[ ] J.5  The complete system — not just the 6 edits — satisfies all standing
          directives. Any gap flagged and resolved before sign-off.
 
 FINAL: all items PASS -> proceed to the FTMO demo (the true final test).

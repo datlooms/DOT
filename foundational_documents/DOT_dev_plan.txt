@@ -14,7 +14,7 @@
            non_negotiables_developer.txt        (coding laws)
            non_negotiables_supervisor.txt       (architectural laws + audit rules)
 
-  SCOPE — EXACTLY FIVE CHANGES, NOTHING MORE:
+  SCOPE — EXACTLY SIX CHANGES, NOTHING MORE:
     (a) Momentum-conditional runner in the LeapFrog trail (runner trail only).
     (b) Sequential-latch subsystem for the 2 F1 signals (bounded state add).
     (c) Replace the current signal set with the BOOK-50 50-signal panel.
@@ -22,6 +22,9 @@
         (ratified S.7 change; human authorization GRANTED).
     (e) Revert DOTS trade management from PER-TICK to PER-BAR SL repositioning
         (ratified S.7 execution-model change; human authorization GRANTED).
+    (f) Momentum-conditional wider initial SL: on momentum entries widen the initial
+        stop to min(ATR×4, 150) up to the existing $150 cap (ratified S.7 change;
+        human authorization GRANTED).
 
   Every change goes through the full pipeline: Developer -> Supervisor ->
   Auditor -> human confirm, with a MetaEditor 0/0 compile at each deliverable.
@@ -38,9 +41,11 @@
     - Dots_RollingBufferSize = 2500, Dots_InitBars = 6900 (locked depth tunables).
     - S.7 trade-management constants (SPREAD 3.0, RISK_MULT 2.0, MAX_RISK 150.0,
       STEP_PCT 0.30). BE nudge = +1 step. Tier-3 LeapFrog activate. The S.7 SL / BE /
-      tier / runner base is UNTOUCHED. TWO authorized S.7 changes only: MAX_POSITIONS=6 is
+      tier / runner base is UNTOUCHED. THREE authorized S.7 changes only: MAX_POSITIONS=6 is
       REPLACED by the 6-lot live-risk jar (change d); PER-TICK SL repositioning is REVERTED to
-      PER-BAR (change e). No other S.7 element changes.
+      PER-BAR (change e); the initial SL becomes MOMENTUM-CONDITIONAL, min(ATR×4,150) on momentum
+      entries (change f). RISK_MULT=2.0 stays the base and the $150 MAX_RISK cap is inviolate.
+      No other S.7 element changes.
     - ResizeAndSmartShift as sole shift authority; sacred calculation pass order.
   ────────────────────────────────────────────────────────────────────────────
 
@@ -236,31 +241,57 @@
   the values it computes.
 
 ================================================================================
- PHASE 6 — VERIFICATION (before any deconstruction)
+ PHASE 6 — MOMENTUM-CONDITIONAL INITIAL SL (change f)
 ================================================================================
 
-  Step 23. MetaEditor compile: 0 errors / 0 warnings.
-  Step 24. Run DOT_post_update_checklist.txt in full — every item PASS.
-  Step 25. Strategy Tester alignment: reproduce the reference RUN numbers under the
+  Widen the initial stop on strong-signal entries, up to the existing $150 cap. This is a
+  single branch at the order-open path where initial_risk is set from ATR.
+
+  Step 23. AT ENTRY (the order-open path, where initial_risk = ATR_1M × RISK_MULT is computed):
+           make the ATR multiple momentum-conditional. Reuse the SAME momentum value the
+           runner already computes at entry — v = Micro_LogReturn × dir:
+             if v >= 0.00012:  initial_risk = MathMin(ATR_1M × 4.0, 150.0)   (momentum entry)
+             else:             initial_risk = MathMin(ATR_1M × 2.0, 150.0)   (unchanged base)
+           No new variable — v is already computed for the runner lag (S.12). The $150
+           MAX_RISK cap is the SAME inviolate ceiling; nothing risks more than $150+spread.
+  Step 24. Confirm STEP / BE / tier / trail continue to derive from initial_risk as-is (the
+           wider momentum risk flows through naturally); RISK_MULT = 2.0 stays the base
+           constant (S.17 unaltered — this is a conditional branch, not a base change).
+  Step 25. Compile 0/0.
+  VERIFY: momentum entries (v >= 0.00012) use min(ATR×4, 150), non-momentum use min(ATR×2, 150);
+  no trade's initial risk exceeds 150; the book reproduces SL 194 -> 166, WR 91.9% -> 92.8%,
+  PF 5.83 -> 6.12, OOS PF 6.57 -> 6.99, min-fold 5.01 -> 5.49, worst-day -127.5 and max-DD
+  -165.6 HELD, net $58,249; runner LF count/net unchanged.
+
+================================================================================
+ PHASE 7 — VERIFICATION (before any deconstruction)
+================================================================================
+
+  Step 26. MetaEditor compile: 0 errors / 0 warnings.
+  Step 27. Run DOT_post_update_checklist.txt in full — every item PASS.
+  Step 28. Strategy Tester alignment: reproduce the reference RUN numbers under the
            jar (WR 91.9%, PF 5.83, net $58,685 @1lot, worst-day −$127.5, 6/6 folds,
            22/22 weeks, OOS PF 6.57) within tolerance. Confirm both F1 signals fire, the
            momentum-runner lag switches on v ≥ 0.00012, the live-lot jar never exceeds
            6 (BE frees a lot; +74 trades vs the old count cap), and per-bar management
-           reproduces portfolio_simulation_engine.py trade-for-trade on a parity run.
-  Step 26. A2.7 DIRECTIVE RECONCILIATION: verify the COMPLETE system still
+           reproduces portfolio_simulation_engine.py trade-for-trade on a parity run, and momentum
+           entries (v ≥ 0.00012) use min(ATR×4,150) giving SL 166 / WR 92.8% / OOS PF 6.99.
+  Step 29. A2.7 DIRECTIVE RECONCILIATION: verify the COMPLETE system still
            satisfies completeness (8/8 structures present), adaptivity (all
            thresholds through the oracle), parity (export = live; per-bar management ==
            the sim), and consistency (sacred layer untouched; jar bounds live risk at 6
-           lots) — not merely that the 5 changes were executed.
+           lots) — not merely that the 6 changes were executed.
 
   ONLY AFTER all of the above pass does any old-code removal proceed
   (build-first, deconstruct-second — see DOT_linear_development_schedule.txt).
 
 
-  NET EFFECT: five bounded changes. The runner touches one arithmetic line in
+  NET EFFECT: six bounded changes. The runner touches one arithmetic line in
   the trail; the F1 subsystem adds two 16-slot boolean buffers + lagged lookups
   on already-computed conditions; the signal set becomes the validated 50; the
   live-risk jar replaces the count cap with a single live-lot counter that BE frees;
-  and the SL-management path is gated to new-bar (per-bar reposition off closed-bar
-  extremes), reproducing the sim. The heavy machinery (adaptive calibration, KAMA
-  warm-start, export, thresholds, memory chain) is sacred and untouched.
+  the SL-management path is gated to new-bar (per-bar reposition off closed-bar
+  extremes), reproducing the sim; and the initial SL gains one momentum-conditional
+  branch (min(ATR×4,150) when v ≥ 0.00012) reusing the runner's own momentum value.
+  The heavy machinery (adaptive calibration, KAMA warm-start, export, thresholds,
+  memory chain) is sacred and untouched.

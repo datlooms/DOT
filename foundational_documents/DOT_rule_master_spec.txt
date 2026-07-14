@@ -13,7 +13,8 @@
 ║  D2D Filter:  ALL signals require D2D_Trend_Dir confirmation               ║
 ║                                                                            ║
 ║  EXIT: S.7 DYNAMIC SL + MOMENTUM-RUNNER upgrade (runner trail only)        ║
-║    SL min(ATR×2,150) | BE +1 step | LeapFrog 0.30×risk activate tier 3     ║
+║    SL min(ATR×2,150) base / min(ATR×4,150) momentum entries (v≥0.00012)    ║
+║    BE +1 step | LeapFrog 0.30×risk activate tier 3 | $150 cap inviolate     ║
 ║    RUN: lag=3 if (Micro_LogReturn×dir ≥ 0.00012) else 2 | Fri 16:45 close  ║
 ║                                                                            ║
 ║  BACKTEST — IN-BOOK PORTFOLIO (50 together, ~105 days, Jan19-Jun25):       ║
@@ -38,6 +39,19 @@
   Rule:  at entry, if v >= 0.00012 -> LeapFrog lag = 3 ; else lag = 2.
   Effect (BOOK-50, jar, S.7 -> RUN): PF 5.66 -> 5.83 | net $56,663 -> $58,685 | OOS PF 5.96 -> 6.57
 
+  MOMENTUM-CONDITIONAL INITIAL SL  [VALIDATED RESEARCH — PENDING EA IMPLEMENTATION]
+══════════════════════════════════════════════════════════════════════════════
+  Scope: INITIAL SL on momentum entries ONLY. BE/tier/runner/Friday/entries = S.7. No look-ahead.
+  Input: Micro_LogReturn (EA-computed), directional v = value * direction (same gate as the runner).
+  Rule:  at entry, if v >= 0.00012 -> initial_risk = min(ATR×4, 150) ; else min(ATR×2, 150).
+         The $150 MAX_RISK cap is UNCHANGED and INVIOLATE — no trade risks more than $150+spread;
+         this only lets momentum entries widen UP TO the existing $150 cap (mean stop $86 -> $131;
+         54% pin to $150). Rationale: room lets strong-signal entries survive a wobble and recover.
+  Effect (BOOK-50, jar, RUN -> +momentum-SL): SL hits 194 -> 166 (-28) | WR 91.9% -> 92.8% |
+         PF 5.83 -> 6.12 | OOS PF 6.57 -> 6.99 | min-fold 5.01 -> 5.49 | worst-day -127.5 HELD |
+         net $58,685 -> $58,249 (-$436). A QUALITY lift (fewer losers, higher WR, stronger OOS)
+         at flat net, not a profit upgrade. Runner interaction confirmed clean (LF count/net held).
+
   LABELLING RULE
 ══════════════════════════════════════════════════════════════════════════════
   Per-signal stats are STANDALONE (F0: signal_full_records.csv; F1: signal_full_records_F1.csv).
@@ -57,6 +71,17 @@
       -$2,500 FTMO daily gate). Counts RISK, not bodies: break-even'd winners no longer block new
       entries, so more trades are admitted over the session at the identical hard bound.
   1. SL: initial_risk=MathMin(ATR_1M×2.0,150.0); SL=entry±risk
+  1M. MOMENTUM-CONDITIONAL INITIAL SL (LAW): on MOMENTUM entries
+      (Micro_LogReturn×dir ≥ 0.00012 — the SAME gate as the runner lag, S.12),
+      initial_risk=MathMin(ATR_1M×4.0,150.0); non-momentum entries keep
+      MathMin(ATR_1M×2.0,150.0). The $150 MAX_RISK cap is UNCHANGED and INVIOLATE —
+      no trade risks more than $150+spread; this only lets momentum entries widen UP TO
+      that existing cap (mean momentum stop $86 -> $131; 54% pin to $150). Reuses the
+      already-computed lr×dir momentum value — NO new variable. Does NOT alter RISK_MULT=2.0
+      (S.17); it is a momentum-conditional branch, same pattern as the runner's lag-2/lag-3.
+      Effect (RUN, jar): SL 194 -> 166, WR 91.9% -> 92.8%, PF 5.83 -> 6.12, OOS PF 6.57 -> 6.99,
+      min-fold 5.01 -> 5.49; worst-day -127.5 and max-DD -165.6 HELD; net $58,249 (-$436). A
+      QUALITY lift (fewer losers, higher WR, stronger OOS), not a profit upgrade.
   2. STEP 0.30×risk  3. BE: profit≥1×step → SL=entry±step (printed only)
   4. TIERS: entry±N×step → TiersReached=N  5. LEAPFROG Tiers≥3 → SL=entry±(Tiers-lag)×step
      lag=3 if Micro_LogReturn×dir≥0.00012 else 2   6. FRIDAY 16:45 EST close ALL

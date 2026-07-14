@@ -51,7 +51,7 @@ SECTION 8.2   [ 8219 – 8555]  PARTIAL TP VISUALS & LOGIC
 SECTION 8.3   [ 8556 – 8613]  ORDER MANAGEMENT HELPERS
 SECTION 8.4   [ 8614 – 8683]  SESSION ENFORCEMENT LOGIC (Friday close)
 SECTION 8.5   [ 8684 – 8770]  DATA CACHING HELPER & RE-PAINT
-SECTION 8.6   [ 8771 – 8852]  DOTS TRADE MANAGEMENT                  << lag entry + jar admission / increment
+SECTION 8.6   [ 8771 – 8852]  DOTS TRADE MANAGEMENT                  << lag entry + jar admission + momentum-conditional initial SL
 SECTION 8.7   [ 8853 – 8926]  DOTS HELPERS
 SECTION 8.8   [ 8927 – 9057]  DOTS POSITIONS & ALERTS               << ManageDotsPositions: per-tick -> per-bar SL reposition
 SECTION 9.0   [ 9058 – 11020] STATISTICS PANEL
@@ -63,7 +63,7 @@ SECTION 11    [11500 – 11673] THE SHUTDOWN ROUTINE (STATEFUL)
 
 ---
 
-## 2. WHERE THE FIVE CHANGES LAND
+## 2. WHERE THE SIX CHANGES LAND
 
 ### Change (a) — Momentum-runner TM branch
 - **Primary: SECTION 8.1 ADVANCED TRADE MANAGEMENT [8032–8218]** — the LeapFrog
@@ -142,6 +142,21 @@ SECTION 11    [11500 – 11673] THE SHUTDOWN ROUTINE (STATEFUL)
   is always live per-tick), LOCK_FRAC / BE_TRIG_FRAC, and the SL / step / BE / tier / trail
   arithmetic. Change (e) alters WHEN the EA repositions the SL, not the values it computes.
 
+### Change (f) — Momentum-conditional wider initial SL
+- **Landing: SECTION 8.6 DOTS TRADE MANAGEMENT [8771–8852]**, the order-open path where the
+  initial risk is computed (~line 8794): `double atr = ATR_1M_Array[1];` then
+  `double risk = MathMin(atr * Dots_SL_Mult, Dots_SL_Cap);`. Make the ATR multiple
+  momentum-conditional here: if the entry's momentum value `v = Micro_LogReturn × dir >= 0.00012`
+  use a ×4 multiple, else the base ×2 — capped by `Dots_SL_Cap` ($150) exactly as now:
+  `double mult = (v >= 0.00012) ? 4.0 : Dots_SL_Mult;` then
+  `double risk = MathMin(atr * mult, Dots_SL_Cap);`.
+- **Reuses the runner's momentum value** — `v` is the SAME `Micro_LogReturn × dir` already
+  computed at Dots entry for the runner lag (change a / S.12); NO new variable, NO new buffer.
+- **UNTOUCHED:** `Dots_SL_Cap` = 150 (the inviolate $150 MAX_RISK ceiling — no trade risks more
+  than $150+spread), `Dots_SL_Mult` = 2.0 stays the base constant (S.17), and STEP / BE / tier /
+  trail all continue to derive from `risk` as-is (the wider momentum risk flows through naturally).
+  Uses `ATR_1M_Array[1]` (closed bar) — consistent with the per-bar model (change e).
+
 ---
 
 ## 3. SACRED — DO NOT MODIFY (behavior-changing edits INVALID without human sign-off)
@@ -157,7 +172,7 @@ SECTION 11    [11500 – 11673] THE SHUTDOWN ROUTINE (STATEFUL)
 - **Locked tunables (SECTION 2.0):** Dots_RollingBufferSize = 2500,
   Dots_InitBars = 6900, and the S.7 trade-management constants.
 
-The five changes are additive and bounded. They do not touch the calculation
+The six changes are additive and bounded. They do not touch the calculation
 memory chain, the threshold oracle, the KAMA persistence, or the export schema.
 
 ---
@@ -181,4 +196,5 @@ Eval_Dots_Signals          @4805    << F1 latch write + lagged fire; signal disp
 (SECTION 8.6 Dots admit)   ~8771    << jar admission (live_lots < 6) + increment
 ManageDotsPositions        @8929    << change (e): per-tick -> per-bar SL reposition (closed-bar H/L)
 (OnTick Dots mgmt call)    ~1380    << change (e): gate to new-bar (currently every tick)
+(Dots entry risk calc)     ~8794    << change (f): momentum-conditional min(ATR x4,150) initial SL
 ```

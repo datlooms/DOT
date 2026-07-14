@@ -15,24 +15,24 @@ Measured **in-book** (all 50 signals trading together) over the clean 6-month sa
 | Metric | RUN (momentum-runner) | S.7 base (ratified) |
 |---|---|---|
 | Signals | 50 (37 long / 13 short) | 50 |
-| Trades | 2,409 | 2,416 |
-| Win rate | 91.9% | 91.9% |
-| Profit factor | 5.83 | 5.66 |
-| Net P&L (6 mo, 1 lot) | **+$58,685** | +$56,663 |
+| Trades | 2,363 | 2,370 |
+| Win rate | 92.8% | 92.8% |
+| Profit factor | 6.12 | 5.95 |
+| Net P&L (6 mo, 1 lot) | **+$58,249** | +$56,341 |
 | Worst single day | −$127.5 | −$127.5 |
 | Max drawdown | −$165.6 | −$165.6 |
 | Monthly folds positive | 6 / 6 | 6 / 6 |
 | ISO-weeks positive | 22 / 22 | 22 / 22 |
 | Weekdays positive | 5 / 5 | 5 / 5 |
-| March bear-fold PF | 5.47 | — |
+| March bear-fold PF | 5.69 | — |
 
 **Out-of-sample (the fixed book measured on May–June, never used to select it):**
 
 | Metric | RUN | S.7 base |
 |---|---|---|
-| Profit factor | **6.57** | 5.96 |
-| Win rate | 92.2% | — |
-| Net P&L | +$18,926 | — |
+| Profit factor | **6.99** | 6.37 |
+| Win rate | 93.1% | — |
+| Net P&L | +$18,742 | — |
 
 The out-of-sample profit factor is **higher** than the in-sample figure. A curve-fit book collapses out-of-sample; this one strengthens. That is the central evidence that the convergence edge is real, not fitted.
 
@@ -49,7 +49,9 @@ The out-of-sample profit factor is **higher** than the in-sample figure. A curve
 
 **The gate.** A signal trades if at least two qualifying signals fire together, or a lone signal fires on a bar with Volume ≥ 300 ticks. Eligibility requires ADX ≥ 15 and Volume > 50. Every signal is D2D-direction-gated.
 
-**The exit (universal).** All 50 signals share one exit system — S.7 dynamic stop management: an initial stop at min(ATR×2, 150), a break-even nudge that locks in one step of profit, and a LeapFrog trailing stop that ratchets up as the move tiers out. Fridays force-close at 16:45 EST. The optional **momentum-runner** upgrade widens the LeapFrog trail by one lag when the entry bar's directional log-return is strong — a runner-only change that lifts profit factor at zero cost to win rate or worst-day.
+**The exit (universal).** All 50 signals share one exit system — S.7 dynamic stop management: an initial stop at min(ATR×2, 150), a break-even nudge that locks in one step of profit, and a LeapFrog trailing stop that ratchets up as the move tiers out. Fridays force-close at 16:45 EST. Two conditional upgrades key off the same strong-momentum signal (the entry bar's directional log-return): the **momentum-runner** widens the LeapFrog trail by one lag, and the **momentum-conditional initial SL** widens the initial stop to min(ATR×4, 150) — never above the inviolate $150 cap — giving strong-signal entries more room to recover instead of clipping a tight stop. Both lift quality (fewer losers, higher win rate, stronger out-of-sample) with the worst day held.
+
+**How the stop is managed — per-bar.** The EA repositions the stop only at each new bar, computed off the closed bar's high and low; the broker holds a hard stop that still executes intrabar on any tick, so downside protection is always live. This per-bar discipline is what makes the live EA reproduce the validated backtest exactly — moving the stop on every tick instead would scratch developing runners and drift the book below its tested numbers.
 
 **The concurrency control.** Positions are bounded by a **6-lot live-risk jar** — the EA holds at most 6 lots of *live* (pre-break-even) risk at once. Each trade takes one lot of the jar; when a winning trade reaches break-even (its stop at entry, so it can no longer lose), its lot leaves the jar and frees a slot. A new signal opens only when there is room (fewer than 6 live lots). Because break-even'd winners no longer count as risk, the book works more of the session without ever holding more than 6 lots of live risk — it counts risk, not open positions. This is a strict improvement over a plain position cap: it takes 74 more trades over the sample at the identical 6-lot hard bound, with the same −$127.5 worst day and −$165.6 max drawdown.
 
@@ -60,15 +62,15 @@ The out-of-sample profit factor is **higher** than the in-sample figure. A curve
 ## Why the signals are trustworthy
 
 - **Selected out-of-sample.** The core was chosen on January–April and measured on unseen May–June. It held and strengthened.
-- **Loss-decorrelation, not sample-fit.** Signals were selected to have *independent losing days*, not to maximize in-sample profit factor. That is why 50 signals produce a −$127 worst day: their bad days don't stack. A naive union of every persistent signal collapses to profit factor 1.9; the decorrelated book holds above 5.
+- **Loss-decorrelation, not sample-fit.** Signals were selected to have *independent losing days*, not to maximize in-sample profit factor. That is why 50 signals produce a −$127 worst day: their bad days don't stack. A naive union of every persistent signal collapses to profit factor 1.9; the decorrelated book holds above 6.
 - **Persistence at three time-scales.** Each signal and the book hold across 6/6 monthly folds, the ISO-weeks, and all five weekdays — a bar a small-sample fluke cannot clear.
-- **A real crash in the sample.** The March −10% war crash is inside the data, and the book stayed green through it (bear-fold PF 5.23).
+- **A real crash in the sample.** The March −10% war crash is inside the data, and the book stayed green through it (bear-fold PF 5.69).
 - **The trim fought overfitting.** A leave-one-out pass *removed* several high-profit-factor signals precisely because their losses were book-correlated — the selection optimized against its own seductive numbers.
 
 ---
 
 ## Status
 
-The BOOK-50 signal set and its trade management are validated in research and frozen. The remaining work is the EA build: implementing the momentum-runner trail, the small sequential-latch subsystem for the 2 F1 signals, swapping in the 50-signal panel, and replacing the position cap with the 6-lot live-risk jar — then the live FTMO demo, which is the true final test. See `DOT_dev_plan.txt`, `DOT_linear_development_schedule.txt`, and `DOT_handover_blueprint.txt`.
+The BOOK-50 signal set and its trade management are validated in research and frozen. The remaining work is the EA build — six bounded changes: the momentum-runner trail, the sequential-latch subsystem for the 2 F1 signals, the 50-signal panel, the 6-lot live-risk jar (replacing the position cap), per-bar SL management (so the live EA matches the validated book), and the momentum-conditional wider initial SL — then the live FTMO demo, which is the true final test. See `DOT_dev_plan.txt`, `DOT_linear_development_schedule.txt`, and `DOT_handover_blueprint.txt`.
 
 *Scale note: every figure in this document is true $1/point/1.0 lot. Per-signal statistics elsewhere in the record set are standalone (that signal alone); the numbers above are in-book (the whole portfolio together). The two are never mixed.*

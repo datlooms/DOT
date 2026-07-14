@@ -134,6 +134,22 @@ are where the method was forged.
       any tick (downside always live); only the EA's REPOSITIONING is per-bar. This is a parity
       fix — per-bar management is what makes live == the validated book.
 
+  (h) THE LOSS-REDUCTION SEARCH (what finally worked: room, not restriction).
+      A systematic hunt for a way to cut the ~194 SL losers. Everything that REMOVED or
+      RESTRICTED failed: a price-action loser filter (scan of the whole micro family) found
+      ZERO variables that cut losers without cutting more winners — the losers are statistically
+      invisible at entry; tighter initial stops added losers; a two-step breakeven lock scratched
+      ~950 developing winners to save ~106 losses (net -$21k). The ONE thing that worked was the
+      opposite instinct — giving strong-signal entries MORE room: a momentum-conditional wider
+      initial SL, min(ATR×4, 150) on momentum entries (lr×dir >= 0.00012), non-momentum unchanged
+      at min(ATR×2, 150). Honest framing: since 54% pin to the cap, it is really "let momentum
+      entries use up to the $150 ceiling you already set" (mean stop $86 -> $131) — the $150 cap
+      is never exceeded. Validated: 194 -> 166 SL, WR 91.9% -> 92.8%, PF 5.83 -> 6.12, OOS PF 6.57
+      -> 6.99, min-fold 5.01 -> 5.49, worst-day -127.5 and max-DD -165.6 HELD, runners untouched,
+      net $58,249 (-$436). A QUALITY lift for a rounding-error of net. The lesson: you cannot
+      filter or stop your way out of the losers (they look like winners at entry); you can only
+      give the borderline ones room to recover. Room helps; taking room hurts.
+
   The recurring lesson across all three: a weak or negative result is a data
   point that redirects, not a verdict that closes a door. Depth stayed closed
   because the clean test said so; the +18 and F1 opened because the clean test
@@ -251,7 +267,7 @@ are where the method was forged.
   The signal set and trade management are validated and frozen. The remaining
   work takes the CURRENT equiDOT.cs (frozen, compiles 0/0) to BOOK-50 through
   the full pipeline (Developer -> Supervisor -> Auditor -> human confirm +
-  MetaEditor 0/0). FIVE changes, no more:
+  MetaEditor 0/0). SIX changes, no more:
 
     (a) MOMENTUM-RUNNER TM BRANCH. In the LeapFrog trail only, switch lag = 3
         when the entry bar's Micro_LogReturn × direction ≥ 0.00012, else 2.
@@ -283,6 +299,15 @@ are where the method was forged.
         tick (downside always live); only the EA's REPOSITIONING is per-bar. Parity fix —
         per-bar is the validated $58,685 book; per-tick diverges downward. Sacred/S.7 change;
         human authorization granted.
+
+    (f) MOMENTUM-CONDITIONAL WIDER INITIAL SL. At the order-open path where initial_risk is
+        set from ATR (SECTION 8.6, risk = MathMin(atr*Dots_SL_Mult, Dots_SL_Cap)), make the
+        ATR multiple momentum-conditional: if v = Micro_LogReturn x dir >= 0.00012 use
+        min(ATR×4, 150), else min(ATR×2, 150). Reuses the runner's OWN v (no new variable).
+        The $150 cap (Dots_SL_Cap) is inviolate and RISK_MULT / Dots_SL_Mult = 2.0 stays the
+        base (S.17 unaltered) — this is a momentum-conditional branch, same pattern as the
+        runner's lag-2/lag-3. Quality lift: 194 -> 166 SL, WR -> 92.8%, OOS PF -> 6.99, worst-day
+        held, net $58,249 (-$436). Sacred/S.7 change; human authorization granted.
 
   Then: MetaEditor 0/0 compile, Strategy Tester alignment to the reference
   numbers, and the live FTMO demo.

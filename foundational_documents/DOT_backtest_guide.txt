@@ -186,6 +186,16 @@ one lot. (An earlier era used 100×; every figure here is the corrected 1×.)
        (thresholds) and jar-parity (admission): if the EA repositions per-tick, live != the
        validated book. Only tick-level data / a demo can locate live inside that bracket.
 
+  4.9  MOMENTUM-CONDITIONAL INITIAL SL (committed engine behavior — model it as the EA runs it).
+       On MOMENTUM entries (Micro_LogReturn x dir >= 0.00012 — the SAME gate as the runner lag),
+       the initial stop widens to min(ATR x 4, 150); non-momentum entries keep min(ATR x 2, 150).
+       The $150 cap is inviolate — no trade risks more than $150+spread; momentum entries merely
+       use more of the cap (mean stop $86 -> $131; 54% pin to $150). The sim reflects this exactly,
+       so backtest == live. It is a QUALITY lift, not a profit change: 166 SL (-28), WR 91.9% ->
+       92.8%, PF 5.83 -> 6.12, OOS PF 6.57 -> 6.99, min-fold 5.01 -> 5.49, worst-day -127.5 and
+       max-DD -165.6 HELD, net $58,249 (-$436, essentially flat). Runner LF count/net unchanged.
+       The $150 cap holding the worst-day is the key survival invariant to confirm on a parity run.
+
   LABELLING: per-signal numbers are STANDALONE (that signal alone; F0 ->
   signal_full_records.csv, F1 -> signal_full_records_F1.csv). Book numbers are
   IN-BOOK PORTFOLIO. Never mix the two.

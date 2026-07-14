@@ -418,6 +418,26 @@ entries LOSES money (-$678, PF 0.97) -- the edge is the signal. Combined with OO
 (luck cannot improve out-of-sample), BOOK-50's edge is statistically distinguishable from luck.
 A book that sits inside the null cloud, or whose TM alone makes the money, is treated as a fit.
 
+
+S.19 — THE MOMENTUM-CONDITIONAL INITIAL SL (RATIFIED S.7 addition, change g):
+On MOMENTUM entries (Micro_LogReturn x direction >= 0.00012 -- the SAME gate as the runner lag,
+S.12), the initial stop uses a wider ATR allowance UP TO the existing $150 cap:
+initial_risk = min(ATR x 4, 150) on momentum entries; non-momentum entries keep min(ATR x 2, 150)
+UNCHANGED. The $150 MAX_RISK cap (S.17) is UNCHANGED and INVIOLATE -- no trade ever risks more
+than $150 + spread; this only lets momentum entries widen up to the cap already deemed safe (mean
+momentum stop $86 -> $131; ~54% pin to $150). This does NOT overturn S.17's risk_mult 2.0: 2.0
+remains the BASE, and this adds a momentum-conditional branch, the same architecture as the
+runner's base-lag-2 / momentum-lag-3. Rationale: room lets strong-signal entries survive an
+intrabar wobble and recover -- the ONLY loss-reduction measure that held net (every filter, tighter
+stop, and the two-step BE failed by cutting or scratching winners; "room helps, taking room hurts").
+Validated (BOOK-50, jar, RUN TM, true $1/pt): SL hits 194 -> 166 (-28), WR 91.9% -> 92.8%, PF
+5.83 -> 6.12, OOS PF 6.57 -> 6.99, min-fold PF 5.01 -> 5.49, worst-day -$127.5 HELD, max-DD -$165.6
+HELD, 6/6 folds, 22/22 weeks, all weekdays. Net $58,685 -> $58,249 (-$436, -0.7%) -- a QUALITY lift
+(fewer losers, higher WR, stronger OOS) at flat net, not a profit upgrade. Runner interaction
+confirmed clean (LF count 382-388 vs base 387, LF net held). SACRED: the momentum gate (0.00012,
+shared with the runner), the ATR x 4 widening, the $150 inviolate cap, and non-momentum staying
+min(ATR x 2, 150). It is an S.7 change requiring the full pipeline + human authorization (granted).
+
 S.ENFORCE (DEVELOPER):
 If any requested task appears to require modifying a protected element, STOP and
 request explicit human confirmation BEFORE writing any code. Do not implement a
