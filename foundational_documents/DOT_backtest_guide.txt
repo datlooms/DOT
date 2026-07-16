@@ -196,6 +196,25 @@ one lot. (An earlier era used 100×; every figure here is the corrected 1×.)
        max-DD -165.6 HELD, net $58,249 (-$436, essentially flat). Runner LF count/net unchanged.
        The $150 cap holding the worst-day is the key survival invariant to confirm on a parity run.
 
+  4.10 CONVICTION SELF-SCALING + GAP-SINGLES (S.20 / change g — model as the EA runs it, 1-LOT BASE).
+       On top of the final book, the EA scales its own lot size and adds two gap-only entries:
+         - book-LONG entry: if Micro_Hurst > adaptive p90 -> 2.0 lots, else 1.0 (LONGS ONLY); a book
+           long within 5 bars of a Micro_FailedBreak-extreme -> 1.25 lots; both -> higher (2.0).
+         - two gap-singles (fire only when zero Dots positions open): Micro_Hurst>p97 & D2D=+1 LONG,
+           and Micro_FailedBreak>p90 & D2D=-1 (counter) LONG; each 1.0 lot at LOCK=3; gate ADX>=15,
+           Vol>=300. All share the one 6-lot jar.
+       To reproduce: run score_book50 / the ratified merged engine with the conviction lot multiplier
+       at admission and the gap-single entries gated to zero-Dots-open. Expected G book (1 lot,
+       momentum-SL active): 2,691 tr | WR 92.2% | PF 6.15 | net $89,487 | worst-day -153.7 | max-DD
+       -153.7 | 6/6 folds | OOS PF 6.81 | OOS net $28,447. Population (honest): book x1.0=1,339 / Hurst
+       x2.0=210 / recentFB x1.25=809 / gap-Hurst=48 / gap-FailedBreak=285. (The earlier modelled $90,103
+       / 2,828 tr / x2=254 carried a research-harness jar-sharing artifact — the pack engine reproduces
+       the honest $89,487, a 0.7% correction that changes no conclusion.) Option map (all pack-engine):
+       A flat $58,277 | B Hurst-only sizing $66,434 | G' Hurst-x2 + gap-only $84,554 (worst-day -127.5)
+       | G $89,487 (worst-day -153.7) | E crude bolt-in REJECTED (dropped OOS below flat). DEPLOY 1-LOT BASE
+       ONLY — the multiplier IS the scaling; the 12-lot worst-case stack (-$1,800) is inside the
+       -$2,500 gate at 1-lot base, but -$3,600 (over the gate) at 2-lot base.
+
   LABELLING: per-signal numbers are STANDALONE (that signal alone; F0 ->
   signal_full_records.csv, F1 -> signal_full_records_F1.csv). Book numbers are
   IN-BOOK PORTFOLIO. Never mix the two.

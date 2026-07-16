@@ -1,0 +1,158 @@
+================================================================================
+  equiDOT BOOK-50 — LINEAR DEVELOPMENT SCHEDULE
+  From first line of code to Strategy Tester alignment and demo
+================================================================================
+
+  This is the master roadmap. It sequences the DOT_dev_plan.txt steps into the
+  correct build order and adds the deconstruction and Strategy-Tester phases the
+  dev plan does not cover. Each phase must be completed AND verified before the
+  next. No skipping. No parallelism. One path from start to finish.
+
+  CRITICAL SEQUENCE: BUILD FIRST, DECONSTRUCT SECOND. The current signal set and
+  any code the new system might reuse stays in the EA until BOOK-50 is fully
+  operational and Strategy-Tester-aligned. Only then is anything stripped. This
+  prevents removing something the new system needs.
+
+  REFERENCE DOCUMENTS:
+    DOT_rule_master_spec.txt        — the 50 signal definitions + gates + exits
+    DOT_dev_plan.txt                — the technical build steps (4 changes)
+    DOT_performance_record.xlsx     — target numbers (RUN + S.7)
+    DOT_signal_dictionary.xlsx      — signal names + ELI5
+    DOT_post_update_checklist.txt   — the verification checkboxes
+    DOT_codebase_map.md             — where each change lands in equiDOT.cs
+    non_negotiables_developer.txt     — coding laws
+    non_negotiables_supervisor.txt    — architectural laws + audit rules
+    equiDOT.cs                        — current EA source (FROZEN until Phase 7)
+
+  DATA / SCALE:
+    Sealed baseline: equiDOT_recon171_step7_part1..8.csv (152,983 × 171),
+    Jan 19 – Jun 25 2026, incl. the March −10% US-Iran-war crash. True $1/pt.
+
+  TARGET NUMBERS (Strategy Tester must reproduce, RUN TM):
+    50 signals (37L / 13S), 6-lot live-risk jar | 2,409 tr | WR 91.9% | PF 5.83 | net $58,685 @1lot
+    worst-day −$127.5 | max-DD −$165.6 | 6/6 folds | 22/22 weeks | 5/5 weekdays | min-fold PF 5.01
+    March bear PF 5.47 | OOS PF 6.57 | OOS WR 92.2% | OOS net $18,926
+    S.7 base (no runner): 2,416 tr | PF 5.66 | net $56,663 | OOS PF 5.96
+
+
+═══════════════════════════════════════════════════════════════════════════
+ PHASE 0 — PREPARATION (read-only; change nothing)
+═══════════════════════════════════════════════════════════════════════════
+  0.1  Read the non_negotiables (all three) and confirm the SACRED registry.
+  0.2  Read DOT_codebase_map.md; confirm the 4 landing zones in equiDOT.cs.
+  0.3  Confirm equiDOT.cs compiles 0/0 as-is (baseline).
+  0.4  Confirm the adaptive threshold table exposes the thresholds the new legs
+       need (Sqz_Val:hi, Micro_OrderFlowDelta:lo, plus all 48 F0 legs) — the F1
+       and F0 legs route through the SAME oracle path. No new threshold source.
+  VERIFY: baseline builds; sacred layer catalogued; no code changed yet.
+
+
+═══════════════════════════════════════════════════════════════════════════
+ PHASE 1 — MOMENTUM-RUNNER TM BRANCH  (dev_plan Steps 1–5)
+ Build the smallest change first; it touches only the trail arithmetic.
+═══════════════════════════════════════════════════════════════════════════
+  1.1  Add per-position entryLogReturn + leapFrogLag state.
+  1.2  At Dots entry, set leapFrogLag = (Micro_LogReturn*dir >= 0.00012) ? 3 : 2.
+  1.3  In the LeapFrog trail ONLY, use per-position leapFrogLag.
+  1.4  Compile 0/0.
+  VERIFY: with the CURRENT signal set still in place, the trail widens on high-
+  velocity entries only; SL/BE/tier/Friday/entries unchanged. Sanity: RUN should
+  lift PF vs S.7 with worst-day and WR steady.
+
+
+═══════════════════════════════════════════════════════════════════════════
+ PHASE 2 — SEQUENTIAL-LATCH SUBSYSTEM  (dev_plan Steps 6–10)
+ Add the 2 F1 latch buffers + lagged fire, wired into the existing eval path.
+═══════════════════════════════════════════════════════════════════════════
+  2.1  Add the two 16-slot boolean ring buffers + rolling index (SECTION 3.0),
+       under ResizeAndSmartShift discipline (one shift per bar).
+  2.2  Write the latch each bar (Sqz_Val:hi&flip ; ADX_Rising==0&flip), routing
+       Sqz_Val:hi through the existing adaptive threshold.
+  2.3  Add the lagged fire for F1-SB (lag 13) and F1-TE (lag 8) with their leg-B
+       conditions and the D2D gate.
+  2.4  Register the 2 F1 signals in the rule table with triggerKind = F1_SEQ.
+  2.5  Compile 0/0.
+  VERIFY: both F1 signals fire on the expected bars; the latch never reaches
+  further back than its lag; ST_Flip is the shared anchor; no new exit or gate
+  was introduced. Confirm against the F1 standalone records (F1-SB 33 tr /
+  WR 93.9% / PF 9.69 ; F1-TE 42 tr / WR 92.9% / PF 4.75).
+
+
+═══════════════════════════════════════════════════════════════════════════
+ PHASE 3 — THE 50-SIGNAL PANEL  (dev_plan Steps 11–14)
+═══════════════════════════════════════════════════════════════════════════
+  3.1  Build the 48 F0 triples into the rule table from PART I of the spec.
+  3.2  Confirm the 2 F1 entries from Phase 2 sit alongside them (50 total).
+  3.3  Extend the panel to 50 rows across the 8 structures, F0/F1 type shown.
+  3.4  Macro-ordering audit across all sections (positional preprocessor).
+  3.5  Compile 0/0.
+  VERIFY: panel shows 50 (37L/13S) across 8 structures; every threshold routes
+  through the oracle; no retired mechanism (A/B/C) present.
+
+
+═══════════════════════════════════════════════════════════════════════════
+ PHASE 4 — LIVE-RISK JAR  (dev_plan Steps 15–19)
+ Replaces the MAX_POSITIONS=6 count cap with a 6-lot LIVE-risk jar.
+═══════════════════════════════════════════════════════════════════════════
+  DEPENDS ON: the S.7 BE-nudge logic (to detect break-even and free the lot), already
+  in the frozen baseline. Sequenced AFTER the 50-signal panel so the jar is built and
+  verified against the FINAL BOOK-50 book, not a partial set.
+  4.1  Add the live-lot counter g_dots_live_lots (SECTION 3.0) — a single integer.
+  4.2  REPLACE the MAX_POSITIONS count check at Dots entry (SECTION 8.6) with the jar
+       check: admit a new Dots signal ONLY IF g_dots_live_lots < 6; on open, += 1.
+       Always 1 lot (no fractional sizing); if the jar is full (== 6), skip the signal.
+  4.3  At the BE transition (SECTION 8.1, SL moved to entry±step — can no longer lose),
+       -= 1: the winner's lot leaves the jar. Decrement EXACTLY ONCE, guarded on the same
+       be flag that gates the one-time BE nudge.
+  4.4  On a still-live exit (a position closing pre-BE — an SL hit), -= 1; a position
+       closing AFTER break-even was already decremented at 4.3 (no double). Remove ALL
+       residual MAX_POSITIONS count-based blocking.
+  4.5  Compile 0/0.
+  VERIFY: the jar NEVER exceeds 6 live lots across a full run; break-even correctly frees
+  a lot; new signals admitted ONLY when live lots < 6; the book reproduces the jar numbers
+  (2,409 tr / net $58,685 / PF 5.83 / OOS 6.57), +74 trades vs the old count cap; worst-day
+  −$127.5 and max-DD −$165.6 unchanged.
+
+
+═══════════════════════════════════════════════════════════════════════════
+ PHASE 5 — FULL VERIFICATION  (dev_plan Steps 20–23)
+═══════════════════════════════════════════════════════════════════════════
+  5.1  Run DOT_post_update_checklist.txt end to end — every item PASS.
+  5.2  Strategy Tester alignment to the target numbers (RUN and S.7).
+  5.3  A2.7 directive reconciliation: completeness (8/8), adaptivity (oracle),
+       parity (export = live), consistency (sacred untouched).
+  VERIFY: Strategy Tester reproduces the reference book within tolerance; the
+  runner lag switches correctly; both F1 signals contribute; 8/8 structures live.
+
+
+═══════════════════════════════════════════════════════════════════════════
+ PHASE 6 — EXPORT PARITY  (the discipline that guards look-ahead)
+═══════════════════════════════════════════════════════════════════════════
+  6.1  Fresh export from the modified EA; confirm every threshold the EA computes
+       live is reproduced bit-for-bit by dots_thresholds.py (export = live).
+  6.2  Confirm the F1 latch is causal in the export: leg A + anchor from k bars
+       ago, leg B now — no future information anywhere.
+  VERIFY: parity holds; no look-ahead; the sealed-baseline discipline intact.
+
+
+═══════════════════════════════════════════════════════════════════════════
+ PHASE 7 — DECONSTRUCTION  (only now)
+═══════════════════════════════════════════════════════════════════════════
+  7.1  With BOOK-50 verified and aligned, remove any dead code from the previous
+       signal set that the new system does not use. One removal at a time; compile
+       0/0 and re-run the checklist after each.
+  7.2  Final macro-ordering + parity re-check.
+  VERIFY: EA still reproduces the reference numbers after cleanup; 0/0; parity holds.
+
+
+═══════════════════════════════════════════════════════════════════════════
+ PHASE 8 — DEMO (the true final test)
+═══════════════════════════════════════════════════════════════════════════
+  8.1  Deploy to the FTMO demo. Monitor execution parity: real spread vs the
+       modeled 3.0 pts, fills, 1-minute slippage, session handling.
+  8.2  Compare live behavior to the validated book. The demo is where regime
+       coverage and execution parity — the honest residuals — are finally tested.
+
+  Throughout: every deliverable passes Developer -> Supervisor -> Auditor ->
+  human confirm + MetaEditor 0/0. Nothing sacred is modified without documented
+  human authorization.

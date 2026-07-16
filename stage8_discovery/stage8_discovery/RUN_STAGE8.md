@@ -127,7 +127,42 @@ chosen set (discriminating — unlike density over the raw 249 pool).
 
 ---
 
-## E. OUTPUT
+## E. STEP 4 — F12 concurrence profiler (BLOCKING: run before the QRA selection phase)
+
+Measures whether raw stacking depth predicts outcome. No triplet, no signal
+list, no survivor filter in the primary view. Run DIRECTLY (multiprocessing):
+
+```
+python scanners\concurrence_profiler.py           (8 workers)
+python scanners\concurrence_profiler.py 16         (16 workers)
+python scanners\concurrence_profiler.py proof      (bounded + [PARITY] check)
+```
+
+No new dependency: k-means and silhouette are implemented in numpy. It forces the
+`spawn` start method (matches Windows; on Linux avoids a fork-after-threads stall),
+so each worker cold-loads the baseline once. Runtime on 8 cores / 16 threads:
+roughly 60–110 minutes (stage 4 = 3,216 configs at k 15..81; stage 5b category
+grid ≈ 4,000 configs; stage 8 null = 20 permutations over a k-subset; plus the
+secondary lens).
+
+Writes nine CSVs to `discovery_results\`:
+
+| File | Question it settles |
+|---|---|
+| `concurrence_depth_bars.csv` | How deep is the stack, bar by bar? (regime-tagged) |
+| `concurrence_events.csv` | Each stack's lifecycle: onset, build rate, peak, hold, decay, onset trade (regime at onset and peak). |
+| `concurrence_entry_order.csv` | Which conditions join first? Per regime and global. |
+| `concurrence_outcome_map.csv` | **KEY.** Peak depth × hold → WR/PF/worst-day/folds, with per-fold PF and trade counts. Does deeper-and-longer win in all six folds? |
+| `concurrence_composition.csv` | How variables cluster **per (direction × regime)** — condition and variable-level membership, top co-occurring pairs, cross-regime stability, deep-stack composition. Do variables keep the same partners across regimes? |
+| `concurrence_category_depth.csv` | When enough variables **within a cluster** stack, does it fire? Causal (burn-in-fit membership), per-fold columns. |
+| `concurrence_regimes.csv` | Do regimes exist (objective n), and does depth→outcome hold **inside every regime** (causal, swept across k, confirm+invert)? |
+| `concurrence_d2d_flips.csv` | Does depth build **before** a D2D flip, and separate good flips from bad? Candidate counter-D2D bars (flagged, never traded). |
+| `concurrence_null_baseline.csv` | Does the depth→outcome relation survive a **circular-shift null** that keeps depth's structure but breaks its price alignment? Observed vs null + empirical p-values. |
+
+Plus `concurrence_outcome_map_secondary.csv` — the outcome map over survivor-only
+conditions (231 of 249: near-identical to the primary, which is itself the finding).
+
+## F. OUTPUT
 
 `discovery_results/discovery_master.csv` — every candidate from every family
 (survivors AND rejects; only floor is each scanner's MIN_TRADES sample-size
@@ -146,7 +181,7 @@ Selection is a later step; nothing is dropped here.
 
 ---
 
-## F. TROUBLESHOOTING
+## G. TROUBLESHOOTING
 
 - pandas fragmentation `PerformanceWarning` (repeated single-column insert):
   cosmetic, ignore.
@@ -169,10 +204,16 @@ db52d43640f28d51dff730eb71e30c7091edf7f3bc0194ccd618ac78b72b0795  data/equiDOT_r
 c0443346abc1ef4cdd0f41bf0520dad05dc1de2f96fd5f0927138956221541f8  data/equiDOT_recon171_step7_part6.csv
 12fa174b93a50bafd230f3cfd9196e45df1de7d54907e59a319f365421478836  data/equiDOT_recon171_step7_part7.csv
 3605299a3fa1df1f7ff958aafd88d7f76f016d8d60ed4936424fce7a2c102d09  data/equiDOT_recon171_step7_part8.csv
+fb1a30341e8810a7fc8d00c32fe77f06f47a4f745dbef14e1b47eca8b4c6361d  engine/analysis_engine.py
+110767ea58dd660983fdd2ad1254e228a98003f48c3938006fb80462d42ec5d0  engine/run_full_analysis.py
 6530e2508b17f4c4523a97f9a5a8e065180334811c16cc0849573afdce75a767  engine/core.py
 518862bf19fb532814d3b4bb327cf2091a479d51cb29400d27e86c4ae9c294c1  engine/dots_thresholds.py
-f88d2f472c278643e0c118b7b02800b2684b4c91961a29a2eb1422fb6b66d84c  engine/portfolio_simulation_engine.py
-c4337a151b5fae3446c7bd720d084965030ddceea30f0e63972724ccfde623b3  engine/wf.py
+18ee954a6f27570999cf8f505f5949b2c3d991da4a4387b20d31246ef70e647f  engine/portfolio_simulation_engine.py
+f2db7eb592a6528732fb56155ecd6bd0fbd0b4950e499c6323ec77310626ed56  engine/score_book50.py
+da982798c625a276490d0c6989128c7f6bcb7e880f04a7749bab24968e0d3da3  engine/conviction.py
+ec5c780addfce947ee3f317505ef3c024ed2c943a496acef084b5732ba4dc99c  engine/score_g.py
+e86a5224450172ed9b23fc6b49f97d0c74ae82c3cdaba5b2434861686a45bf02  engine/book50_signals.csv
+793e6e5f8d9a1c88ab49f57678a35f4664642cefba6491565660981b15d06467  engine/wf.py
 31165e9a17df3bd9fc08bb64c1a957701e9e3b5fbd7b3ff8b6d2769be0a77596  orchestrator/discovery_orchestrator.py
 423e6e60c38efa8c8d41a0b14624d429bfd12e5e5a227b0f606d8f484ae204ad  reference/equiDOT_discovery_blueprint.md
 1a7a9d423381ed7f3daa7d1f6ec849ce4dcd84bb3c6c10a3c82bc5c12f6dfad7  reference/equiDOT_discovery_pattern_map.md
@@ -181,6 +222,8 @@ c4337a151b5fae3446c7bd720d084965030ddceea30f0e63972724ccfde623b3  engine/wf.py
 a95c521cd55c62d7a4a3c191b60bc85aebbb50a4ea8980b0f44c5c8cd7277ef3  scanners/divergence_nonconfirm.py
 f878d3b46c8ba4ba9748da52bd22e486ef808057872f834987651aa291d5ceae  scanners/f0_to_schema.py
 868bc7edf5fed2eb4a301e02cf7c2a95de729c58684f68d83720d788a6d442e5  scanners/mean_reversion.py
+188a5794bce5eb0594184abe223a03ab6c2d6b237d919f4f33a8f6a86feb6ac6  scanners/concurrence_profiler.py
+0ca336cdf9df2c3f3b1668c7032e630dba68961700a5795eb45a4b95c43631cd  scanners/single_variable_extremes.py
 cd3afbfe69947669bbcea8ab28049e854b82eac0e9d9852fac3064c67ea79323  scanners/persistence_autocorr.py
 08848774ca1c4376a16ca2c790af74fbb65d5246696fa26bb282879700e640fd  scanners/rolling_leadlag.py
 8a8a276cfbef8f464f09cd8e01d0ad18ccafde4fa2e082c0c09da54f8cfc6a35  scanners/run_f0_full.py

@@ -12,9 +12,10 @@
 ║  Init: 6,900 bars | Buffer: 2,500 | Live-risk jar: 6 lots | Spread: 3.0    ║
 ║  D2D Filter:  ALL signals require D2D_Trend_Dir confirmation               ║
 ║                                                                            ║
-║  EXIT: S.7 DYNAMIC SL + MOMENTUM-RUNNER upgrade (runner trail only)        ║
-║    SL min(ATR×2,150) base / min(ATR×4,150) momentum entries (v≥0.00012)    ║
-║    BE +1 step | LeapFrog 0.30×risk activate tier 3 | $150 cap inviolate     ║
+║  EXIT: S.7 DYNAMIC SL + MOMENTUM upgrades (runner trail + S.19 init-SL)    ║
+║  SL base min(ATR×2,150) | BE +1 step | LeapFrog 0.30×base_risk tier 3      ║
+║  S.19 mom entry: catastrophe SL min(ATR×4,150); BE/step stay on base       ║
+║  S.20 conviction: Hurst>p90 book-longs 2x; 2 gap-singles; 1-LOT BASE       ║
 ║    RUN: lag=3 if (Micro_LogReturn×dir ≥ 0.00012) else 2 | Fri 16:45 close  ║
 ║                                                                            ║
 ║  BACKTEST — IN-BOOK PORTFOLIO (50 together, ~105 days, Jan19-Jun25):       ║
@@ -39,18 +40,55 @@
   Rule:  at entry, if v >= 0.00012 -> LeapFrog lag = 3 ; else lag = 2.
   Effect (BOOK-50, jar, S.7 -> RUN): PF 5.66 -> 5.83 | net $56,663 -> $58,685 | OOS PF 5.96 -> 6.57
 
-  MOMENTUM-CONDITIONAL INITIAL SL  [VALIDATED RESEARCH — PENDING EA IMPLEMENTATION]
+  MOMENTUM-CONDITIONAL INITIAL SL (S.19)  [VALIDATED RESEARCH — PENDING EA IMPLEMENTATION]
 ══════════════════════════════════════════════════════════════════════════════
-  Scope: INITIAL SL on momentum entries ONLY. BE/tier/runner/Friday/entries = S.7. No look-ahead.
-  Input: Micro_LogReturn (EA-computed), directional v = value * direction (same gate as the runner).
-  Rule:  at entry, if v >= 0.00012 -> initial_risk = min(ATR×4, 150) ; else min(ATR×2, 150).
-         The $150 MAX_RISK cap is UNCHANGED and INVIOLATE — no trade risks more than $150+spread;
-         this only lets momentum entries widen UP TO the existing $150 cap (mean stop $86 -> $131;
-         54% pin to $150). Rationale: room lets strong-signal entries survive a wobble and recover.
-  Effect (BOOK-50, jar, RUN -> +momentum-SL): SL hits 194 -> 166 (-28) | WR 91.9% -> 92.8% |
-         PF 5.83 -> 6.12 | OOS PF 6.57 -> 6.99 | min-fold 5.01 -> 5.49 | worst-day -127.5 HELD |
-         net $58,685 -> $58,249 (-$436). A QUALITY lift (fewer losers, higher WR, stronger OOS)
-         at flat net, not a profit upgrade. Runner interaction confirmed clean (LF count/net held).
+  Scope: initial CATASTROPHE stop ONLY, on momentum entries. Reuses the runner's v. No new variable.
+  Rule:  if v >= 0.00012 -> catastrophe SL = MathMin(ATR_1M×4.0, 150.0); else MathMin(ATR_1M×2.0, 150.0).
+  EA-CRITICAL SPLIT: the BE-arm trigger and the LeapFrog step_size STAY on base_risk =
+    MathMin(ATR_1M×2.0, 150.0)  (step_size = STEP_PCT × base_risk; be_trigger off base_risk) —
+    NOT off the widened ATR×4 risk. Scaling BE/step off the widened risk arms break-even too late
+    and blows worst-day to ~-320 with SL rising to 202 (empirically confirmed during the engine
+    merge). The correct split HOLDS worst-day -127.5 and converts stop-outs to break-evens (SL 194
+    -> 166), reproducing the record exactly.
+  $150 MAX_RISK cap INVIOLATE. RISK_MULT=2.0 base unchanged (S.17).
+  Effect (BOOK-50, jar, RUN): SL 194 -> 166 | WR 91.9% -> 92.8% | PF 5.83 -> 6.12 | OOS PF 6.57 -> 6.99
+
+  CONVICTION SELF-SCALING + GAP-SINGLES (S.20 / change g)  [VALIDATED RESEARCH — PENDING EA IMPLEMENTATION]
+══════════════════════════════════════════════════════════════════════════════
+  The EA scales ITSELF by lot multiplier only where probability is highest — it does NOT blanket-double.
+  Three mechanisms sharing the one 6-lot live-risk jar (S.15):
+  (1) CONVICTION SIZING on BOOK-50 lot size: at a book-LONG entry, read Micro_Hurst on the signal bar;
+      if Micro_Hurst > adaptive p90 (oracle rolling-2500, day-refreshed; ~0.521) -> 2.0 lots, else 1.0.
+      LONGS ONLY (Micro_Hurst confers NO short edge: OOS PF 2.22 vs 4.99 — shorts always 1.0). PLUS
+      recentFB: book longs firing within 5 bars of a Micro_FailedBreak-extreme -> x1.25. A long that is
+      BOTH takes the HIGHER multiplier (x2), never the product.
+  (2) GAP-ONLY SINGLES (two NEW entries, fire ONLY when ZERO Dots positions are open — any open
+      position, live-risk OR already-BE'd, blocks them): Hurst single = Micro_Hurst > p97 (~0.550) AND
+      D2D_Trend_Dir == +1 -> LONG 1 lot LOCK=3; FailedBreak single = Micro_FailedBreak > p90 (~0.664)
+      AND D2D_Trend_Dir == -1 (counter/reversion) -> LONG 1 lot LOCK=3. Gate: ADX_Value >= 15 AND
+      Volume >= 300 (solo). Gap-singles are 1.0 lot (NOT conviction-sized); LOCK=3 lets fat-tail winners run.
+  (3) PER-BAR SEQUENCE: STEP1 book signal qualifies -> open through S.7/S.12/S.19 exits, size 2x if
+      LONG & Hurst>p90 else 1x; STEP2 only if NO book signal AND zero Dots open -> check the 2 gap-singles;
+      STEP3 a gap-single is BLOCKED the moment any Dots position is live.
+  SACRED: threshold values (Hurst p90 sizing / p97 gap-single; FailedBreak p90), direction constraints
+  (Hurst LONG-only; FailedBreak counter-LONG), the gap-gate (zero Dots open), the x2 / x1.25 multipliers,
+  LOCK=3 on gap-singles, and the 1-LOT-BASE deployment constraint.
+  DEPLOYMENT CONSTRAINT (SACRED): 1-LOT BASE ONLY. The multiplier IS the scaling — do NOT blanket-2x on
+  top. At 1-lot base the worst-case 12-lot stack (-$1,800, reached ~6 one-minute bars in 6mo, never bit)
+  is INSIDE the FTMO -$2,500 gate; at 2-lot base a 12-lot peak -> -$3,600, OVER the gate (needs the
+  jar-tweak — count multiplied lots toward the 6-cap — measured first).
+  RESULT (pack-engine honest reproduction, momentum-SL active, 1 lot): 2,691 tr | WR 92.2% | PF 6.15 |
+  net $89,487 | worst-day -153.7 | max-DD -153.7 | 6/6 folds | OOS PF 6.81 | OOS net $28,447.
+  Population (honest): book x1.0=1,339 | Hurst x2.0=210 | recentFB x1.25=809 | gap-Hurst=48 | gap-FailedBreak=285.
+  (The earlier MODELLED $90,103 / 2,828 tr / x2=254 carried a jar-sharing artifact in the research
+  harness — it double-counted book trades (book showed 2,511 WITH gap-singles > 2,361 flat, impossible
+  under a shared jar). The ratified pack engine reproduces the honest $89,487 — a 0.7% correction that
+  changes NO conclusion. $89,487 is canonical.)
+  OPTION MAP (all pack-engine):  A flat $58,277  |  B Hurst-only sizing $66,434  |  G' Hurst-x2 +
+  gap-only $84,554 (worst-day -127.5, tail-lighter)  |  G (adopted) $89,487 (worst-day -153.7)  |
+  E crude bolt-in REJECTED (dropped OOS below flat).
+  recentFB x1.25 is the max-net component AND the tail-widener (fills the >6-lot zone 3.5x more often);
+  G' drops it — one flag.
 
   LABELLING RULE
 ══════════════════════════════════════════════════════════════════════════════
@@ -79,10 +117,17 @@
       that existing cap (mean momentum stop $86 -> $131; 54% pin to $150). Reuses the
       already-computed lr×dir momentum value — NO new variable. Does NOT alter RISK_MULT=2.0
       (S.17); it is a momentum-conditional branch, same pattern as the runner's lag-2/lag-3.
+      SPLIT (EA-CRITICAL): the widened min(ATR×4,150) is the CATASTROPHE STOP ONLY. The BE-arm
+      trigger and the LeapFrog step_size STAY on the BASE scale — base_risk=MathMin(ATR_1M×2.0,150.0);
+      step_size=STEP_PCT×base_risk; be_trigger off base_risk — NOT off the widened risk. This split
+      is what converts would-be stop-outs to break-evens (SL 194->166) while HOLDING worst-day -127.5.
+      Scaling BE/step off the widened ATR×4 risk is WRONG: break-even arms too late and worst-day
+      blows to ~-320 (SL up to 202), confirmed during the engine merge.
       Effect (RUN, jar): SL 194 -> 166, WR 91.9% -> 92.8%, PF 5.83 -> 6.12, OOS PF 6.57 -> 6.99,
       min-fold 5.01 -> 5.49; worst-day -127.5 and max-DD -165.6 HELD; net $58,249 (-$436). A
       QUALITY lift (fewer losers, higher WR, stronger OOS), not a profit upgrade.
-  2. STEP 0.30×risk  3. BE: profit≥1×step → SL=entry±step (printed only)
+  2. STEP 0.30×base_risk (base_risk=MathMin(ATR_1M×2.0,150.0); NOT the momentum-widened risk)
+  3. BE: profit≥1×step → SL=entry±step (printed only)
   4. TIERS: entry±N×step → TiersReached=N  5. LEAPFROG Tiers≥3 → SL=entry±(Tiers-lag)×step
      lag=3 if Micro_LogReturn×dir≥0.00012 else 2   6. FRIDAY 16:45 EST close ALL
   7. EXECUTION MODEL — PER-BAR SL REPOSITIONING (LAW; matches portfolio_simulation_engine.py):

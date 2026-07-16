@@ -19,6 +19,17 @@ MAX_RISK = 150.0
 STEP_PCT = 0.30
 BE_TRIG_FRAC = 1.0
 LOCK_FRAC = 1.0
+MOMENTUM_THRESHOLD = 0.00012
+MOMENTUM_SL_MULT = 4.0
+LAG_BASE = 2
+LAG_MOMENTUM = 3
+HURST_SIZE_PCT = 0.90
+HURST_GAP_PCT = 0.97
+FB_PCT = 0.90
+CONV_HURST_MULT = 2.0
+CONV_RECENTFB_MULT = 1.25
+RECENTFB_WINDOW = 5
+GAP_LOCK = 3.0
 MAX_POSITIONS = 6
 
 # ═══════════════════════════════════════════════════════════════
@@ -97,27 +108,29 @@ def build_signal_masks(df, signals_df, adaptive, structural, entry_ok, verbose=T
     return signal_masks, signal_dirs, signal_names
 
 # ═══════════════════════════════════════════════════════════════
-#  TRADE MANAGEMENT (S.7 LOCKED — do not change)
+#  TRADE MANAGEMENT (S.7 + S.12 runner + S.15 jar + S.16 per-bar + S.17 + S.19 SL)
 # ═══════════════════════════════════════════════════════════════
 
 class Trade:
-    def __init__(self, signal_idx, entry_bar, entry_price, direction, initial_risk):
+    def __init__(self, signal_idx, entry_bar, entry_price, direction, initial_risk, lag, base_risk, lock_frac, lots):
         self.signal_idx = signal_idx
         self.entry_bar = entry_bar
         self.entry_price = entry_price
         self.direction = direction
         self.initial_risk = initial_risk
-        self.step_size = STEP_PCT * initial_risk
+        self.step_size = STEP_PCT * base_risk
         self.be_trigger = BE_TRIG_FRAC * self.step_size
-        self.be_lock_dist = LOCK_FRAC * self.be_trigger
+        self.be_lock_dist = lock_frac * self.be_trigger
         if direction == 1:
             self.current_sl = entry_price - initial_risk
         else:
             self.current_sl = entry_price + initial_risk
         self.tiers = 0
         self.be_nudged = False
+        self.lag = lag
+        self.lots = lots
 
-def run_portfolio(df, signals_df, mask_window=None, adaptive=None, structural=None,
+def run_portfolio(df, signals_df, mask_window=None, adaptive=None, structural=None, conviction=None,
                   warmup=None, verbose=True):
     if adaptive is None:
         adaptive = dt.compute_adaptive_thresholds(df)
@@ -150,8 +163,15 @@ def run_portfolio(df, signals_df, mask_window=None, adaptive=None, structural=No
     mn = df['EST_Minute'].values
     times = df['Time'].values
     volume = df['Volume'].values
+    long_mult = conviction.get('long_mult') if conviction is not None else None
+    gap_hurst_mask = conviction.get('gap_hurst') if conviction is not None else None
+    gap_fb_mask = conviction.get('gap_fb') if conviction is not None else None
+    GAP_H_IDX = n_signals
+    GAP_F_IDX = n_signals + 1
+    signal_names = signal_names + ['GAP_HURST', 'GAP_FB']
 
     all_trades = []
+    micro_logret = df['Micro_LogReturn'].values
     active_trades = []
     signal_in_trade = [False] * n_signals
     gate_blocks = 0
@@ -190,13 +210,16 @@ def run_portfolio(df, signals_df, mask_window=None, adaptive=None, structural=No
                     'exit_time': times[bar],
                     'entry_price': ep,
                     'exit_price': exit_price,
-                    'pnl': round(pnl, 1),
+                    'pnl': round(pnl * trade.lots, 1),
+                    'pnl_per_lot': round(pnl, 1),
+                    'lots': trade.lots,
                     'exit_type': exit_type,
                     'tiers': trade.tiers,
                     'be_nudged': trade.be_nudged,
                     'initial_risk': trade.initial_risk,
                 })
-                signal_in_trade[trade.signal_idx] = False
+                if trade.signal_idx < n_signals:
+                    signal_in_trade[trade.signal_idx] = False
                 closed_this_bar.append(trade)
                 continue
 
@@ -222,12 +245,12 @@ def run_portfolio(df, signals_df, mask_window=None, adaptive=None, structural=No
                         if new_sl < trade.current_sl: trade.current_sl = new_sl
                     trade.be_nudged = True
 
-            if trade.tiers >= 3:
+            if trade.tiers >= trade.lag + 1:
                 if d == 1:
-                    trail = ep + (trade.tiers - 2) * trade.step_size
+                    trail = ep + (trade.tiers - trade.lag) * trade.step_size
                     if trail > trade.current_sl: trade.current_sl = trail
                 else:
-                    trail = ep - (trade.tiers - 2) * trade.step_size
+                    trail = ep - (trade.tiers - trade.lag) * trade.step_size
                     if trail < trade.current_sl: trade.current_sl = trail
 
         for t in closed_this_bar:
@@ -237,30 +260,48 @@ def run_portfolio(df, signals_df, mask_window=None, adaptive=None, structural=No
             continue
         qual_indices = np.where(signal_masks_arr[:, bar])[0]
         n_qual = len(qual_indices)
-        if n_qual == 0:
-            continue
+        if n_qual >= 1 and not (n_qual == 1 and volume[bar] < 300):
+            live_lots = sum(1 for t in active_trades if not t.be_nudged)
+            for sig_idx in qual_indices:
+                if signal_in_trade[sig_idx]:
+                    continue
+                if live_lots >= MAX_POSITIONS:
+                    cap_blocks += 1
+                    continue
+                entry_price = closes[bar]
+                v = micro_logret[bar] * signal_dirs[sig_idx]
+                momentum = v >= MOMENTUM_THRESHOLD
+                raw_risk = atrs[bar] * (MOMENTUM_SL_MULT if momentum else RISK_MULT)
+                initial_risk = min(raw_risk, MAX_RISK)
+                if initial_risk <= 0:
+                    continue
+                lag = LAG_MOMENTUM if momentum else LAG_BASE
+                base_risk = min(atrs[bar] * RISK_MULT, MAX_RISK)
+                lots = long_mult[bar] if (long_mult is not None and signal_dirs[sig_idx] == 1) else 1.0
+                trade = Trade(sig_idx, bar, entry_price, signal_dirs[sig_idx], initial_risk, lag, base_risk, LOCK_FRAC, lots)
+                active_trades.append(trade)
+                signal_in_trade[sig_idx] = True
+                live_lots += 1
+        elif n_qual == 1 and volume[bar] < 300:
+            gate_blocks += 1
 
-        if n_qual == 1:
-            if volume[bar] >= 300:
-                pass
-            else:
-                gate_blocks += 1
-                continue
-
-        for sig_idx in qual_indices:
-            if signal_in_trade[sig_idx]:
-                continue
-            if len(active_trades) >= MAX_POSITIONS:
-                cap_blocks += 1
-                continue
-            entry_price = closes[bar]
-            raw_risk = atrs[bar] * RISK_MULT
-            initial_risk = min(raw_risk, MAX_RISK)
-            if initial_risk <= 0:
-                continue
-            trade = Trade(sig_idx, bar, entry_price, signal_dirs[sig_idx], initial_risk)
-            active_trades.append(trade)
-            signal_in_trade[sig_idx] = True
+        if conviction is not None and len(active_trades) == 0:
+            gfire = None
+            if gap_hurst_mask is not None and gap_hurst_mask[bar]:
+                gfire = GAP_H_IDX
+            elif gap_fb_mask is not None and gap_fb_mask[bar]:
+                gfire = GAP_F_IDX
+            if gfire is not None:
+                entry_price = closes[bar]
+                v = micro_logret[bar]
+                momentum = v >= MOMENTUM_THRESHOLD
+                raw_risk = atrs[bar] * (MOMENTUM_SL_MULT if momentum else RISK_MULT)
+                initial_risk = min(raw_risk, MAX_RISK)
+                if initial_risk > 0:
+                    lag = LAG_MOMENTUM if momentum else LAG_BASE
+                    base_risk = min(atrs[bar] * RISK_MULT, MAX_RISK)
+                    trade = Trade(gfire, bar, entry_price, 1, initial_risk, lag, base_risk, GAP_LOCK, 1.0)
+                    active_trades.append(trade)
 
         if verbose and (bar + 1) % 10000 == 0:
             elapsed = time.time() - t_start
@@ -282,7 +323,9 @@ def run_portfolio(df, signals_df, mask_window=None, adaptive=None, structural=No
             'exit_time': times[-1],
             'entry_price': ep,
             'exit_price': exit_price,
-            'pnl': round(pnl, 1),
+            'pnl': round(pnl * trade.lots, 1),
+            'pnl_per_lot': round(pnl, 1),
+            'lots': trade.lots,
             'exit_type': 'EOD',
             'tiers': trade.tiers,
             'be_nudged': trade.be_nudged,

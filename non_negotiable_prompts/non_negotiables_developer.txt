@@ -423,6 +423,13 @@ S.19 — THE MOMENTUM-CONDITIONAL INITIAL SL (RATIFIED S.7 addition, change g):
 On MOMENTUM entries (Micro_LogReturn x direction >= 0.00012 -- the SAME gate as the runner lag,
 S.12), the initial stop uses a wider ATR allowance UP TO the existing $150 cap:
 initial_risk = min(ATR x 4, 150) on momentum entries; non-momentum entries keep min(ATR x 2, 150)
+UNCHANGED. CRITICAL CONVENTION (EA-critical, verified by book reproduction): the widened ATR x 4
+is the CATASTROPHE STOP only. The BE-arm trigger and the LeapFrog step_size stay on the BASE
+(ATR x 2) scale -- i.e. step_size = STEP_PCT x base_risk where base_risk = min(ATR x 2, 150),
+NOT off the widened risk. This is what converts would-be stop-outs to break-evens (SL 194->166)
+while HOLDING worst-day -$127.5. Scaling BE/step off the widened ATR x 4 risk is WRONG -- it arms
+break-even too late and blows worst-day to ~-$320 (empirically confirmed). The EA MUST widen the
+catastrophe stop while keeping BE/step on the base scale, or the live EA will not match the book.
 UNCHANGED. The $150 MAX_RISK cap (S.17) is UNCHANGED and INVIOLATE -- no trade ever risks more
 than $150 + spread; this only lets momentum entries widen up to the cap already deemed safe (mean
 momentum stop $86 -> $131; ~54% pin to $150). This does NOT overturn S.17's risk_mult 2.0: 2.0
@@ -437,6 +444,53 @@ HELD, 6/6 folds, 22/22 weeks, all weekdays. Net $58,685 -> $58,249 (-$436, -0.7%
 confirmed clean (LF count 382-388 vs base 387, LF net held). SACRED: the momentum gate (0.00012,
 shared with the runner), the ATR x 4 widening, the $150 inviolate cap, and non-momentum staying
 min(ATR x 2, 150). It is an S.7 change requiring the full pipeline + human authorization (granted).
+
+
+S.20 — THE CONVICTION SELF-SCALING + GAP-SINGLE SYSTEM (RATIFIED design decision, the "G" config):
+The EA scales ITSELF by lot multiplier only where probability is highest -- it does NOT blanket-double.
+Three mechanisms sharing the one 6-lot live-risk jar (S.15):
+(1) CONVICTION SIZING on BOOK-50 lot size: at a book-LONG entry, read Micro_Hurst on the signal bar;
+    if Micro_Hurst > adaptive p90 (oracle rolling-2500 day-refreshed) -> 2.0 lots, else 1.0. LONGS
+    ONLY (Micro_Hurst confers NO short edge: OOS PF 2.22 vs 4.99 -- shorts always 1.0). PLUS recentFB:
+    book longs firing within 5 bars of a Micro_FailedBreak-extreme -> x1.25. A long that is BOTH takes
+    the HIGHER multiplier (x2), never the product.
+(2) GAP-ONLY SINGLES (two NEW entries, fire ONLY when ZERO Dots positions are open -- any open position,
+    live-risk OR already-BE'd, blocks them): Hurst single = Micro_Hurst > p97 AND D2D_Trend_Dir == +1
+    -> LONG 1 lot LOCK=3; FailedBreak single = Micro_FailedBreak > p90 AND D2D_Trend_Dir == -1
+    (counter/reversion) -> LONG 1 lot LOCK=3. Gate: ADX_Value >= 15 AND Volume >= 300 (solo). Gap-singles
+    are 1.0 lot (NOT conviction-sized); the loose LOCK=3 lets their fat-tail winners run.
+(3) PER-BAR SEQUENCE: STEP1 book signal qualifies -> open through ratified S.7/S.12/S.19 exits, size
+    2x if LONG & Hurst>p90 else 1x; STEP2 only if NO book signal AND zero Dots open -> check the 2
+    gap-singles; STEP3 a gap-single is BLOCKED the moment any Dots position is live.
+VALIDATED (final book, momentum-SL active, 1 lot, true $1/pt), pack-engine honest reproduction:
+2,691 tr, WR 92.2%, PF 6.15, net $89,487, worst-day -153.7, 6/6 folds. Population: book x1=1,339 /
+Hurst x2=210 / recentFB x1.25=809, gap-singles gapH=48 + gapF=285. Option map (all through the
+ratified pack engine): A flat $58,277 / B Hurst-only $66,434 / G' (recentFB off) $84,554 wd -127.5 /
+G (all-on) $89,487 wd -153.7. NOTE: the earlier MODELLED figure ($90,103 / 2,828 tr / x2=254 /
+wd -147.2) carried a jar-sharing artifact in the research harness -- it double-counted book trades
+(book 2,511 WITH gap-singles present > 2,361 flat, impossible under a shared jar). The pack build
+surfaced and corrected it: gap-singles share the one jar and can only DISPLACE book trades (book
+2,358 <= 2,361 flat), so the honest total is $89,487. The 0.7% delta does not change any conclusion;
+$89,487 is now the canonical S.20 figure. (~$28/2-trade flat residual is the known F0 def-recovery
+precision, independent of S.20.)
+RATIONALE: conviction SELF-scaling is SAFER than blanket-2x. Blanket-doubling → ~$116K but doubles
+every worst-day/drawdown indiscriminately (worst-day -127.5 → -255). The conviction system captures
+$89K SELECTIVELY -- the x2 lands only on 95.7%-WR high-Hurst longs (absent from the worst day) and the
+gap-singles fire only when the book is flat (physically cannot deepen a stacked day). The risk
+management IS the product: press where the edge is strongest, flat otherwise, base lot never changes.
+DEPLOYMENT CONSTRAINT (SACRED): this system deploys at 1-LOT BASE ONLY. The conviction multiplier IS
+the scaling mechanism -- do NOT blanket-2x on top. At 1-lot base the worst-case 12-lot stack (-$1,800,
+reached on ~6 one-minute bars in 6 months, never bit) is INSIDE the FTMO -$2,500 gate. At 2-lot base
+the x2 trades become effectively 4 lots and a 12-lot peak -> -$3,600, OVER the gate -- so 2-lot scaling
+requires the jar-tweak (count multiplied lots toward the 6-cap) first, measured before use.
+SACRED: the threshold values (Hurst p90 for sizing / p97 for the gap-single; FailedBreak p90), the
+direction constraints (Hurst LONG-only; FailedBreak counter-LONG), the gap-gate (zero Dots open), the
+x2 / x1.25 multipliers, LOCK=3 on gap-singles, and the 1-LOT-BASE deployment constraint. recentFB
+x1.25 is the max-net component AND the tail-widener (fills the >6-lot zone 3.5x more often); the
+recorded tail-lighter alternative G' drops it (net $85,134, worst-day -120.9, OOS 5.94) -- one flag.
+STATUS: ADOPTED (human-confirmed), pending Stage-9 implementation + full pipeline audit. The quant
+MODELLED G via its analysis harness; the ratified-engine implementation is still to be built and
+audited. It is an S.7-class change requiring the full pipeline; the operator ADOPTED it.
 
 S.ENFORCE (DEVELOPER):
 If any requested task appears to require modifying a protected element, STOP and

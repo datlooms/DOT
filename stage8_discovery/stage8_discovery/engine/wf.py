@@ -10,8 +10,8 @@ import portfolio_simulation_engine as engine
 
 DAILY_LOSS_CEILING_USD = 2500.0    # EA hard stop (operator-set: half the FTMO
                                    # $5,000 daily limit). This is the survival gate.
-USD_PER_POINT_PER_LOT  = 100.0     # US30.cash: $1/point per 0.01 lot => $100/point
-                                   # per 1.0 lot. OPERATOR-CONFIRM.
+USD_PER_POINT_PER_LOT  = 1.0       # US30.cash: $1/point per 1.0 lot
+                                   # (FTMO spec, operator-confirmed 2026-07-11).
 LOT_SIZE               = 1.0       # CONFIGURABLE. Production lot size decided AFTER
                                    # Stage 8 from the discovered set's statistics;
                                    # the survival gate must work at any value.

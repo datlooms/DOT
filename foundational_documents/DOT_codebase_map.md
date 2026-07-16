@@ -63,7 +63,7 @@ SECTION 11    [11500 – 11673] THE SHUTDOWN ROUTINE (STATEFUL)
 
 ---
 
-## 2. WHERE THE SIX CHANGES LAND
+## 2. WHERE THE SEVEN CHANGES LAND
 
 ### Change (a) — Momentum-runner TM branch
 - **Primary: SECTION 8.1 ADVANCED TRADE MANAGEMENT [8032–8218]** — the LeapFrog
@@ -145,17 +145,42 @@ SECTION 11    [11500 – 11673] THE SHUTDOWN ROUTINE (STATEFUL)
 ### Change (f) — Momentum-conditional wider initial SL
 - **Landing: SECTION 8.6 DOTS TRADE MANAGEMENT [8771–8852]**, the order-open path where the
   initial risk is computed (~line 8794): `double atr = ATR_1M_Array[1];` then
-  `double risk = MathMin(atr * Dots_SL_Mult, Dots_SL_Cap);`. Make the ATR multiple
-  momentum-conditional here: if the entry's momentum value `v = Micro_LogReturn × dir >= 0.00012`
-  use a ×4 multiple, else the base ×2 — capped by `Dots_SL_Cap` ($150) exactly as now:
-  `double mult = (v >= 0.00012) ? 4.0 : Dots_SL_Mult;` then
-  `double risk = MathMin(atr * mult, Dots_SL_Cap);`.
+  `double risk = MathMin(atr * Dots_SL_Mult, Dots_SL_Cap);`. Split it into TWO risks — keep a
+  base_risk (always ×2) for BE/step, and a momentum-widened catastrophe risk for the SL only:
+  `double base_risk = MathMin(atr * Dots_SL_Mult, Dots_SL_Cap);`
+  `double mult = (v >= 0.00012) ? 4.0 : Dots_SL_Mult;`
+  `double risk = MathMin(atr * mult, Dots_SL_Cap);`  (catastrophe stop uses `risk`;
+  `rawSL = entryPrice ± risk`), and the step at ~line 8824 uses base_risk:
+  `double step = Dots_StepFrac * base_risk;`  (NOT `risk`).
 - **Reuses the runner's momentum value** — `v` is the SAME `Micro_LogReturn × dir` already
   computed at Dots entry for the runner lag (change a / S.12); NO new variable, NO new buffer.
 - **UNTOUCHED:** `Dots_SL_Cap` = 150 (the inviolate $150 MAX_RISK ceiling — no trade risks more
-  than $150+spread), `Dots_SL_Mult` = 2.0 stays the base constant (S.17), and STEP / BE / tier /
-  trail all continue to derive from `risk` as-is (the wider momentum risk flows through naturally).
-  Uses `ATR_1M_Array[1]` (closed bar) — consistent with the per-bar model (change e).
+  than $150+spread), and `Dots_SL_Mult` = 2.0 stays the base constant (S.17). Uses
+  `ATR_1M_Array[1]` (closed bar) — consistent with the per-bar model (change e).
+- **TWO-RISK SPLIT (EA-CRITICAL, S.19):** the momentum widening is the CATASTROPHE STOP ONLY.
+  Compute a separate `base_risk = MathMin(atr * Dots_SL_Mult, Dots_SL_Cap)` (always ×2), and use
+  base_risk for the BE-arm trigger and the step_size (`step = Dots_StepFrac * base_risk` — at
+  ~line 8824, NOT the widened `risk`). ONLY the initial SL (`rawSL = entryPrice ± risk`) uses the
+  momentum-widened `risk`. Wiring step/BE off the widened risk arms break-even too late and blows
+  worst-day to ~-320 (SL up to 202) — the regression caught during the engine merge. Verify the
+  `step` at line 8824 reads base_risk, not the momentum `risk`.
+
+### Change (g) — Conviction self-scaling + gap-singles (S.20)
+- **Landing (lot multiplier): SECTION 8.6 DOTS TRADE MANAGEMENT**, the order-open path where `lots`
+  is set before `OrderSend` (~line 8824). For a book-LONG, read `Micro_Hurst` on the signal bar
+  (`Micro_Hurst_Array[1]`) and its adaptive p90 via the oracle: if `Micro_Hurst > p90` -> `lots = 2.0`,
+  else `1.0`; LONGS ONLY (no short edge). PLUS a recentFB flag (a book long within 5 bars of a
+  Micro_FailedBreak-extreme) -> `lots = 1.25`; a long qualifying for both takes the higher (2.0), never
+  the product. Base lot stays 1.0 — the multiplier IS the scaling (S.20 SACRED: 1-LOT BASE ONLY).
+- **Landing (gap-single entries): the Dots entry qualification loop** (~line 8790), alongside the
+  BOOK-50 signal checks. Two new single-condition entries: `Micro_Hurst > p97 & D2D_Trend_Dir==+1`
+  (LONG) and `Micro_FailedBreak > p90 & D2D_Trend_Dir==-1` (LONG, counter/reversion). Gate
+  `ADX_Value>=15 & Volume>=300`. Each opens 1.0 lot at LOCK=3. **Entry-gate:** a gap-single is admitted
+  ONLY when the count of open Dots positions is zero (any open body — live-risk OR breakeven'd — blocks
+  it). Per-bar order: book signals first (with the Hurst 2x/1x sizing); gap-singles only when no book
+  signal qualifies AND the book is flat.
+- **UNTOUCHED:** the 6-lot jar (S.15) is shared by all entries; the oracle thresholds (Hurst p90/p97,
+  FailedBreak p90) are computed the same adaptive way as every book threshold — nothing new to calibrate.
 
 ---
 
@@ -172,7 +197,7 @@ SECTION 11    [11500 – 11673] THE SHUTDOWN ROUTINE (STATEFUL)
 - **Locked tunables (SECTION 2.0):** Dots_RollingBufferSize = 2500,
   Dots_InitBars = 6900, and the S.7 trade-management constants.
 
-The six changes are additive and bounded. They do not touch the calculation
+The seven changes are additive and bounded. They do not touch the calculation
 memory chain, the threshold oracle, the KAMA persistence, or the export schema.
 
 ---
@@ -197,4 +222,6 @@ Eval_Dots_Signals          @4805    << F1 latch write + lagged fire; signal disp
 ManageDotsPositions        @8929    << change (e): per-tick -> per-bar SL reposition (closed-bar H/L)
 (OnTick Dots mgmt call)    ~1380    << change (e): gate to new-bar (currently every tick)
 (Dots entry risk calc)     ~8794    << change (f): momentum-conditional min(ATR x4,150) initial SL
+(Dots entry lots calc)     ~8824    << change (g): conviction lot multiplier (Hurst>p90 -> 2x book longs)
+(Dots entry qualification) ~8790    << change (g): 2 gap-single entries, gated to zero-Dots-open
 ```

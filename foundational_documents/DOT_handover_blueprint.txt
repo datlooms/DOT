@@ -267,7 +267,7 @@ are where the method was forged.
   The signal set and trade management are validated and frozen. The remaining
   work takes the CURRENT equiDOT.cs (frozen, compiles 0/0) to BOOK-50 through
   the full pipeline (Developer -> Supervisor -> Auditor -> human confirm +
-  MetaEditor 0/0). SIX changes, no more:
+  MetaEditor 0/0). SEVEN changes, no more:
 
     (a) MOMENTUM-RUNNER TM BRANCH. In the LeapFrog trail only, switch lag = 3
         when the entry bar's Micro_LogReturn × direction ≥ 0.00012, else 2.
@@ -308,6 +308,22 @@ are where the method was forged.
         base (S.17 unaltered) — this is a momentum-conditional branch, same pattern as the
         runner's lag-2/lag-3. Quality lift: 194 -> 166 SL, WR -> 92.8%, OOS PF -> 6.99, worst-day
         held, net $58,249 (-$436). Sacred/S.7 change; human authorization granted.
+
+    (g) CONVICTION SELF-SCALING + GAP-SINGLES (S.20, ADOPTED). The EA scales its OWN lot size by
+        conviction and adds two gap-only single-variable entries, all sharing the 6-lot jar:
+        (1) at a book-LONG entry, Micro_Hurst > adaptive p90 -> 2.0 lots else 1.0 (LONGS ONLY, no
+        short edge); a book long within 5 bars of a Micro_FailedBreak-extreme -> 1.25 (both -> higher).
+        (2) two gap-singles fire only when zero Dots positions are open: Micro_Hurst>p97 & D2D=+1
+        LONG, and Micro_FailedBreak>p90 & D2D=-1 (counter) LONG; each 1 lot at LOCK=3, gate ADX>=15 &
+        Vol>=300. (3) per-bar: book signal -> Hurst-size 2x/1x; else-if flat -> the 2 gap-singles;
+        single blocked while any Dots live. DEPLOY 1-LOT BASE ONLY (the multiplier IS the scaling;
+        blanket-2x on top breaches the FTMO gate at a 12-lot stack). Result: 2,691 tr, WR 92.2%, PF
+        6.15, net $89,487, worst-day -153.7, OOS PF 6.81 (pack-engine honest reproduction; the earlier
+        modelled $90,103 carried a research-harness jar-sharing artifact — 0.7% correction, no
+        conclusion changes). RATIONALE: press where the edge is strongest
+        (x2 on 95.7%-WR high-Hurst longs, absent from the worst day; gap-singles only when flat, cannot
+        deepen a stacked day), flat otherwise — net +54% while worst-day barely moves. S.7-class change;
+        human-confirmed/ADOPTED, pending Stage-9 build + full pipeline audit.
 
   Then: MetaEditor 0/0 compile, Strategy Tester alignment to the reference
   numbers, and the live FTMO demo.

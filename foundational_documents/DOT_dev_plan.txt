@@ -14,7 +14,7 @@
            non_negotiables_developer.txt        (coding laws)
            non_negotiables_supervisor.txt       (architectural laws + audit rules)
 
-  SCOPE — EXACTLY SIX CHANGES, NOTHING MORE:
+  SCOPE — EXACTLY SEVEN CHANGES, NOTHING MORE:
     (a) Momentum-conditional runner in the LeapFrog trail (runner trail only).
     (b) Sequential-latch subsystem for the 2 F1 signals (bounded state add).
     (c) Replace the current signal set with the BOOK-50 50-signal panel.
@@ -25,6 +25,9 @@
     (f) Momentum-conditional wider initial SL: on momentum entries widen the initial
         stop to min(ATR×4, 150) up to the existing $150 cap (ratified S.7 change;
         human authorization GRANTED).
+    (g) Conviction self-scaling + gap-single system (S.20): the EA scales its own lot
+        size by Micro_Hurst/Micro_FailedBreak conviction and adds two gap-only single-
+        variable entries (ADOPTED, human-confirmed; deploys 1-LOT BASE ONLY).
 
   Every change goes through the full pipeline: Developer -> Supervisor ->
   Auditor -> human confirm, with a MetaEditor 0/0 compile at each deliverable.
@@ -244,54 +247,90 @@
  PHASE 6 — MOMENTUM-CONDITIONAL INITIAL SL (change f)
 ================================================================================
 
-  Widen the initial stop on strong-signal entries, up to the existing $150 cap. This is a
-  single branch at the order-open path where initial_risk is set from ATR.
+  Widen the initial CATASTROPHE stop on strong-signal entries, up to the existing $150 cap —
+  while keeping BE and step sizing on the BASE risk. This is the EA-critical split (S.19).
 
-  Step 23. AT ENTRY (the order-open path, where initial_risk = ATR_1M × RISK_MULT is computed):
-           make the ATR multiple momentum-conditional. Reuse the SAME momentum value the
-           runner already computes at entry — v = Micro_LogReturn × dir:
-             if v >= 0.00012:  initial_risk = MathMin(ATR_1M × 4.0, 150.0)   (momentum entry)
-             else:             initial_risk = MathMin(ATR_1M × 2.0, 150.0)   (unchanged base)
-           No new variable — v is already computed for the runner lag (S.12). The $150
-           MAX_RISK cap is the SAME inviolate ceiling; nothing risks more than $150+spread.
-  Step 24. Confirm STEP / BE / tier / trail continue to derive from initial_risk as-is (the
-           wider momentum risk flows through naturally); RISK_MULT = 2.0 stays the base
-           constant (S.17 unaltered — this is a conditional branch, not a base change).
+  Step 23. AT ENTRY (the order-open path), compute TWO risks:
+             base_risk = MathMin(ATR_1M × 2.0, 150.0)                    (ALWAYS)
+             if v = Micro_LogReturn × dir >= 0.00012:
+                 catastrophe_risk = MathMin(ATR_1M × 4.0, 150.0)         (momentum entry)
+             else:
+                 catastrophe_risk = base_risk                            (non-momentum)
+           The INITIAL SL uses catastrophe_risk: SL = entry ± catastrophe_risk. Reuse the
+           SAME v the runner already computes (S.12) — no new variable. The $150 cap is the
+           SAME inviolate ceiling; nothing risks more than $150+spread.
+  Step 24. THE SPLIT (EA-CRITICAL — get this wrong and worst-day blows to ~-320): the BE-arm
+           trigger and the LeapFrog step_size MUST derive from base_risk, NOT catastrophe_risk:
+             step_size = STEP_PCT × base_risk        (base = min(ATR×2,150), NOT the widened risk)
+             be_trigger off base_risk
+           ONLY the catastrophe stop uses the widened risk. Scaling BE/step off the widened ATR×4
+           risk arms break-even too late and pushes SL UP to 202 with worst-day ~-320 — the exact
+           regression caught during the engine merge. The correct split HOLDS worst-day -127.5 and
+           converts stop-outs to break-evens (SL 194 -> 166).
   Step 25. Compile 0/0.
-  VERIFY: momentum entries (v >= 0.00012) use min(ATR×4, 150), non-momentum use min(ATR×2, 150);
-  no trade's initial risk exceeds 150; the book reproduces SL 194 -> 166, WR 91.9% -> 92.8%,
-  PF 5.83 -> 6.12, OOS PF 6.57 -> 6.99, min-fold 5.01 -> 5.49, worst-day -127.5 and max-DD
-  -165.6 HELD, net $58,249; runner LF count/net unchanged.
+  VERIFY: momentum entries (v >= 0.00012) use catastrophe SL min(ATR×4,150) while BE/step use
+  base_risk=min(ATR×2,150); no trade's initial risk exceeds 150; the book reproduces SL 194 -> 166,
+  WR 91.9% -> 92.8%, PF 5.83 -> 6.12, OOS PF 6.57 -> 6.99, min-fold 5.01 -> 5.49, worst-day -127.5
+  (NOT -320) and max-DD -165.6 HELD, net $58,249; runner LF count/net unchanged.
 
 ================================================================================
- PHASE 7 — VERIFICATION (before any deconstruction)
+ PHASE 7 — CONVICTION SELF-SCALING + GAP-SINGLES (change g / S.20)
 ================================================================================
 
-  Step 26. MetaEditor compile: 0 errors / 0 warnings.
-  Step 27. Run DOT_post_update_checklist.txt in full — every item PASS.
-  Step 28. Strategy Tester alignment: reproduce the reference RUN numbers under the
+  The EA scales its OWN lot size by conviction and adds two gap-only entries. Shares the
+  one 6-lot jar (S.15). DEPLOY 1-LOT BASE ONLY.
+
+  Step 26. CONVICTION SIZING (book lot size): at a book-LONG order-open, read Micro_Hurst on
+           the signal bar. If Micro_Hurst > adaptive p90 (via the oracle) -> lots = 2.0, else 1.0.
+           LONGS ONLY (no short edge). PLUS: if the long fired within 5 bars of a Micro_FailedBreak
+           -extreme -> lots = 1.25. A long qualifying for BOTH takes the HIGHER (2.0), never product.
+  Step 27. GAP-ONLY SINGLES (two new entries): fire ONLY when zero Dots positions are open (any
+           open body, live or BE'd, blocks them). Hurst single: Micro_Hurst > p97 AND D2D=+1 ->
+           LONG 1 lot LOCK=3. FailedBreak single: Micro_FailedBreak > p90 AND D2D=-1 (counter) ->
+           LONG 1 lot LOCK=3. Gate: ADX>=15 AND Volume>=300. Gap-singles are 1.0 lot (not sized).
+  Step 28. PER-BAR SEQUENCE: book signal -> Hurst-size 2x/1x; else-if book flat -> check the 2
+           gap-singles; a gap-single is blocked while any Dots position is live.
+  Step 29. 1-LOT-BASE CONSTRAINT (SACRED): base lot stays 1.0; the multiplier IS the scaling. Do
+           NOT blanket-2x on top — at 2-lot base the 12-lot worst-case stack (-$3,600) breaches the
+           FTMO -$2,500 gate (1-lot base: 12-lot stack -$1,800, inside the gate). 2-lot scaling
+           requires the jar-tweak (count multiplied lots toward the 6-cap) first, measured before use.
+  Step 30. Compile 0/0.
+  VERIFY: Hurst>p90 book-longs open 2x (longs only); gap-singles fire only when zero Dots open, at
+  LOCK=3; base lot 1.0; reproduces 2,691 tr / WR 92.2% / PF 6.15 / net $89,487 / worst-day -153.7 /
+  OOS PF 6.81. (The earlier modelled $90,103 / 2,828 tr carried a research-harness jar-sharing
+  artifact; the ratified pack engine reproduces the honest $89,487 — a 0.7% correction, no conclusion changes.)
+
+================================================================================
+ PHASE 8 — VERIFICATION (before any deconstruction)
+================================================================================
+
+  Step 31. MetaEditor compile: 0 errors / 0 warnings.
+  Step 32. Run DOT_post_update_checklist.txt in full — every item PASS.
+  Step 33. Strategy Tester alignment: reproduce the reference RUN numbers under the
            jar (WR 91.9%, PF 5.83, net $58,685 @1lot, worst-day −$127.5, 6/6 folds,
            22/22 weeks, OOS PF 6.57) within tolerance. Confirm both F1 signals fire, the
            momentum-runner lag switches on v ≥ 0.00012, the live-lot jar never exceeds
            6 (BE frees a lot; +74 trades vs the old count cap), and per-bar management
            reproduces portfolio_simulation_engine.py trade-for-trade on a parity run, and momentum
            entries (v ≥ 0.00012) use min(ATR×4,150) giving SL 166 / WR 92.8% / OOS PF 6.99.
-  Step 29. A2.7 DIRECTIVE RECONCILIATION: verify the COMPLETE system still
+  Step 34. A2.7 DIRECTIVE RECONCILIATION: verify the COMPLETE system still
            satisfies completeness (8/8 structures present), adaptivity (all
            thresholds through the oracle), parity (export = live; per-bar management ==
            the sim), and consistency (sacred layer untouched; jar bounds live risk at 6
-           lots) — not merely that the 6 changes were executed.
+           lots) — not merely that the 7 changes were executed.
 
   ONLY AFTER all of the above pass does any old-code removal proceed
   (build-first, deconstruct-second — see DOT_linear_development_schedule.txt).
 
 
-  NET EFFECT: six bounded changes. The runner touches one arithmetic line in
+  NET EFFECT: seven bounded changes. The runner touches one arithmetic line in
   the trail; the F1 subsystem adds two 16-slot boolean buffers + lagged lookups
   on already-computed conditions; the signal set becomes the validated 50; the
   live-risk jar replaces the count cap with a single live-lot counter that BE frees;
   the SL-management path is gated to new-bar (per-bar reposition off closed-bar
   extremes), reproducing the sim; and the initial SL gains one momentum-conditional
-  branch (min(ATR×4,150) when v ≥ 0.00012) reusing the runner's own momentum value.
-  The heavy machinery (adaptive calibration, KAMA warm-start, export, thresholds,
-  memory chain) is sacred and untouched.
+  branch (min(ATR×4,150) when v ≥ 0.00012) reusing the runner's own momentum value;
+  and the conviction system (change g / S.20) adds a lot multiplier at book-long admission
+  (Hurst>p90 -> 2x, longs only) plus two gap-only single entries gated to zero-Dots-open,
+  deployed 1-LOT BASE ONLY. The heavy machinery (adaptive calibration, KAMA warm-start,
+  export, thresholds, memory chain) is sacred and untouched.
