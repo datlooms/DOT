@@ -92,6 +92,17 @@ A real edge survives on data it wasn't selected on. If OOS holds, it's real. If 
 collapses, it was fitted. Always keep a slice of data the selection never touches, and
 judge on THAT, not on the data you chose from.
 
+WORKED EXAMPLE — the conviction self-scaling system (S.20) passed exactly this discipline.
+When we hunted for lone single-variable signals (the F13 scan), the honest result was a
+clean NEGATIVE: no single variable reaches book-level performance on its own — convergence
+is necessary. What DID survive was narrower and OOS-confirmed: Micro_Hurst-high at a book-long
+entry predicts a fatter winner OUT OF SAMPLE (OOS PF 16.6 vs 6.6), so it earns a 2x conviction
+size — and the sized book strengthens out-of-sample (its OOS PF 6.81 exceeds its in-sample 6.15, far more net).
+The tell that kept us honest: the crude "bolt the singles in as full entries" version (E) was
+REJECTED precisely because its OOS PF (5.42) fell BELOW the flat book (6.99) — OOS collapse is
+the fingerprint of adding noise, so we didn't ship it. The gap-only + conviction version was
+adopted only because OOS held. OOS decided every call; nothing shipped on in-sample net alone.
+
 ---
 
 ## 7. LEAVE-ONE-OUT TRIM — throw away the seductive signals

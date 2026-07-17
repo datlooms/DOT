@@ -171,6 +171,24 @@ backtest and real capital, not a flaw. More data spanning more regimes is always
 highest-value next step.
 
 ---
+## D2D AS AN ARTIFACT-DISCIPLINE CASE STUDY (S.21)
+
+The D2D crown-jewel work is a worked example of running every candidate through the artifact gates
+before adopting it -- and of filing (not adopting) the ones that don't clear.
+- D2D-CONVICTION passed on GENUINE edge, not in-sample WR: flagged book trades averaged $114 vs $30 for a
+  random equal-n subset (100th percentile of 2,000 draws), and beat the strong-trend-but-NO-D2D-flip cohort
+  ($114 vs $35) -- so the D2D FLIP discriminates, not generic ADX/Hurst trend-strength. It holds OOS. ADOPTED.
+- The MIRROR CHECK refuted a mutual-selection worry: D2D's own trades are 100% WR when the book is FLAT (its
+  independent gap trades) and its one loss lands on a book-co-fire bar -- the edge is D2D's own, not borrowed.
+- The 14-GAP CEILING was proven BOTH ways: looser gates add losers and deepen the worst day; tighter/split
+  gates drop winners and displace the pristine set. 14 is the genuine count, not a round-number target.
+- Micro_Rejection lo (a real short conditioner on the broad pool, mechanism-backed, OOS-positive) FAILED strict
+  multiple-comparisons correction (360 tests, none clear Bonferroni) and was FILED, NOT ADOPTED -- a lead for
+  fresh-export confirmation, not a ratified rule. Discipline over a good-looking number.
+- The BUILD CORRECTION $92,567 -> $92,347: the modelled (signal-path harness) figure was superseded by the
+  built (gap-path engine) figure once the Developer reproduced it end-to-end -- honest engine-vs-model
+  reconciliation (~$220, immaterial), not a paper-over. The BUILT number is canonical.
+
 ## CHECKLIST (tape this to the wall)
 [ ] Gates: only trade real moves (trend strength + volume + direction agreement)
 [ ] Convergence: multiple variables agree at once, not one

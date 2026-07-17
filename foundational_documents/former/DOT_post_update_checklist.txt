@@ -163,33 +163,51 @@
 
 
 ═══════════════════════════════════════════════════════════════════════════
- PHASE I: STRATEGY TESTER ALIGNMENT
+ PHASE I: CONVICTION SELF-SCALING + GAP-SINGLES (change g / S.20)
 ═══════════════════════════════════════════════════════════════════════════
-[ ] I.1  RUN book reproduces within tolerance: WR 91.9%, PF 5.83, net $58,685
+[ ] I.1  book-LONG entries with Micro_Hurst > adaptive p90 open at 2.0 lots; all other book
+         trades (and ALL shorts) open at 1.0 lot — Micro_Hurst sizing is LONGS ONLY.
+[ ] I.2  book longs within 5 bars of a Micro_FailedBreak-extreme open at 1.25 lots; a long
+         qualifying for both Hurst and recentFB takes the HIGHER (2.0), never the product.
+[ ] I.3  the two gap-singles fire ONLY when zero Dots positions are open (any open body,
+         live-risk OR breakeven’d, blocks them). Hurst: Micro_Hurst>p97 & D2D==+1 LONG;
+         FailedBreak: Micro_FailedBreak>p90 & D2D==-1 (counter) LONG. Gate ADX>=15 & Vol>=300.
+[ ] I.4  gap-singles use LOCK=3 and 1.0 lot (NOT conviction-sized).
+[ ] I.5  base lot is 1.0 (the multiplier IS the scaling) — NO blanket-2x on top (SACRED: 1-LOT
+         BASE ONLY; 2-lot base breaches the FTMO gate at a 12-lot stack).
+[ ] I.6  reproduces the G book: 2,691 tr, WR 92.2%, PF 6.15, net $89,487, worst-day -153.7, OOS PF 6.81
+         (honest pack-engine figure; the modelled $90,103 carried a research-harness artifact —
+         worst-day -153.7 is ~16x inside the -$2,500 gate at 1-lot base).
+
+
+═══════════════════════════════════════════════════════════════════════════
+ PHASE J: STRATEGY TESTER ALIGNMENT
+═══════════════════════════════════════════════════════════════════════════
+[ ] J.1  RUN book reproduces within tolerance: WR 91.9%, PF 5.83, net $58,685
          @1lot, worst-day −$127.5, max-DD −$165.6.
-[ ] I.2  Persistence reproduces: 6/6 folds, 22/22 ISO-weeks, 5/5 weekdays,
+[ ] J.2  Persistence reproduces: 6/6 folds, 22/22 ISO-weeks, 5/5 weekdays,
          min-fold PF 5.01.
-[ ] I.3  March bear fold reproduces: PF 5.47 / net $14,500 (positive through the
+[ ] J.3  March bear fold reproduces: PF 5.47 / net $14,500 (positive through the
          −10% crash).
-[ ] I.4  OOS (May–Jun) reproduces: PF 6.57, WR 92.2%, net $18,926.
-[ ] I.5  Survival margins hold: worst-day 19× inside −$2,500; max-DD 60× inside
+[ ] J.4  OOS (May–Jun) reproduces: PF 6.57, WR 92.2%, net $18,926.
+[ ] J.5  Survival margins hold: worst-day 19× inside −$2,500; max-DD 60× inside
          −$10,000.
-[ ] I.6  Both F1 signals contribute trades in the tester run; the runner lag
+[ ] J.6  Both F1 signals contribute trades in the tester run; the runner lag
          switch is observed on high-velocity entries.
 
 
 ═══════════════════════════════════════════════════════════════════════════
- PHASE J: DIRECTIVE RECONCILIATION (A2.7) & PARITY
+ PHASE K: DIRECTIVE RECONCILIATION (A2.7) & PARITY
 ═══════════════════════════════════════════════════════════════════════════
-[ ] J.1  COMPLETENESS: all 8 structures present; all 50 signals live.
-[ ] J.2  ADAPTIVITY: every threshold self-computes through the oracle regardless
+[ ] K.1  COMPLETENESS: all 8 structures present; all 50 signals live.
+[ ] K.2  ADAPTIVITY: every threshold self-computes through the oracle regardless
          of chart history.
-[ ] J.3  PARITY: fresh export reproduced bit-for-bit by dots_thresholds.py
+[ ] K.3  PARITY: fresh export reproduced bit-for-bit by dots_thresholds.py
          (export = live). No look-ahead anywhere, including the F1 latch. Per-bar SL
          management reproduces portfolio_simulation_engine.py trade-for-trade (parity run).
-[ ] J.4  CONSISTENCY: the sacred layer is byte-identical except the 6 authorized
+[ ] K.4  CONSISTENCY: the sacred layer is byte-identical except the 6 authorized
          changes; no retired mechanism returned.
-[ ] J.5  The complete system — not just the 6 edits — satisfies all standing
+[ ] K.5  The complete system — not just the 6 edits — satisfies all standing
          directives. Any gap flagged and resolved before sign-off.
 
 FINAL: all items PASS -> proceed to the FTMO demo (the true final test).

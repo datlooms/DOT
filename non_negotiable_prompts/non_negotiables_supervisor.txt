@@ -599,6 +599,50 @@ STATUS: ADOPTED (human-confirmed), pending Stage-9 implementation + full pipelin
 MODELLED G via its analysis harness; the ratified-engine implementation is still to be built and
 audited. It is an S.7-class change requiring the full pipeline; the operator ADOPTED it.
 
+
+S.21 — THE D2D CROWN JEWEL (RATIFIED — Auditor PASS 2026-07-17, built into the pack):
+The founding D2D signal (Anthony's original custom-OBVf-driven directional system, already live in
+equiDOT.cs) is promoted from directional-gate-only to a THREE-role member of the DOT system:
+(1) DIRECTIONAL GATE [existing, unchanged] — the +1/-1 trend direction the book aligns to.
+(2) D2D-CONVICTION 2× SIZER on book trades, BOTH DIRECTIONS: up-size a book trade 2.0× when its entry
+    bar satisfies `D2D_Signal == trade_dir & ADX_Value >= 30 & Micro_Hurst >= p30` (the throne gate,
+    p30 = adaptive rolling-2500 day-refreshed percentile). D2D is the ONLY short-side conviction source
+    (Hurst/recentFB are long-only) — it fills the gap where shorts had no conviction lever. Genuine edge,
+    not artifact: flagged trades avg $114 vs $30 random (100th percentile), beat the strong-trend-NO-flip
+    cohort ($114 vs $35) — the D2D FLIP discriminates, not generic trend-strength. Higher-mult-wins with
+    Hurst(2×)/recentFB(1.25×): a trade flagged by multiple takes the MAX, NEVER a product (never 4×).
+(3) D2D-GAP-FILLER: D2D throne entries (ADX>=30 & Micro_Hurst>=p30 & flip, BOTH directions) that land
+    when the book is flat (zero Dots open) fire as standalone entries at a FLAT 2.0 LOTS, shared 6-lot jar,
+    gap-gated + InitBars-guarded like the S.20 singles. 14 additive trades (4L/10S), all 100% WR in-sample;
+    they offset the book's worst day (combined daily worst-day IMPROVES -153.7 -> -104.4).
+D2D runs on the RATIFIED TM (ATR×2/×4 momentum-SL, BE tier-1, LeapFrog). Its NATIVE SuperTrend trail is
+FORBIDDEN in this role — decisively worse (net -$836, 28.8% WR); do not import it.
+RATIFIED CANONICAL (Auditor-verified, built gap-path engine, true $1/pt, 1-lot base): crown jewel =
+2,698 tr, WR 92.3%, PF 6.40, net $92,347, daily worst-day -104.4, daily max-DD -145.9, 6/6 folds
+(min fold PF 5.39), OOS PF 6.96 / net $29,326. Component deltas (roles INTERACT via shared jar + short
+conviction — combined verified DIRECTLY, not summed): Role 2 conviction +$1,015, Role 1 gap +$1,900.
+The modelled $92,567 is SUPERSEDED by the built $92,347 (~$220 admission-timing displacement, immaterial).
+SACRED BUILD-GUARDS (both Auditor-proven; behavior-changing edits require the full pipeline + human auth):
+  (a) short_mult SUPPORT — the engine and conviction.py must SIZE SHORTS (D2D-agree short -> 2×). Without
+      it D2D's entire short-side conviction is silently dropped (verified live: x2 book count 210 -> 249
+      with Role 2 on = book shorts sized 2×). This is a required structural capability, not optional.
+  (b) FLAT-2-LOT D2D-GAP BYPASS — D2D-gap assigns lots = 2.0 DIRECTLY, bypassing the conviction arrays;
+      it is NOT a 1-lot entry routed through conviction (the D2D-agree condition is true by definition on
+      every gap bar, so routing it through conviction then hardcoding 2× would yield 4× — FORBIDDEN,
+      gate-breaching). All 14 gaps are exactly 2.0 lots; D2D-gap uses book LOCK_FRAC=1.0 while the S.20
+      Hurst/FailedBreak gaps keep GAP_LOCK=3.0.
+DELIBERATE ASYMMETRY (not a bug): D2D-gap = 2 lots because it clears the throne gate (96.9% WR, highest
+in the book); the S.20 Hurst/FailedBreak gaps stay 1 lot because they clear a lower ~p90 gate. Any future
+instance reading "one gap is 2× and the others 1×" must treat this as stated and deliberate.
+WARM-UP GUARD: all three gap sources (Hurst, FailedBreak, D2D) inherit the InitBars=6900 floor (bar >=
+6900); export=live correctness — pre-floor adaptive/KAMA state is not live-reproducible. Fixed the 6
+prior pre-floor leaks. GAP PRIORITY: at most one gap per flat-bar, priority D2D-gap -> S.20 gaps; the two
+S.20 gaps are mutually exclusive (opposite D2D signs). Isolation: change confined to
+portfolio_simulation_engine.py + conviction.py + score_g.py; oracle (dots_thresholds.py sha 518862bf19fb),
+wf.py, core.py BYTE-IDENTICAL. Build contract: DOT_d2d_integration_blueprint.md (§1-§6, verified).
+STATUS: BUILT + RATIFIED. The pack scores the full committed design: BOOK-50 + S.15 jar + S.12 runner +
+S.19 momentum-SL + S.20 conviction/gap + S.21 D2D. S.7-class sacred.
+
 S.ENFORCE (SUPERVISOR):
 FAIL any delivery that modifies a protected element unless it cites documented human
 authorization. A behavior-changing edit to a protected element without that

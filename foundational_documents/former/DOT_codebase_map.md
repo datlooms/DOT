@@ -63,7 +63,7 @@ SECTION 11    [11500 – 11673] THE SHUTDOWN ROUTINE (STATEFUL)
 
 ---
 
-## 2. WHERE THE SIX CHANGES LAND
+## 2. WHERE THE SEVEN CHANGES LAND
 
 ### Change (a) — Momentum-runner TM branch
 - **Primary: SECTION 8.1 ADVANCED TRADE MANAGEMENT [8032–8218]** — the LeapFrog
@@ -165,6 +165,23 @@ SECTION 11    [11500 – 11673] THE SHUTDOWN ROUTINE (STATEFUL)
   worst-day to ~-320 (SL up to 202) — the regression caught during the engine merge. Verify the
   `step` at line 8824 reads base_risk, not the momentum `risk`.
 
+### Change (g) — Conviction self-scaling + gap-singles (S.20)
+- **Landing (lot multiplier): SECTION 8.6 DOTS TRADE MANAGEMENT**, the order-open path where `lots`
+  is set before `OrderSend` (~line 8824). For a book-LONG, read `Micro_Hurst` on the signal bar
+  (`Micro_Hurst_Array[1]`) and its adaptive p90 via the oracle: if `Micro_Hurst > p90` -> `lots = 2.0`,
+  else `1.0`; LONGS ONLY (no short edge). PLUS a recentFB flag (a book long within 5 bars of a
+  Micro_FailedBreak-extreme) -> `lots = 1.25`; a long qualifying for both takes the higher (2.0), never
+  the product. Base lot stays 1.0 — the multiplier IS the scaling (S.20 SACRED: 1-LOT BASE ONLY).
+- **Landing (gap-single entries): the Dots entry qualification loop** (~line 8790), alongside the
+  BOOK-50 signal checks. Two new single-condition entries: `Micro_Hurst > p97 & D2D_Trend_Dir==+1`
+  (LONG) and `Micro_FailedBreak > p90 & D2D_Trend_Dir==-1` (LONG, counter/reversion). Gate
+  `ADX_Value>=15 & Volume>=300`. Each opens 1.0 lot at LOCK=3. **Entry-gate:** a gap-single is admitted
+  ONLY when the count of open Dots positions is zero (any open body — live-risk OR breakeven'd — blocks
+  it). Per-bar order: book signals first (with the Hurst 2x/1x sizing); gap-singles only when no book
+  signal qualifies AND the book is flat.
+- **UNTOUCHED:** the 6-lot jar (S.15) is shared by all entries; the oracle thresholds (Hurst p90/p97,
+  FailedBreak p90) are computed the same adaptive way as every book threshold — nothing new to calibrate.
+
 ---
 
 ## 3. SACRED — DO NOT MODIFY (behavior-changing edits INVALID without human sign-off)
@@ -180,7 +197,7 @@ SECTION 11    [11500 – 11673] THE SHUTDOWN ROUTINE (STATEFUL)
 - **Locked tunables (SECTION 2.0):** Dots_RollingBufferSize = 2500,
   Dots_InitBars = 6900, and the S.7 trade-management constants.
 
-The six changes are additive and bounded. They do not touch the calculation
+The seven changes are additive and bounded. They do not touch the calculation
 memory chain, the threshold oracle, the KAMA persistence, or the export schema.
 
 ---
@@ -205,4 +222,6 @@ Eval_Dots_Signals          @4805    << F1 latch write + lagged fire; signal disp
 ManageDotsPositions        @8929    << change (e): per-tick -> per-bar SL reposition (closed-bar H/L)
 (OnTick Dots mgmt call)    ~1380    << change (e): gate to new-bar (currently every tick)
 (Dots entry risk calc)     ~8794    << change (f): momentum-conditional min(ATR x4,150) initial SL
+(Dots entry lots calc)     ~8824    << change (g): conviction lot multiplier (Hurst>p90 -> 2x book longs)
+(Dots entry qualification) ~8790    << change (g): 2 gap-single entries, gated to zero-Dots-open
 ```

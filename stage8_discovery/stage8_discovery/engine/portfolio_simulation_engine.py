@@ -30,6 +30,9 @@ CONV_HURST_MULT = 2.0
 CONV_RECENTFB_MULT = 1.25
 RECENTFB_WINDOW = 5
 GAP_LOCK = 3.0
+D2D_HURST_PCT = 0.30
+D2D_ADX_MIN = 30.0
+D2D_GAP_LOTS = 2.0
 MAX_POSITIONS = 6
 
 # ═══════════════════════════════════════════════════════════════
@@ -164,11 +167,14 @@ def run_portfolio(df, signals_df, mask_window=None, adaptive=None, structural=No
     times = df['Time'].values
     volume = df['Volume'].values
     long_mult = conviction.get('long_mult') if conviction is not None else None
+    short_mult = conviction.get('short_mult') if conviction is not None else None
     gap_hurst_mask = conviction.get('gap_hurst') if conviction is not None else None
     gap_fb_mask = conviction.get('gap_fb') if conviction is not None else None
+    gap_d2d_dir = conviction.get('gap_d2d_dir') if conviction is not None else None
     GAP_H_IDX = n_signals
     GAP_F_IDX = n_signals + 1
-    signal_names = signal_names + ['GAP_HURST', 'GAP_FB']
+    GAP_D2D_IDX = n_signals + 2
+    signal_names = signal_names + ['GAP_HURST', 'GAP_FB', 'GAP_D2D']
 
     all_trades = []
     micro_logret = df['Micro_LogReturn'].values
@@ -277,7 +283,10 @@ def run_portfolio(df, signals_df, mask_window=None, adaptive=None, structural=No
                     continue
                 lag = LAG_MOMENTUM if momentum else LAG_BASE
                 base_risk = min(atrs[bar] * RISK_MULT, MAX_RISK)
-                lots = long_mult[bar] if (long_mult is not None and signal_dirs[sig_idx] == 1) else 1.0
+                if signal_dirs[sig_idx] == 1:
+                    lots = long_mult[bar] if long_mult is not None else 1.0
+                else:
+                    lots = short_mult[bar] if short_mult is not None else 1.0
                 trade = Trade(sig_idx, bar, entry_price, signal_dirs[sig_idx], initial_risk, lag, base_risk, LOCK_FRAC, lots)
                 active_trades.append(trade)
                 signal_in_trade[sig_idx] = True
@@ -285,22 +294,29 @@ def run_portfolio(df, signals_df, mask_window=None, adaptive=None, structural=No
         elif n_qual == 1 and volume[bar] < 300:
             gate_blocks += 1
 
-        if conviction is not None and len(active_trades) == 0:
+        if conviction is not None and len(active_trades) == 0 and bar >= warmup:
             gfire = None
-            if gap_hurst_mask is not None and gap_hurst_mask[bar]:
+            gdir = 1
+            glots = 1.0
+            if gap_d2d_dir is not None and gap_d2d_dir[bar] != 0:
+                gfire = GAP_D2D_IDX
+                gdir = int(gap_d2d_dir[bar])
+                glots = D2D_GAP_LOTS
+            elif gap_hurst_mask is not None and gap_hurst_mask[bar]:
                 gfire = GAP_H_IDX
             elif gap_fb_mask is not None and gap_fb_mask[bar]:
                 gfire = GAP_F_IDX
-            if gfire is not None:
+            if gfire is not None and glots <= MAX_POSITIONS:
                 entry_price = closes[bar]
-                v = micro_logret[bar]
+                v = micro_logret[bar] * gdir
                 momentum = v >= MOMENTUM_THRESHOLD
                 raw_risk = atrs[bar] * (MOMENTUM_SL_MULT if momentum else RISK_MULT)
                 initial_risk = min(raw_risk, MAX_RISK)
                 if initial_risk > 0:
                     lag = LAG_MOMENTUM if momentum else LAG_BASE
                     base_risk = min(atrs[bar] * RISK_MULT, MAX_RISK)
-                    trade = Trade(gfire, bar, entry_price, 1, initial_risk, lag, base_risk, GAP_LOCK, 1.0)
+                    _lock = LOCK_FRAC if gfire == GAP_D2D_IDX else GAP_LOCK
+                    trade = Trade(gfire, bar, entry_price, gdir, initial_risk, lag, base_risk, _lock, glots)
                     active_trades.append(trade)
 
         if verbose and (bar + 1) % 10000 == 0:

@@ -224,4 +224,10 @@ ManageDotsPositions        @8929    << change (e): per-tick -> per-bar SL reposi
 (Dots entry risk calc)     ~8794    << change (f): momentum-conditional min(ATR x4,150) initial SL
 (Dots entry lots calc)     ~8824    << change (g): conviction lot multiplier (Hurst>p90 -> 2x book longs)
 (Dots entry qualification) ~8790    << change (g): 2 gap-single entries, gated to zero-Dots-open
+(Dots entry lots calc)     ~8824    << change (h/S.21): D2D-CONVICTION 2x sizer, BOTH dirs
+                                       (D2D_Signal==dir & ADX>=30 & Micro_Hurst>=p30); requires
+                                       short_mult -- the EA must SIZE SHORTS. Higher-mult-wins, never 4x.
+(Dots gap-entry, flat)     ~8790    << change (h/S.21): D2D-GAP-FILLER flat-2-lot standalone entries
+                                       when zero Dots open; assign lots=2.0 DIRECTLY (bypass conviction,
+                                       no 4x); book LOCK_FRAC=1.0 (S.20 gaps keep GAP_LOCK=3). 14 gaps.
 ```

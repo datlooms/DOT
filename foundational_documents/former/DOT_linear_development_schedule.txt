@@ -1,5 +1,5 @@
 ================================================================================
-  equiDOT BOOK-50 — LINEAR DEVELOPMENT SCHEDULE
+  DOT BOOK-50 — LINEAR DEVELOPMENT SCHEDULE
   From first line of code to Strategy Tester alignment and demo
 ================================================================================
 
@@ -15,11 +15,11 @@
 
   REFERENCE DOCUMENTS:
     DOT_rule_master_spec.txt        — the 50 signal definitions + gates + exits
-    DOT_dev_plan.txt                — the technical build steps (4 changes)
+    DOT_dev_plan.txt                — the technical build steps (7 changes: a-g)
     DOT_performance_record.xlsx     — target numbers (RUN + S.7)
     DOT_signal_dictionary.xlsx      — signal names + ELI5
     DOT_post_update_checklist.txt   — the verification checkboxes
-    DOT_codebase_map.md             — where each change lands in equiDOT.cs
+    DOT_codebase_map.md             — where each change lands in equiDOT.cs (the EA file name)
     non_negotiables_developer.txt     — coding laws
     non_negotiables_supervisor.txt    — architectural laws + audit rules
     equiDOT.cs                        — current EA source (FROZEN until Phase 7)
@@ -112,6 +112,23 @@
   a lot; new signals admitted ONLY when live lots < 6; the book reproduces the jar numbers
   (2,409 tr / net $58,685 / PF 5.83 / OOS 6.57), +74 trades vs the old count cap; worst-day
   −$127.5 and max-DD −$165.6 unchanged.
+
+
+═══════════════════════════════════════════════════════════════════════════
+ PHASE 4B — CONVICTION SELF-SCALING + GAP-SINGLES  (change g / S.20, ADOPTED)
+═══════════════════════════════════════════════════════════════════════════
+  Built on top of the final book (jar + runner + momentum-SL). The EA scales its own
+  lot size by conviction and adds two gap-only single-variable entries.
+  4B.1 CONVICTION SIZING (lot size at Dots order-open, SECTION 8.6): book-LONG with
+       Micro_Hurst > adaptive p90 -> 2.0 lots else 1.0 (LONGS ONLY); a long within 5 bars
+       of a Micro_FailedBreak-extreme -> 1.25; both -> higher (2.0).
+  4B.2 GAP-ONLY SINGLES (two new entries, admitted ONLY when zero Dots positions open):
+       Micro_Hurst>p97 & D2D=+1 -> LONG; Micro_FailedBreak>p90 & D2D=-1 (counter) -> LONG;
+       each 1 lot at LOCK=3; gate ADX>=15 & Vol>=300. Shared 6-lot jar.
+  4B.3 DEPLOY 1-LOT BASE ONLY (the multiplier IS the scaling; NO blanket-2x on top — the
+       12-lot worst-case stack is inside the -$2,500 gate at 1-lot base, over it at 2-lot).
+  VERIFY: reproduces 2,691 tr | WR 92.2% | PF 6.15 | net $89,487 | worst-day -153.7 | OOS
+  PF 6.81 (honest pack-engine figure; modelled $90,103 carried a research-harness artifact); Hurst-sizing longs-only; gap-singles fire only when flat; base lot 1.0.
 
 
 ═══════════════════════════════════════════════════════════════════════════

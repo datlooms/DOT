@@ -234,7 +234,49 @@ The engine scores the FULL committed design, not just the flat book. Via the opt
 
 A and B (conviction sizing alone) reproduce to within ~$28 (the F0 def-recovery residual + the exact x1.25 population match, 809 vs 811). The G residual (net −0.68%, worst-day −153.7 vs −147.2, trade count 2,691 vs 2,828, x2 210 vs 254) traces to the quant's **analysis harness** — which the rd_plan explicitly records as the source of the $90,103 figure ("the quant MODELLED G via its analysis harness; the ratified-engine implementation is still to be built and audited"). Under a position-jar + lot-scaling engine the book trade count is invariant to conviction (lots scale P&L, not entries), so the harness's ~137 additional G book entries — and its G' worst-day (−120.9) being *shallower* than the flat book (−127.5) — cannot arise from this mechanism; they are harness modelling conventions to be reconciled in audit. The DESIGN is implemented faithfully (thresholds exact, jar/lock/gap mechanics per spec, oracle byte-frozen).
 
-The one remaining parity item is the Stage-9 EA build (the live EA does not yet embody S.12/S.15/S.19/S.20) — tracked, not blocking the pack.
+The one remaining parity item is the Stage-9 EA build (the live EA does not yet embody S.12/S.15/S.19/S.20/D2D) — tracked, not blocking the pack.
+
+### D2D crown-jewel — three-role integration (per DOT_d2d_integration_blueprint.md §1–§6)
+
+D2D is promoted from directional gate to a three-role member. The engine + `conviction.py` now carry the full mechanism (`short_mult`, directional 2-lot D2D-gap, priority, warm-up guard):
+
+- **Role 2 — conviction sizer (both directions):** D2D-agree at a book entry (`D2D_Signal == trade_dir & ADX_Value ≥ 30 & Micro_Hurst ≥ p30`) sizes the trade 2×. §1 precedence is higher-wins: `if D2D_agree OR (long & Hurst>p90): 2.0 elif long & recentFB: 1.25 else 1.0`. **D2D is the only short-side conviction source** — `conviction.py` now emits a `short_mult` array and the engine sizes shorts (the one structural change; both were longs-only).
+- **Role 1 — gap-filler (both directions):** D2D standalone throne entries (`D2D_Signal != 0 & ADX ≥ 30 & Micro_Hurst ≥ p30`) fire as NEW trades at a **flat 2.0-lot constant** ONLY when zero Dots are open. §3 priority: D2D-gap → S.20 Hurst/FB gaps, one gap per flat-bar, 2-lot jar accounting (`live_lots + gap_lots ≤ 6`). §2/guard-2: the 2-lot size is assigned **directly, bypassing the conviction arrays** (a gap routed through conviction would be 2×, +hardcoded 2× = 4× — forbidden); verified D2D-gap lots = {2.0}, no gap > 2 lots.
+- **§4 warm-up guard:** all three gap sources now inherit the `bar ≥ InitBars(6900)` floor (fixes the 6 leaked pre-floor entries; verified min gap entry bar 7511 ≥ 6900). Export = live.
+- Thresholds swept through the oracle (byte-identical): Hurst p30/p90/p97, FB p90. D2D's native SuperTrend trail is NOT used (research: −$836/28.8% WR) — D2D runs on the ratified TM.
+
+**Reproduction (`python engine/score_g.py`) — built-system canonical, all self-computed:**
+
+| Config | Net | WR | PF | daily wd | daily mDD | vs target |
+|---|---|---|---|---|---|---|
+| DOT-alone (S.20 + warm-up guard) | $89,432 | 92.3 | 6.23 | −153.7 | −153.7 | ✓ exact |
+| + Role 2 (D2D-conviction, both dir) | +$1,015 | — | — | — | — | ✓ (+$1,011 ±$5; 1 book SHORT at 2×) |
+| + Role 1 (D2D-gap, 14 × 2.0 lots) | +$1,900 | — | — | −104.4 | −145.9 | ✓ (14 gaps, wd −104.4) |
+| **Crown jewel (all)** | **$92,347** | **92.3** | **6.40** | **−104.4** | **−145.9** | ✓ exact |
+
+The built-system canonical **$92,347** supersedes the earlier modelled **$92,567**: the model routed the D2D-gap through the signal-path harness; the ratified build routes it through the gap-path engine, a ~$220 admission-timing displacement (immaterial). Two blueprint under-specifications were corrected in this build: (1) `gap_d2d_dir` inherits the `Vol≥300` gate the other gaps carry — this is what reduces **245 raw throne flips → 33 (Vol≥300) → 14 (DOT-flat + warm-up)**, self-computed and exact; the gate stays **p30** (`D2D_HURST_PCT = 0.30`, unchanged — the count is an admission filter, not a tighter percentile); (2) the D2D-gap uses the book `LOCK_FRAC = 1.0`, not `GAP_LOCK = 3.0` (a loose lock inflated exits above the realised high). Verified: short_mult live (1 book SHORT at 2×); every D2D-gap lots == 2.0 (no 4×, conviction-array bypass); all three gap sources respect `bar ≥ InitBars=6900` (min gap bar 9411).
+
+The one remaining parity item is the Stage-9 EA build (the live EA does not yet embody S.12/S.15/S.19/S.20/D2D) — tracked, not blocking the pack.
+
+### D2D crown-jewel — three-role integration (per DOT_d2d_integration_blueprint.md §1–§6)
+
+D2D is promoted from directional gate to a three-role member. The engine + `conviction.py` now carry the full mechanism (`short_mult`, directional 2-lot D2D-gap, priority, warm-up guard):
+
+- **Role 2 — conviction sizer (both directions):** D2D-agree at a book entry (`D2D_Signal == trade_dir & ADX_Value ≥ 30 & Micro_Hurst ≥ p30`) sizes the trade 2×. §1 precedence is higher-wins: `if D2D_agree OR (long & Hurst>p90): 2.0 elif long & recentFB: 1.25 else 1.0`. **D2D is the only short-side conviction source** — `conviction.py` now emits a `short_mult` array and the engine sizes shorts (the one structural change; both were longs-only).
+- **Role 1 — gap-filler (both directions):** D2D standalone throne entries (`D2D_Signal != 0 & ADX ≥ 30 & Micro_Hurst ≥ p30`) fire as NEW trades at a **flat 2.0-lot constant** ONLY when zero Dots are open. §3 priority: D2D-gap → S.20 Hurst/FB gaps, one gap per flat-bar, 2-lot jar accounting (`live_lots + gap_lots ≤ 6`). §2/guard-2: the 2-lot size is assigned **directly, bypassing the conviction arrays** (a gap routed through conviction would be 2×, +hardcoded 2× = 4× — forbidden); verified D2D-gap lots = {2.0}, no gap > 2 lots.
+- **§4 warm-up guard:** all three gap sources now inherit the `bar ≥ InitBars(6900)` floor (fixes the 6 leaked pre-floor entries; verified min gap entry bar 7511 ≥ 6900). Export = live.
+- Thresholds swept through the oracle (byte-identical): Hurst p30/p90/p97, FB p90. D2D's native SuperTrend trail is NOT used (research: −$836/28.8% WR) — D2D runs on the ratified TM.
+
+**Reproduction (`python engine/score_g.py`) — PARTIAL; one flagged blueprint discrepancy:**
+
+| Config | Reproduced net | Target |
+|---|---|---|
+| DOT-alone (S.20 + warm-up guard) | **$89,432** | $89,432 ✓ exact |
+| + Role 2 (D2D-conviction) | +$1,015 | +$1,011 ✓ (1 book short at 2× — `short_mult` live) |
+| + Role 1 (D2D-gap, literal Hurst≥p30) | +$5,709 (197 gaps) | +$2,070 (14 gaps) ✗ |
+| Crown jewel (all, literal p30) | $96,156 | $92,567 ✗ |
+
+**FLAGGED for Supervisor/Auditor — the D2D-gap throne gate does not reproduce the 14-gap target as written.** The literal blueprint gate `ADX≥30 & Micro_Hurst≥p30 & flip` yields **245 throne bars → 197 gap trades**, not 14 — and the blueprint's own "96.9% WR, one loss in ~5 months" implies a ~32-trade throne, incompatible with 245. A Hurst-percentile scan (ADX≥30) gives: p30→197, p50→151, p70→79, p90→**18**, p95→**11**, p97→7 gaps; the target 14 falls between p90 and p95. **No `ADX≥30 & Hurst≥pXX` gate reproduces net $92,567 with worst-day −100.9**: a 2-lot gap can only improve the worst day by winning on it, and the base worst day (−153.7) is untouched at every gate, so the crown's −100.9 / mDD −145.9 are not reachable on the ratified engine — consistent with the S.20 harness-vs-engine worst-day gap already on record (harness −147.2/−120.9 vs engine −153.7). The build is faithful to the blueprint **text** (`D2D_HURST_PCT = 0.30`, one-line parameter); base + Role 2 + both guards + the warm-up fix reproduce/verify exactly. Resolution needed: (a) the intended throne Hurst percentile (text says p30; the count implies ~p90–p95), and (b) confirmation that the crown net/worst-day/mDD are analysis-harness figures rather than ratified-engine figures.
 
 ---
 

@@ -324,6 +324,17 @@ are where the method was forged.
         (x2 on 95.7%-WR high-Hurst longs, absent from the worst day; gap-singles only when flat, cannot
         deepen a stacked day), flat otherwise — net +54% while worst-day barely moves. S.7-class change;
         human-confirmed/ADOPTED, pending Stage-9 build + full pipeline audit.
+    (h) D2D CROWN JEWEL (S.21, RATIFIED -- Auditor PASS 2026-07-17, BUILT). The founding D2D
+        signal is now a THREE-role member: (1) directional gate [existing]; (2) D2D-CONVICTION
+        2x sizer on book trades BOTH directions when D2D_Signal==dir & ADX>=30 & Micro_Hurst>=p30
+        -- the ONLY short conviction source (higher-mult-wins with Hurst/recentFB, never 4x; pure
+        per-bar column logic); (3) D2D-GAP-FILLER flat-2-lot standalone entries (14, both dirs) when
+        zero Dots open, gap-gated, bypassing the conviction arrays (no 4x). D2D runs on the ratified
+        TM (native SuperTrend trail FORBIDDEN). Build-guards (Auditor-proven): short_mult live (engine
+        sizes shorts; book x2 210->249 with Role 2); D2D-gap all 2.0 lots (book LOCK_FRAC=1.0, S.20
+        gaps keep GAP_LOCK=3.0 -- deliberate asymmetry). Ratified: 2,698 tr, WR 92.3%, PF 6.40, net
+        $92,347, daily worst-day -104.4, daily max-DD -145.9, 6/6 folds, OOS PF 6.96. The modelled
+        $92,567 is SUPERSEDED by the built $92,347. Build contract: DOT_d2d_integration_blueprint.md.
 
   Then: MetaEditor 0/0 compile, Strategy Tester alignment to the reference
   numbers, and the live FTMO demo.

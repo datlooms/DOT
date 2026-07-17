@@ -1,0 +1,7 @@
+add:
+
+for %f in (*.*) do @for %e in ("%~xf") do @ren "%f" "%~nf_new%~xf"
+
+Remove:
+
+for %f in (*_new.*) do @call set "n=%~nf" & @call ren "%f" "%n:~0,-4%%~xf"
