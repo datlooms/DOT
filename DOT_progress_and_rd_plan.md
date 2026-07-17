@@ -6,6 +6,37 @@
 
 ---
 
+## 2026-07-17 — D2D CROWN JEWEL: the founding signal added to the DOT system as conviction + gap-filler (both roles), honest +$3,080 lift
+
+The D2D signal — Anthony's original, primary, custom-OBVf-driven concept, the founding gate the whole project grew from — was pushed to its standalone ceiling and then integrated into the DOT system in two complementary roles. D2D is a COMPLETE independent trade system already living in equiDOT.cs with its own native adaptive TM; this work re-gated it, scored it on the ratified TM, and added it to the book.
+
+### D2D STANDALONE THRONE (the founding system, given its full due)
+Config: raw D2D-flip signal, BOTH directions, ADX>=30 & Micro_Hurst>=p30 & Vol>=100, ratified TM (ATR×2/×4 momentum-SL, BE tier-1, LeapFrog), conviction 2× on the Hurst>=p90 slice. Result: **32 trades (18L/14S), WR 96.9%, PF 16.89, net $2,431, worst-day -153, max-DD -153, 6/6 folds, OOS 100% WR** — ONE loss in ~5 months (a single -153 March SL). The gentle lever was loosening HURST (persistence), not ADX (trend-strength): at ADX>=30 the flips are already elite, so Hurst>=p50→p30 added only winners (WR rose 95.7→96.9% as trades rose 23→32, OOS held at 999). Dropping ADX instead cracks WR and collapses OOS — rejected. Native D2D SuperTrend trail is DECISIVELY WORSE (net -$836, 28.8% WR — a low-WR trend-runner); the ratified TM's tight BE-banking is what makes D2D shine → the EA build strips the native trail, runs D2D on the ratified TM.
+
+### THE TWO INTEGRATION ROLES (both adopted)
+**Role 2 — D2D-CONVICTION (2× sizer on DOT book trades):** up-size a DOT book trade 2× when its entry bar satisfies `D2D_Signal == trade_direction & ADX_Value>=30 & Micro_Hurst>=p30`. D2D sizes BOTH directions (unlike Hurst/recentFB which are long-only) — this is its unique contribution: a SHORT conviction source. Higher-mult-wins with the existing Hurst/recentFB levers (a trade flagged by both takes 2×, never product/4×). Genuine-edge-confirmed (not a selection artifact): the flagged DOT trades avg $114 vs $30 random (100th percentile of 2,000 random-subset draws), and beat the strong-trend-NO-flip cohort ($114 vs $35) on identical ADX/Hurst bars — so it is the D2D FLIP specifically, not generic trend-strength, that discriminates. 28 of 42 flagged trades are winners the Hurst≥p90 lever misses. **CORRECTION during the build:** the initial +$6,014 lift was double-counted (it 2×'d trades already 2×'d by Hurst → 4×, violating higher-mult-wins); the honest higher-mult-wins incremental is **+$1,011** (mostly the shorts, which Hurst never sized). Small but real; the "100% WR" headline is fragile (n=55, ~4 losses erases the WR edge) but the avg-win effect is robust.
+
+**Role 1 — D2D-GAP-FILLER (standalone 1-lot D2D entry when DOT is flat):** the D2D throne entries that land in DOT's flat gaps (zero Dots positions open) fire as new 1-lot entries, shared 6-lot jar, gap-gated exactly like the Hurst/FailedBreak singles. **14 additive trades (4L/10S, all 100% WR)**, +$2,070. These land on DOT's flat days and OFFSET its worst day — the combined worst-day IMPROVES -153.7 → -100.9.
+
+### CROWN JEWEL — full system (BOOK-50 + S.20 + D2D conviction + D2D gap-filler)
+**2,719 trades, WR 92.2%, PF 6.18, net $92,567 (vs DOT-alone $89,487 → +$3,080 / +3.4%), worst-day -100.9 (improved from -153.7), max-DD -145.9, 6/6 folds, 23/23 ISO-weeks, OOS PF 6.76 / net $29,326.** Additivity confirmed (no double-count): Role 2 +$1,011 + Role 1 +$2,070 = +$3,081 ≈ total; the two roles fire on different bars (conviction up-sizes DOT trades that ARE trading; gap fires only when DOT is flat). Survival IMPROVES on every axis. Combined worst-day 25× inside the -$2,500 gate.
+
+### THE 14-GAP CEILING (proven from BOTH directions — 14 is the honest number, not a limit to beat)
+Chasing more gap-fills was tested exhaustively and 14 is optimal:
+- LOOSER (ADX 30→25→20→15): gap count rises 14→158 but net-added FALLS +$3,084→-$342 and worst-day DEEPENS -100.9→-166.2 (worse than DOT-alone). The gap-gate protects against stacking, NOT against a loose gap trade taking a full SL — more low-WR gap trades = more losing days. Rejected.
+- TIGHTER / SPLIT-GATE (shorts on Micro_Rejection instead of Hurst): cuts gap-fills 14→7 (shorts 10→3), net-added FALLS $3,084→$2,968. Reason: the 14 gap trades are ALREADY 100% WR — a loser-removal conditioner has nothing to remove and only throws away winners. Rejected.
+- 14 is the genuine count of high-quality DOT-flat strong-trend D2D moments in ~5 months. Both looser and tighter make it worse. Do NOT chase a round number (30); 14 clean beats 30 fragile.
+
+### BANKED LEAD (not adopted, filed for later): Micro_Rejection lo as a broad D2D-short conditioner
+On the BROAD D2D pool (ADX>=15, real short losers present), `Micro_Rejection lo` (clean-flip decisiveness — low counter-wick = confirmed breakdown, no fakeout) is a genuine short-side conditioner Hurst can't provide (Hurst is long-biased): lifts D2D shorts 84.5%→94.7% WR, PF 1.39→6.98, 16/19 independent of Hurst, OOS-positive, coherent mechanism, corroborated by Lower_Wick lo. **Promising, mechanism-backed, NOT proven** (n=19, ~6 losses erases it, did not clear strict Bonferroni across 360 tests). Useless in the gap slot (already 100% WR) — belongs to a future broad-D2D-short use-case if ever run outside the pristine slot. Needs fresh-export confirmation before sacred.
+
+### CORRECTIONS RECORDED
+- Tradeable window is ~5.0 months (first scannable bar 2026-01-26 20:54 after the 6900 InitBars warmup; first book trade 2026-01-27 01:25; first D2D trade 2026-01-29 → Jun 25), NOT 5.2 or 6. Prior "6 months" mislabels corrected.
+- WARM-UP GUARD BUG (found + to fix in build): the gap-single masks (Hurst/FailedBreak/D2D) skip the 6900-bar InitBars floor the book signals respect — 6 gap-singles leaked into warmup (entry bars 1195-6900). Tiny (6 of 2,691) but a real defect: ALL gap entries must inherit the same InitBars guard. DOT-alone with the guard applied = $89,432 (-$55 from the 6 removed leaks).
+
+### STATUS
+ADOPTED design decision (human-confirmed). D2D promoted from directional-gate-only to a THREE-role member of the DOT system: (1) directional gate (existing), (2) conviction 2× sizer on book trades both directions (Role 2), (3) gap-filler standalone entries (Role 1). Pending: blueprint (conviction-stacking precedence table, gap-priority, warm-up fix, per-bar order) → pack scripts represent D2D's two roles for the blind audit → Developer EA build → docs propagation → full pipeline audit. `D2D_Signal`, `D2D_Trend_Dir`, `ADX_Value`, `Micro_Hurst` are all in the 171-column baseline, so Role 2 is pure per-bar column logic; only Role 1 (gap entry) needs its own zero-position gate. This is the founding concept earning its full place — not just a trend gate, but a conviction source and gap-filler. Diamonds, not curve-fitting.
+
 ## 2026-07-16 — CONVICTION SELF-SCALING + GAP-SINGLE SYSTEM ADOPTED (F13 single-variable scan → two D2D conditioners → the "G" configuration)
 
 A single-variable extremes scan (F13, standalone, separate from the F0-F12 convergence families) was run to hunt a lone-variable "Heart of the Ocean" (100% WR + 100% persistence). Clean NEGATIVE on standalone diamonds — no single variable reaches book-level WR at full span; convergence is confirmed necessary. But the scan surfaced TWO genuine full-span single-variable persisters that became D2D CONDITIONERS, not standalone trades:
