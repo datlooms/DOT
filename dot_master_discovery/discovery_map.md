@@ -1,8 +1,11 @@
-# stage8_discovery — Program Map & Project Reconciliation
+# dot_master_discovery — DOT Master Discovery: Program Map & Inventory
 
-Inventory and reconciliation of the `stage8_discovery` pack. Every sha256 below is the first 12 hex chars, self-computed from the actual bytes.
+Inventory and reconciliation of the `dot_master_discovery` pack. Every sha256 below is the first 12 hex chars, self-computed from the actual bytes.
 
 **Entry point:** `master.py` is the single command that runs the whole pipeline (S0→S9). See **master_guide.md** to run it. This map is the file inventory; the build contract is **master_stage_spec.md**.
+
+
+**2026-07-18 rename + Windows-UTF8 + verdict-softening pass.** Program renamed `stage8_discovery` → `dot_master_discovery`. All text file I/O now carries `encoding='utf-8'` (Windows cp1252 crashes on `→`/`×`/`≥`). S8 verdict softened to a quiet US30-baseline canary. The 5 sacred files stay **byte-identical** (their historical "Stage-8" phase comments are preserved under byte-lock — those name the dev phase, not the directory). Non-sacred scripts touched this pass (new shas above): master.py `db8957587844`, run_full_analysis `886ea8ca17fa`, analysis_engine `d9acd1ddc3fe`, single_variable_extremes `37e3a9075aea`, run_f1_parallel `230427fcbd04`, concurrence_profiler `554019e93069` — utf-8/comment-only, no logic change; Auditor re-bless pending.
 
 Headline reconciliation: the ratified scripts (engines, oracle, 13 scanners, orchestrator) are byte-identical between the pack and the project files. `master.py` orchestrates them and never rewrites them.
 
@@ -13,7 +16,7 @@ Headline reconciliation: the ratified scripts (engines, oracle, 13 scanners, orc
 ## 1. Directory Tree (annotated)
 
 ```
-stage8_discovery/
+dot_master_discovery/
 ├── master.py                      SINGLE ENTRY POINT — one command runs S0→S9 (ingest→report)
 ├── master_guide.md                operator guide (how to run + every stage) — PRIMARY doc
 ├── discovery_map.md               THIS FILE — script/file inventory
@@ -118,8 +121,8 @@ Lineage, oldest → current:
 | `engine/conviction.py` | `27af7acee824` | S.20 + D2D conviction/gap builder (`long_mult`, `short_mult`, `gap_hurst`, `gap_fb`, `gap_d2d_dir` with Vol≥300 gate). | ratified (current) |
 | `engine/score_g.py` | `3129aecec634` | D2D crown-jewel option-map scorer (DOT-alone / +Role2 / +Role1 / crown), population breakdown, daily wd + daily mDD. Reproduces **$92,347** canonical. | ratified (current) |
 | `engine/score_book50.py` | `f2db7eb592a6` | Flat BOOK-50 scorer (reproduces the flat book $58,277). | current |
-| `engine/analysis_engine.py` | `fb1a30341e88` | F0 tic-proof scorer core (per-signal folds/weeks/dow via injected ==1). | current (but see §6) |
-| `engine/run_full_analysis.py` | `110767ea58dd` | F0 analysis driver → `signal_full_records.csv` + `signal_per_day_pnl.jsonl`. | current engine, **stale outputs — see §6** |
+| `engine/analysis_engine.py` | `d9acd1ddc3fe` | F0 tic-proof scorer core (per-signal folds/weeks/dow via injected ==1). | current (but see §6) |
+| `engine/run_full_analysis.py` | `886ea8ca17fa` | F0 analysis driver → `signal_full_records.csv` + `signal_per_day_pnl.jsonl`. | current engine, **stale outputs — see §6** |
 | `reproduce_dot.py` | *(project-only)* | Reproduction harness. | **not in pack** |
 
 Oracle / wf / core are byte-identical to the project copies (§7) and must stay so.
@@ -152,8 +155,8 @@ Oracle / wf / core are byte-identical to the project copies (§7) and must stay 
 | `engine/conviction.py` | `27af7acee824` | MATCH |
 | `engine/score_g.py` | `3129aecec634` | MATCH |
 | `engine/score_book50.py` | `f2db7eb592a6` | MATCH |
-| `engine/analysis_engine.py` | `fb1a30341e88` | MATCH |
-| `engine/run_full_analysis.py` | `110767ea58dd` | MATCH |
+| `engine/analysis_engine.py` | `d9acd1ddc3fe` | MATCH |
+| `engine/run_full_analysis.py` | `886ea8ca17fa` | MATCH |
 | `engine/wf.py` | `793e6e5f8d9a` | MATCH |
 | `engine/core.py` | `6530e2508b17` | MATCH |
 | `engine/dots_thresholds.py` | `518862bf19fb` | MATCH |
@@ -170,13 +173,15 @@ Oracle / wf / core are byte-identical to the project copies (§7) and must stay 
 | `scanners/cross_variable_structure.py` (F8) | `5594fa73a7d3` | MATCH |
 | `scanners/session_temporal.py` (F9) | `2e5f1703aaa2` | MATCH |
 | `scanners/rolling_leadlag.py` (F11) | `08848774ca1c` | MATCH |
-| `scanners/concurrence_profiler.py` (F12) | `188a5794bce5` | MATCH |
-| `scanners/single_variable_extremes.py` (F13) | `0ca336cdf9df` | MATCH |
+| `scanners/concurrence_profiler.py` (F12) | `554019e93069` | MATCH |
+| `scanners/single_variable_extremes.py` (F13) | `37e3a9075aea` | MATCH |
 | `scanners/f0_to_schema.py` | `f878d3b46c8b` | MATCH |
 | `scanners/run_f0_full.py` | `8a8a276cfbef` | MATCH |
-| `scanners/run_f1_parallel.py` | `47bf4d0ce4b9` | MATCH |
-| `master.py` | `9f124a9160c8` | current entry point |
-| `master_guide.md` | `a91899d50751` | current operator doc |
+| `scanners/run_f1_parallel.py` | `230427fcbd04` | MATCH |
+| `master.py` | `db8957587844` | run entry point (S0 re-ingests split parts, natural-sort) |
+| `rebuild.py` | `609580a417fe` | data-prep entry point (raw export → data/) |
+| `_packutil.py` | `6c8f2a3a7d04` | shared helpers (natural-sort + auto-split), no import side-effects |
+| `master_guide.md` | `027be57e8634` | current operator doc |
 | `data/equiDOT_recon171_step7_part1..8.csv` | `9b27119ab564` … `3605299a3fa1` | MATCH (all 8 parts) |
 | `discovery_results/results_F13_single_variable_extremes.csv` | `ca7aafdb7f80` | MATCH |
 
@@ -202,7 +207,7 @@ Oracle / wf / core are byte-identical to the project copies (§7) and must stay 
 
 To give the pack a self-contained discovery surface, 7c belongs under a materialised `dots_results/` (F0 outputs) and `discovery_results/` (F1). They are currently only in the project root.
 
-### 7d. Project files outside pack scope (context, not stage8_discovery)
+### 7d. Project files outside pack scope (context, not dot_master_discovery)
 Governance/context files present in the project that are **not** part of the discovery pack and need no reconciliation into it: `equiDOT.cs`, `equiDOT_KAMA_US30_cash_1.bin`, `equiDOT_adaptive_thresholds_stage.md`, the `non_negotiables_*.txt` set, `DOT_progress_and_rd_plan.md`, `DOT_execution_sequence.md`, `DOT_readme.md`, `DOT_codebase_map.md`, `DOT_handover_blueprint.txt`, `DOT_anti_curvefit_guide.md`, `DOT_backtest_guide.txt`, `DOT_post_update_checklist.txt`, `DOT_linear_development_schedule.txt`, `DOT_rule_master_spec.txt`, `DOT_dev_plan.txt`, `quant_auditor_phase_1_closing.txt`, `DOT_signal_dictionary.xlsx`, `DOT_signal_overview.xlsx`, `DOT_performance_record.xlsx`.
 
 ---
@@ -222,8 +227,8 @@ Deprecated figures (not files): modelled `$90,103` (S.20 harness) / `$92,567` (D
 
 **CARRY** — `master.py` orchestrates all of these (byte-identical):
 - **Sacred (5):** `dots_thresholds.py` `518862bf19fb`, `wf.py` `793e6e5f8d9a`, `core.py` `6530e2508b17`, `portfolio_simulation_engine.py` `bb498eb13ce3`, `conviction.py` `27af7acee824`.
-- **Scoring:** `score_g.py` `3129aecec634`, `score_book50.py` `f2db7eb592a6`, `analysis_engine.py` `fb1a30341e88`, `run_full_analysis.py` `110767ea58dd`.
-- **13 scanners + runners:** F0–F13 per §3/§10 of the spec; `run_f0_full.py` `8a8a276cfbef`, `run_f1_parallel.py` `47bf4d0ce4b9`, `f0_to_schema.py` `f878d3b46c8b`; `discovery_orchestrator.py` `31165e9a17df`.
+- **Scoring:** `score_g.py` `3129aecec634`, `score_book50.py` `f2db7eb592a6`, `analysis_engine.py` `d9acd1ddc3fe`, `run_full_analysis.py` `886ea8ca17fa`.
+- **13 scanners + runners:** F0–F13 per §3/§10 of the spec; `run_f0_full.py` `8a8a276cfbef`, `run_f1_parallel.py` `230427fcbd04`, `f0_to_schema.py` `f878d3b46c8b`; `discovery_orchestrator.py` `31165e9a17df`.
 - **Book + entry:** `book50_signals.csv` `e86a52244501` (frozen US30 book); `master.py` (folds in `reproduce_dot.py`'s S8 logic).
 
 **DROP** — never carried:

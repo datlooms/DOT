@@ -32,7 +32,7 @@ import wf
 #
 #  Thresholds: dots_thresholds oracle, SACRED, unchanged. Zero reconstruction.
 #
-#  Layout: this file lives in stage8_discovery/engine/ alongside the ratified
+#  Layout: this file lives in dot_master_discovery/engine/ alongside the ratified
 #  engine. load_sealed_baseline() reads the baseline by bare filename (CWD-
 #  relative); the driver (run_full_analysis.py) chdirs into the baseline
 #  directory in each worker before build_context() is called, so the loader

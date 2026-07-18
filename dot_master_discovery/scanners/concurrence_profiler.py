@@ -3,7 +3,7 @@ import sys
 import shutil
 
 # Self-bootstrap so this runs DIRECTLY (python scanners/concurrence_profiler.py)
-# rather than through stage8.py — multiprocessing on Windows (spawn) re-imports
+# rather than through master.py — multiprocessing on Windows (spawn) re-imports
 # the main module, which must be THIS file, not the launcher's runpy context.
 # Idempotent: safe to re-run in spawned children. Resolves engine/ imports and
 # the CWD-relative baseline exactly as the launcher does. (Same pattern as the
@@ -132,7 +132,7 @@ import sequential_temporal as seq
 #  pandas 3.0.2 (Python 3.12.3), so NO new dependency is introduced and there
 #  is nothing to pip install.
 #
-#  Run DIRECTLY (not via stage8.py):
+#  Run DIRECTLY (not via master.py):
 #     python scanners\concurrence_profiler.py           (full)
 #     python scanners\concurrence_profiler.py proof      (bounded + parity)
 #     python scanners\concurrence_profiler.py 16         (full, 16 workers)

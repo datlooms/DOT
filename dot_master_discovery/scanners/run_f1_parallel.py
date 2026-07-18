@@ -3,7 +3,7 @@ import sys
 import shutil
 
 # Self-bootstrap so this runs DIRECTLY (python scanners/run_f1_parallel.py) rather
-# than through stage8.py — multiprocessing on Windows (spawn) re-imports the main
+# than through master.py — multiprocessing on Windows (spawn) re-imports the main
 # module, which must be THIS file, not the launcher's runpy context. Idempotent:
 # safe to re-run in spawned children. Resolves engine/ imports and the CWD-relative
 # baseline the same way the launcher does.

@@ -295,7 +295,7 @@ def process_shard(task):
     tmp = os.path.join(SHARD_DIR, f'shard_{idx:04d}.csv.tmp')
     pd.DataFrame(rows).to_csv(tmp, index=False, lineterminator='\n')
     os.replace(tmp, os.path.join(SHARD_DIR, f'shard_{idx:04d}.csv'))
-    with open(done, 'w') as f:
+    with open(done, 'w', encoding='utf-8') as f:
         f.write(f'{len(rows)} surfaced\n')
     return (idx, len(rows))
 

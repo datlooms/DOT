@@ -6,7 +6,7 @@ import glob
 import math
 import shutil
 
-# Self-bootstrap for the stage8_discovery layout. This script lives in engine/
+# Self-bootstrap for the dot_master_discovery layout. This script lives in engine/
 # (alongside portfolio_simulation_engine.py / dots_thresholds.py / wf.py /
 # analysis_engine.py), so those imports resolve natively. All data paths are
 # resolved as ABSOLUTES relative to this file — never the cwd — so the operator
@@ -166,10 +166,10 @@ def process_shard(task):
     pd.DataFrame(recs).to_csv(tmp_pq, index=False, lineterminator='\n')
     os.replace(tmp_pq, pq_path)
     tmp_j = jsonl_path + '.tmp'
-    with open(tmp_j, 'w') as f:
+    with open(tmp_j, 'w', encoding='utf-8') as f:
         f.write('\n'.join(perday) + ('\n' if perday else ''))
     os.replace(tmp_j, jsonl_path)
-    with open(done_path, 'w') as f:
+    with open(done_path, 'w', encoding='utf-8') as f:
         f.write(f"{len(rows)} candidates, {len(recs)} survivors\n")
     return (start, len(recs))
 
@@ -235,9 +235,9 @@ def run(n_workers=N_WORKERS):
 
     jsonl_files = sorted(glob.glob(os.path.join(SHARD_DIR, 'shard_*.jsonl')))
     tmp = OUT_JSONL + '.tmp'
-    with open(tmp, 'w') as out:
+    with open(tmp, 'w', encoding='utf-8') as out:
         for jf in jsonl_files:
-            with open(jf) as f:
+            with open(jf, encoding='utf-8') as f:
                 shutil.copyfileobj(f, out)
     os.replace(tmp, OUT_JSONL)
 

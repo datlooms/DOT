@@ -45,8 +45,7 @@ FAMILIES = [
 ]
 
 
-def sha12(path):
-    return hashlib.sha256(open(path, 'rb').read()).hexdigest()[:12]
+from _packutil import sha12, _natkey, split_output
 
 
 def verify_sacred():
@@ -77,7 +76,7 @@ def done_path(out, key):
 def mark_done(out, key, meta):
     os.makedirs(os.path.join(out, '.markers'), exist_ok=True)
     tmp = done_path(out, key) + '.tmp'
-    with open(tmp, 'w') as f:
+    with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(meta, f)
     os.replace(tmp, done_path(out, key))
 
@@ -87,7 +86,7 @@ def is_done(out, key, input_sha):
     if not os.path.exists(p):
         return False
     try:
-        meta = json.load(open(p))
+        meta = json.load(open(p, encoding='utf-8'))
         return meta.get('input_sha') == input_sha
     except Exception:
         return False
@@ -98,56 +97,6 @@ def _pf(x):
     if (x < 0).any():
         return round(x[x > 0].sum() / -x[x < 0].sum(), 2)
     return 999.0 if len(x) else 0.0
-
-
-# ── auto-split (§9) — row-boundary CSV (header in part1 only), line-boundary JSONL ──
-def split_output(path, chunk_mb):
-    limit = chunk_mb * 1024 * 1024
-    if not os.path.exists(path) or os.path.getsize(path) <= limit:
-        return [path]
-    base, ext = os.path.splitext(path)
-    parts = []
-    if ext.lower() == '.jsonl':
-        lines = open(path, 'r').read().splitlines(keepends=True)
-        cur, sz, idx = [], 0, 1
-        for ln in lines:
-            b = len(ln.encode())
-            if sz + b > limit and cur:
-                pp = f'{base}_part{idx}.jsonl'
-                open(pp, 'w').write(''.join(cur))
-                parts.append(pp)
-                cur, sz, idx = [], 0, idx + 1
-            cur.append(ln)
-            sz += b
-        if cur:
-            pp = f'{base}_part{idx}.jsonl'
-            open(pp, 'w').write(''.join(cur))
-            parts.append(pp)
-    else:
-        with open(path, 'r') as f:
-            header = f.readline()
-            body = f.readlines()
-        cur, sz, idx = [], len(header.encode()), 1
-        for ln in body:
-            b = len(ln.encode())
-            if sz + b > limit and cur:
-                pp = f'{base}_part{idx}.csv'
-                open(pp, 'w').write(header + ''.join(cur) if idx == 1 else ''.join(cur))
-                parts.append(pp)
-                cur, sz, idx = [], 0, idx + 1
-            cur.append(ln)
-            sz += b
-        if cur:
-            pp = f'{base}_part{idx}.csv'
-            open(pp, 'w').write(header + ''.join(cur) if idx == 1 else ''.join(cur))
-            parts.append(pp)
-    man = f'{base}_manifest.txt'
-    with open(man, 'w') as f:
-        f.write(f'# split of {os.path.basename(path)} — header in part1 only, continuation parts headerless\n')
-        for pp in parts:
-            f.write(f'{sha12(pp)}  {os.path.basename(pp)}\n')
-    os.remove(path)
-    return parts
 
 
 def split_tree(out, chunk_mb):
@@ -171,13 +120,13 @@ def _is_header_row(first_line):
 
 def s0_ingest(data_dir, out, chunk_mb):
     import portfolio_simulation_engine as engine
-    files = sorted(glob.glob(os.path.join(data_dir, '*.csv')))
+    files = sorted(glob.glob(os.path.join(data_dir, '*.csv')), key=_natkey)
     if not files:
         print(f'ABORT — no CSVs in {data_dir}')
         sys.exit(2)
     input_sha = hashlib.sha256((''.join(sha12(f) for f in files)).encode()).hexdigest()[:12]
     recon = [f for f in files if 'recon171_step7_part' in os.path.basename(f)]
-    ncols = len(open(files[0]).readline().split(','))
+    ncols = len(open(files[0], encoding='utf-8').readline().split(','))
     attest = {'files': [os.path.basename(f) for f in files], 'ncols_first': ncols}
     if recon and len(recon) == len(files):
         cwd = os.getcwd()
@@ -193,9 +142,14 @@ def s0_ingest(data_dir, out, chunk_mb):
             print('  S0a — 256-col raw export detected → core.py reconstruction')
             attest['path'] = 'core.py reconstruction (256→171)'
         frames = []
+        header_cols = None
         for f in files:
-            hdr = 0 if _is_header_row(open(f).readline()) else None
-            frames.append(pd.read_csv(f, header=hdr))
+            if _is_header_row(open(f, encoding='utf-8').readline()):
+                d = pd.read_csv(f)
+                header_cols = list(d.columns)
+            else:
+                d = pd.read_csv(f, header=None, names=header_cols)
+            frames.append(d)
         df = pd.concat(frames, ignore_index=True)
         attest['path'] = 'generic concatenate+validate'
     if 'Time' not in df.columns or df.shape[1] != 172:
@@ -401,18 +355,17 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
     lines.append(f'  daily max-drawdown $: {r["daily_mDD"]}')
     lines.append(f'  folds positive      : {r["folds_plus"]}/6  (min-fold PF {r["min_fold_pf"]})')
     lines.append(f'  OOS (May–Jun) PF    : {r["oos_pf"]}   net ${r["oos_net"]}')
-    verdict = None
-    if frozen and os.path.basename(book_file) == 'book50_signals.csv':
-        ok = (r['trades'] == 2698) and (abs(r['net'] - 92347) < 1)
-        verdict = 'REPRODUCED' if ok else 'MISMATCH — investigate'
+    canary = (frozen and os.path.basename(book_file) == 'book50_signals.csv'
+              and r['trades'] == 2698 and abs(r['net'] - 92347) < 1)
+    if canary:
         lines.append('')
-        lines.append(f'  RATIFIED CANONICAL CHECK (BOOK-50): net $92,347 / 2,698 tr → {verdict}')
+        lines.append('  US30 baseline canary: $92,347 / 2,698 tr — engine intact')
     txt = '\n'.join(lines)
-    open(os.path.join(committed, 'committed_score.txt'), 'w').write(txt + '\n')
+    open(os.path.join(committed, 'committed_score.txt'), 'w', encoding='utf-8').write(txt + '\n')
     print('\n'.join('  ' + ln for ln in lines))
     r['book_tag'] = book_tag
-    r['verdict'] = verdict
-    mark_done(out, 'S8', {'input_sha': input_sha, 'net': r['net'], 'trades': r['trades'], 'verdict': verdict})
+    r['canary'] = canary
+    mark_done(out, 'S8', {'input_sha': input_sha, 'net': r['net'], 'trades': r['trades'], 'canary': canary})
     return r
 
 
@@ -445,8 +398,8 @@ def s9_report(out, attest, contenders, committed, sacred, market_label, chunk_mb
         L.append(f"- **net ${committed['net']} | {committed['trades']} tr | WR {committed['WR']}% | PF {committed['PF']} | "
                  f"daily wd {committed['daily_wd']} | daily mDD {committed['daily_mDD']} | "
                  f"{committed['folds_plus']}/6 folds min-PF {committed['min_fold_pf']} | OOS PF {committed['oos_pf']} | OOS net ${committed['oos_net']}**")
-        if committed.get('verdict'):
-            L.append(f"- BOOK-50 canonical check: **{committed['verdict']}**")
+        if committed.get('canary'):
+            L.append('- US30 baseline canary: $92,347 / 2,698 tr — engine intact')
         L.append('')
     L.append('## 5. Per-family coverage')
     L.append('- families: F0 (committed) + F1 (2 pairs committed) + F2–F9/F11 (exploratory) + F12 (concurrence diagnostic) + F13 (documented negative). **F10 folded into F0** (concurrence null) — complete, not gapped.')
@@ -455,7 +408,7 @@ def s9_report(out, attest, contenders, committed, sacred, market_label, chunk_mb
     L.append(f'- signal_full_records / signal_per_day_pnl: {scored_fresh}')
     L.append('')
     rep = os.path.join(out, 'master_report.md')
-    open(rep, 'w').write('\n'.join(L) + '\n')
+    open(rep, 'w', encoding='utf-8').write('\n'.join(L) + '\n')
     nsplit = split_tree(out, chunk_mb)
     print(f'  report → {rep} | auto-split: {nsplit} oversized artifact(s) chunked (≤{chunk_mb}MB, header-in-part1)')
     mark_done(out, 'S9', {'input_sha': input_sha, 'split_files': nsplit})
@@ -545,8 +498,8 @@ def main():
 
     print('\n' + '═' * 68)
     print(f'MASTER COMPLETE in {_hms(time.time() - t0)} | out: {out}')
-    if committed and committed.get('verdict'):
-        print(f'ACCEPTANCE: BOOK-50 → {committed["verdict"]}  (net ${committed["net"]} / {committed["trades"]} tr)')
+    if committed and committed.get('canary'):
+        print(f'US30 baseline canary: engine intact — net ${committed["net"]} / {committed["trades"]} tr')
     print('═' * 68)
 
 

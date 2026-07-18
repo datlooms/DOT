@@ -4,11 +4,22 @@
 
 | Document | What it's for |
 |---|---|
-| **master_guide.md** (this file) | **How to run it** — the single entry point (`master.py`), every stage S0–S9, every output, `--book` vs no-book, resume, auto-split. Start here. |
+| **master_guide.md** (this file) | **How to run it** — data-prep (`rebuild.py`) + the single entry point (`master.py`), every stage S0–S9, every output, `--book` vs no-book, resume, auto-split. Start here. |
 | **discovery_map.md** | The script/file **inventory** — every file, sha256, canonical-vs-retired, the carry/drop manifest, project-vs-local reconciliation. |
 | **master_stage_spec.md** | The **build contract** — the §1–§10 design spec `master.py` was built from (historical reference). |
 
 *Retired (do not use as current): `RUN_STAGE8.md`, `DOT_stage8_program_map.md`, `stage8.py` — the pre-master multi-script pack workflow, superseded by `master.py` + this guide.*
+
+## Preparing data — `rebuild.py`
+
+Before `master.py`, prep a raw EA export into a validated baseline:
+
+```
+python rebuild.py                      # uses the newest CSV in raw/
+python rebuild.py --in D:\path\export.csv   # or a specific file
+```
+
+`rebuild.py` reads the raw EA export (`<ASSET>_AUTO_EXPORT.csv` dropped in `raw/`), runs the reconstruction, validates the 172-col contract (Time + 171 features, time-strict / 0-dup / 0-NaN), **clears any old CSVs from `data/`**, and auto-splits the corrected output into `≤9MB` parts (header in part1 only, headerless continuation — the exact convention `master.py` S0 re-ingests) written straight into `data/`. It prints rows / cols / range / `invariants PASS` / the part list, and aborts loudly on any schema failure. It wires in `core.py`'s feature functions (`families`, `compute_new45`) for the recompute path; a fixed-EA export is already export=live-correct, so it is validated and split (consumed, not re-shifted — the EA's `.bin` seed supplied the warm-start).
 
 One command runs the whole DOT pipeline: ingest a market export → compute thresholds → discover patterns → filter → rank the mechanism choices → score the committed system → write one report. `master.py` orchestrates the ratified scripts; it never rewrites them.
 
@@ -81,3 +92,18 @@ Every stage writes a `.done` marker recording the input sha. Re-running the same
 ## Sacred files (never edited by the master)
 
 `dots_thresholds.py`, `wf.py`, `core.py`, `portfolio_simulation_engine.py`, `conviction.py` are byte-locked. The master prints all five shas at startup and aborts on any drift. No stage computes a threshold except through the oracle; no stage opens a trade except through the ratified engine.
+
+## Coding conventions (standing rules for all pack scripts)
+
+- **All file I/O uses `encoding='utf-8'`** — Windows defaults to cp1252 and crashes on non-ASCII (arrows `→`, `×`, `≥`). Every `open(..., 'w'/'a')` and every text `open(..., 'r')` in the pack carries `encoding='utf-8'`. Binary opens (`'rb'`/`'wb'`) are exempt.
+- LF line endings; no inline comments.
+
+## Changelog
+
+- **2026-07-18** — Fixed `rebuild.py` crash: it borrowed helpers via `import master`, which coupled it to master's startup and could leave `_natkey`/`split_output` unresolved (AttributeError at the split step). Moved both helpers into a side-effect-free **`_packutil.py`** imported by both `rebuild.py` and `master.py`; importing rebuild's deps no longer triggers master's sequence. Verified full round-trip: rebuild → data/ parts → master ingests → $92,347. shas: rebuild `609580a417fe`, master `db8957587844`, _packutil `6c8f2a3a7d04`.
+
+- **2026-07-18** — Added **`rebuild.py`** (data-prep): raw EA export → validated 171-col baseline → auto-split into `data/`. Wires in `core.py`'s feature functions. Also fixed `master.py` S0 to re-ingest the split convention (header-in-part1 + headerless continuation) and sort parts by **natural (numeric) order** so >9 parts reassemble correctly; split output is zero-padded. sha now `ec1bd550bfba`.
+
+- **2026-07-18** — `master.py` patched for Windows UTF-8 file I/O (no logic change); re-verified the committed system reproduces **$92,347 / 2,698 tr** on Windows. sha now `b18f554953fd` (was the Auditor-ratified `9f124a9160c8`).
+- **2026-07-18** — Program renamed `stage8_discovery` → **`dot_master_discovery`** ("DOT Master Discovery"). Directory + all docs updated; sacred files byte-identical (their historical "Stage-8" phase comments are preserved under byte-lock).
+- **2026-07-18** — S8 committed-score verdict softened: the canonical check is now a quiet, neutral **US30 baseline canary** that fires only on the recognized sealed baseline (`book50_signals.csv` and trades==2,698 & net==$92,347). All other data (SP500, US100, fresh exports, other books) prints the headline numbers only — no `REPRODUCED`/`MISMATCH`/verdict line. Different data producing different numbers is the expected outcome.
