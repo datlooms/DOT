@@ -181,6 +181,21 @@
 
 
 ═══════════════════════════════════════════════════════════════════════════
+ PHASE I.S21: D2D CROWN JEWEL (change h / S.21, RATIFIED)
+═══════════════════════════════════════════════════════════════════════════
+[ ] S21.1 short_mult sizes SHORTS -- book x2 count RISES with Role 2 on (210 -> 249); a
+          longs-only build silently drops D2D's short conviction. REQUIRED structural capability.
+[ ] S21.2 D2D-gap all exactly 2.0 lots, NO 4x -- lots assigned directly, never routed through
+          the conviction arrays (the D2D-agree condition is true on every gap bar).
+[ ] S21.3 warm-up guard on ALL 3 gap sources (Hurst, FailedBreak, D2D): min gap entry bar >= 6900.
+[ ] S21.4 gap priority: one gap per flat-bar, D2D-gap -> S.20 gaps; D2D-gap uses LOCK_FRAC=1.0,
+          S.20 gaps keep GAP_LOCK=3.0 (deliberate asymmetry, not a bug).
+[ ] S21.5 reproduces the crown jewel: 2,698 tr / WR 92.3% / PF 6.40 / net $92,347 / daily worst-
+          day -104.4 / daily max-DD -145.9 / 6/6 folds (min fold PF 5.39) / OOS PF 6.96 / net $29,326.
+[ ] S21.6 oracle (dots_thresholds.py 518862bf), wf.py, core.py BYTE-IDENTICAL.
+
+
+═══════════════════════════════════════════════════════════════════════════
  PHASE J: STRATEGY TESTER ALIGNMENT
 ═══════════════════════════════════════════════════════════════════════════
 [ ] J.1  RUN book reproduces within tolerance: WR 91.9%, PF 5.83, net $58,685

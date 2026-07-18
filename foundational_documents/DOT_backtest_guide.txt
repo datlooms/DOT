@@ -216,7 +216,7 @@ one lot. (An earlier era used 100×; every figure here is the corrected 1×.)
        momentum-SL + S.20 + D2D roles) via score_g.py with the D2D toggles on
        (d2d_conviction=True, d2d_gap=True in build_conviction). Expected built-system canonical:
        2,698 tr | WR 92.3% | PF 6.40 | net $92,347 | daily worst-day -104.4 | daily max-DD -145.9 |
-       6/6 folds (min fold PF 5.39) | OOS PF 6.96 / net $29,326. Option map: DOT-alone (S.20, warm-up-
+       6/6 folds (min fold PF 5.39) | OOS PF 6.96 / net $29,190. Option map: DOT-alone (S.20, warm-up-
        guarded) $89,432/-153.7 -> +Role2 D2D-conviction +$1,015 -> +Role1 D2D-gap +$1,900 -> $92,347.
        Roles INTERACT (shared jar + short conviction) -- verify the COMBINED number directly, not the
        sum. Build-guards: short_mult sizes shorts (book x2 210->249 with Role 2); D2D-gap all 2.0 lots,
