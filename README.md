@@ -1,4 +1,4 @@
-# DOT — Distributional Observation Triggers
+# DOT — Distributional Observation Triggers 2026
 
 *An autonomous trading system for the US30 (Dow Jones), told as a story.*
 
