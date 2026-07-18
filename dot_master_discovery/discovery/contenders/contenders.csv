@@ -1,7 +1,0 @@
-id,contender,trades,net,delta,WR,PF,daily_wd,daily_mDD,folds_plus,min_fold_pf,oos_pf,oos_net
-C0,"Flat book (1-lot, no conviction/gaps)",2361,58277,58277,92.8,6.12,-127.5,-165.6,6,5.49,7.04,18893
-C1,+ S.20 conviction (Hurst/recentFB longs),2361,71377,13100,92.8,6.58,-153.7,-191.8,6,5.93,7.88,24500
-C2,"+ S.20 gap-singles (Hurst-gap, FB-gap)",2685,89432,18055,92.3,6.23,-153.7,-153.7,6,5.29,6.81,28447
-C3,+ S.21 D2D-conviction (2x both dir),2685,90447,1015,92.3,6.29,-153.7,-153.7,6,5.34,6.9,28894
-C4,+ S.21 D2D-gap (flat 2-lot) = FULL,2698,92347,1900,92.3,6.4,-104.4,-145.9,6,5.39,6.96,29190
-C5,"sizing variant (conviction-off, gaps-on)",2698,78243,19966,92.3,5.99,-122.6,-140.6,6,5.08,6.18,23136
