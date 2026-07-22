@@ -942,3 +942,201 @@ The scattered stage8_discovery pipeline (many scripts across families/folders + 
 **STATUS:** Phase-1 blind audit CLOSED (system independently confirmed real). Master program RATIFIED as the sole discovery entry point. reproduce_dot + master-analyst layer delivered. The path to live is unchanged (Stage 9 EA build → sim↔MT4 parity → demo → live); the discovery/analysis infrastructure is now a single ratified command runnable on any data.
 
 **Post-ratification patches (2026-07-18):** master.py received two fixes after the Auditor's PASS on sha 9f124a9160c8 — (a) Windows UTF-8 file-I/O (all writes encoding='utf-8'; cp1252 crashed on the '→' char), and (b) natural-sort + S0 header-handling for >9 split parts, plus rebuild.py integration (shared _packutil.py). Current master.py sha: db8957587844. The committed-path logic is unchanged; $92,347 re-verified REPRODUCED on Windows and from a clean clone. A fresh Auditor pass on db8957587844 is pending to re-bless the new sha.
+
+---
+
+## 2026-07-21/22 — THE NEW-DATA REVEAL: first true out-of-sample event, and the gate-first redesign it triggered
+
+**The single most consequential session since discovery closed.** A fresh EA export extended the data
+past the sealed baseline for the first time. The committed BOOK-50 met genuinely unseen bars, degraded
+materially but stayed profitable, and the diagnosis exposed both a methodology gap and a one-variable
+fix already sitting in the export. Full detail: `DOT_new_data_reveal_2026-07-21.md` (404 lines).
+
+### 1. THE EXPORT AND THE PIPELINE — rebuild.py's first real use
+Fresh export taken 2026-07-21: `US30.cash_AUTO_EXPORT.csv`, 100,000 rows, 2026.04.08 17:32 →
+2026.07.21 17:09. Run through the ratified data-prep layer:
+- `python rebuild.py` — validated and split first time, no adjustment needed. The dotted asset name
+  (`US30.cash`) required no rename. **invariants PASS**, 13 parts written to `data/`.
+- `python master.py --book engine/book50_signals.csv` — ran clean end-to-end on Windows.
+**The rebuild → master chain worked on first real-world use.** No code changes required.
+
+### 2. DATA INTEGRITY — CONFIRMED, with a correction to the initial reading
+Overlap with the sealed baseline: **75,732 shared bars.**
+- OHLCV: Open/Low/Close max diff **0.000000**. High max diff 2.0 on one bar; Volume max 10 on three.
+- Adaptive variables (KAMA_Value, D2D_Trend, Micro_Hurst, ADX_Value, PoC_Price): **median 0.000000**.
+**Export=live parity holds on fresh data. The adaptive layer and the KAMA `.bin` warm-start seed are
+working correctly.**
+
+**CORRECTION (recorded because the first attribution was wrong):** the non-zero maxes were initially
+attributed to cold-start effects in the fresh export's early bars. That was a guess, not a
+measurement. Re-checked: the warm-up region has **max diff 0.000000** on ATR_1M, D2D_Trend and
+ADX_Value. The divergences are concentrated on **a single day — 2026.06.17** — entered via one
+High-bar discrepancy at 04:45, propagating through the recursive adaptive chains and **re-converging
+within the same session**. A one-bar feed discrepancy between two separate exports, self-healing.
+Not a cold-start problem and not a parity concern (live runs one continuous chain off one feed).
+
+### 3. THE HEADLINE — BOOK-50 on genuinely unseen data
+Segment split at the baseline boundary (2026.06.25):
+
+| Segment | Trades | Net | PF | WR | Worst day | Days |
+|---|---|---|---|---|---|---|
+| Overlap (Apr08–Jun25) | 975 | +$31,360 | 6.08 | 92.1% | −$204 | 49 |
+| **NEW (Jun25–Jul21)** | **375** | **+$8,407** | **2.19** | **81.1%** | **−$565** | **18** |
+
+Profitable on unseen data, survival intact (worst day = 11% of the FTMO $5,000 ceiling), and it did
+**not** invert (the prior 76-book failure mode). But materially degraded, and the trade rate was
+unchanged (~20/day both segments) — **the system did not self-throttle in the weaker regime.**
+Mechanism: SL share rose 7.5% → 18.7% while BE share fell 77% → 66%; whipsaw reversals took entries
+to full stop before the BE tier could arm.
+
+Market context: range-bound geopolitical chop (US–Iran escalation) opening the seasonal summer
+doldrums — the worst conditions a directional convergence system can face.
+
+### 4. WHAT PERSISTED — the findings the redesign is built on
+**Signal-level persistence.** The committed book is **50 signals: 48 F0 triple-convergence + 2 F1
+sequential.** The 3 GAP fillers (GAP_HURST, GAP_FB, GAP_D2D) are separate post-selection additions.
+Total entities 53; 52 fired in both segments.
+
+| Group | Persisted (net>0, PF>=2, WR>=75 in BOTH) | Rate |
+|---|---|---|
+| F0 triple-convergence | 23 / 47 | 49% |
+| F1 sequential | 1 / 2 | 50% |
+| GAP fillers | 2 / 3 | 67% |
+| **ALL** | **26 / 52** | **50%** |
+
+**Null baseline (is 50% skill or luck?):** 400 random triple-convergence signals generated from the
+same condition pool and scored on both segments. 15 of 201 (7%) passed the old-segment quality bar;
+of those, **4 (27%) persisted.** **Selection persists at ~2x the random rate — real, but insufficient
+for funded deployment.**
+
+**Market-structure persistence, normalised per trading day:**
+
+| Structure | Persist rate | OLD $/day | NEW $/day | |
+|---|---|---|---|---|
+| TREND_CONTINUATION | 67% | $165.8 | **$265.1** | **+60% BETTER** |
+| BREAKOUT_EXPANSION | 75% | $100.9 | **$140.7** | **+39% BETTER** |
+| MOMENTUM_IGNITION | 23% | $124.8 | $17.4 | −86% |
+| STRUCTURAL_ENTRY | 50% | $93.5 | −$10.0 | broke |
+| PRICE_ACTION | 25% | $22.2 | −$9.2 | broke |
+
+**The two directional-structure families EARNED MORE PER DAY on new data than on old.** The book's
+degradation is attributable to MOMENTUM_IGNITION, PRICE_ACTION and STRUCTURAL_ENTRY reversing — not
+to uniform decay. **Structural class predicts persistence better than in-sample statistics do.**
+
+**CONCURRENCE IS THE PERSISTENCE AXIS** (the operator argued this for months against repeated
+dismissal; it is now measured):
+
+| Depth | OLD WR / PF | NEW WR / PF |
+|---|---|---|
+| 1 (solo) | 90% / 4.12 | 73% / **1.25** |
+| 2 | 91% / 5.89 | 88% / 3.33 |
+| 3–4 | 100% / no losses | 92% / 7.43 |
+| 5–7 | 100% / no losses | **100% / no losses** |
+
+Monotonic in both segments. **Depth 3+ produced ZERO losing trades in either period.** Depth >=2
+alone lifts the new-segment PF from 2.19 to 7.89.
+
+**Mechanism (measured, not assumed):** solo entries carry avg loss 2–3x avg win — solvent only on an
+extreme win rate, so a modest WR drop collapses them (exactly the 90% → 73% observed). Concurrent
+entries have balanced payoff and degrade gracefully. Solo breakeven-WR is 64–75%; concurrent is 39–52%.
+
+**Conviction held almost perfectly.** Hurst-p90 2x tier: PF 13.42 → **11.81**. 38 conviction trades
+out-earned 243 base trades on the new segment. Hurst p90 standalone: 94% WR, PF 15.96, $5,490.
+
+**The edge is BIG-MOVE CAPTURE.** Bucketing new-segment trades by the absolute 60-bar forward move:
+**77% of all profit came from the largest-move quartile** (PF 4.27). Deep stacks carry the largest
+forward moves. By hour: 12:00 EST $4,674; 10:00 EST $1,621 at **100% WR** and the highest mean
+concurrency. This also explains why March (the crash) was the best month — maximum directional thrust.
+
+### 5. THE FIX — `AT_Regime_ST`, a gate already in the export
+`AT_Regime_ST` is the EA's **native binary trend-strength state**, already exported, already computed
+live. Gating BOOK-50 trades on directional alignment with it:
+
+| Segment | Aligned | Misaligned |
+|---|---|---|
+| OLD | 630 tr, WR 92%, PF 6.63, **+$21,377** | 345 tr, WR 92%, PF 5.21, +$9,983 |
+| **NEW** | **267 tr, WR 87%, PF 3.83, +$9,228, wd −$116** | 108 tr, WR 68%, PF 0.78, **−$821, wd −$535** |
+
+**The aligned subset EXCEEDS the whole book's new-segment net** (+$9,228 vs +$8,407) — the misaligned
+trades subtract. **The entire worst-day problem lives in the misaligned cohort**: book −$565,
+aligned-only −$116, misaligned −$535. Gating cuts tail risk ~5x. Holds in both segments.
+
+**Interpretation:** in the OLD segment the misaligned (counter-slope) trades were healthy — WR 92%,
+PF 5.21. These are **pullback entries**: buying a dip against short-term slope, which works when there
+is an established trend to pull back into. In the flat NEW segment there was no trend to resume.
+**`AT_Regime_ST` alignment is a TREND-PRESENCE filter, not a signal-quality filter.** The affected
+signals need gating, not deletion.
+
+**ENCODING — CONFIRMED AGAINST SOURCE:** `AT_Regime_ST == 0` is **BULLISH**, `== 1` is **BEARISH**
+(DOT.cs L3102 `curr_AnchorType_ST = (st_Slope > 0.0) ? 0 : 1`, corroborated L3113; 96%+ agreement
+across 177,251 bars). The intuitive reading is inverted.
+
+**AT_Regime_ST IS NOT sign(AT_Slope_ST).** DOT.cs L3110 updates the anchor only when a slope sign
+change coincides with a qualifying flip; otherwise the prior state **latches**. The ~4% disagreement
+is hysteresis, not noise. **RATIFIED GATE VARIABLE: the native binary `AT_Regime_ST` state** — no
+derivation, no export=live risk, and the latch resists whipsaw in flat regimes.
+
+### 6. THE METHODOLOGY GAP
+All prior validation — blind audit, OOS May–Jun, 6/6 folds, decorrelation, null/shuffle — occurred
+**INSIDE the Jan–Jun window**, downstream of a funnel that had already run across that whole window.
+**"Real in-window" and "persists across regimes" are different claims, and only the second was ever
+the goal.** The selection funnel (1.7M → 89K → 51K → 1,788 → 50) never applied multiple-testing
+correction, used single-pass rather than stability selection, and used aggregate rather than
+regime-conditional OOS.
+
+**The book was validated. The selection process never was.**
+
+### 7. THE STITCHED DATASET — one continuous series
+Built by the Quant, independently verified by the Supervisor:
+`DOT_stitched172_jan19_jul21_part01..09.csv` — **177,251 x 172, 2026.01.19 15:49 → 2026.07.21 17:09.**
+- Sealed baseline for 2026.01.19 → 2026.06.25 (152,983 rows, warm throughout)
+- Fresh export for bars AFTER 2026.06.25 only (24,268 rows)
+- Schema reconciled UP to 172: `VWAP_Sigma_ATR` native on fresh rows, oracle-derived on baseline rows
+  exactly as `portfolio_simulation_engine.load_sealed_baseline` does (verified max diff 1.84e-5)
+- Text-level stitch preserving original digit strings byte-for-byte — no float re-serialisation drift
+- **Verified: baseline half 171/171 columns bit-identical to source; fresh half 172/172 bit-identical.
+  Seam clean (Δt 00:01:00, no gap, no duplicate). Time strictly increasing, 0 dup, 0 NaN.**
+- Split at 25MB max per part + manifest with per-part sha256.
+**This is now the single source of truth. Never frame analysis as "old vs new" — it is one geometric
+palette.**
+
+### 8. DECISIONS TAKEN
+1. **Solo (depth-1) convergence is excluded** from the forward book. PF 1.25 on new data with a 2–3x
+   loss/win ratio is structurally fragile, not merely unlucky.
+2. **`AT_Regime_ST` (native binary) joins the gate stack:** ADX >= 15, ticks >= 50, D2D directional
+   agreement, AT_Regime_ST directional agreement. ADX>=15 and ticks>=50 remain as-is — they are
+   minimal-participation filters removing dead zero-participation bars, nothing more.
+3. **GATES ARE STATE COLUMNS, NEVER ROW FILTERS.** No bar is ever deleted. Every candidate is scored
+   both ungated and per-gate-subset. Rationale: a row filter destroys the counterfactual, makes an
+   inverted-encoding error silent and irreversible, and — critically — deleting rows upstream of the
+   oracle changes what mechanism D's rolling-2500 ring sees, which is an **export=live parity failure**
+   of the same class as a global percentile.
+4. **Discovery becomes GATE-FIRST** — search within the gated universe rather than searching all bars
+   and filtering afterwards. Gates are pre-trade market-state conditions, not performance-selected
+   outcomes, so conditioning on them does not curve-fit the way selecting on returns does; and the
+   narrower universe directly reduces multiple-testing bias.
+5. **THE SELECTION PRINCIPLE CHANGES.** The old objective optimised for DECORRELATION — signals that
+   do not overlap. But overlap IS depth, and depth is what predicts persistence. **Selecting against
+   overlap systematically selected against the property that survives, concentrating the book into the
+   fragile depth-1 population.** The corrected objective: a book whose signals **CO-FIRE often**
+   (creating depth) while their **FAILURES remain uncorrelated**. Two separate properties; the old
+   method collapsed them into one and optimised the wrong one.
+6. **Minimum UNIQUE-VARIABLE count at depth**, not merely a signal count — measured depth-2 events
+   with only 3 unique variables (the same read counted twice).
+7. **Walk-forward validation OF THE SELECTION PROCESS** is mandatory before any new book is committed.
+
+### 9. SUPERVISOR HANDOVER
+The outgoing Supervisor moved to **Manager**; a new Supervisor was initialised against the repo
+non-negotiables, the reveal document, both plan docs, and a handover brief encoding four documented
+failure modes from this session — negative overreach, premature closure, unverified attribution,
+anxiety amplification. Pipeline is now **Operator → Manager → Supervisor → specialists.**
+
+On initialisation the new Supervisor independently verified the `AT_Regime_ST` encoding against DOT.cs
+source (closing an open item), **discovered the latch/hysteresis property** the outgoing Supervisor had
+missed, and caught two documentation errors (a signal-count discrepancy and a stale $29,326 in the root
+README). Both corrected.
+
+**STATUS:** BOOK-50 remains the committed artifact and is NOT retired — it is profitable and survives
+on unseen data. But it is superseded as the *forward* book pending the gate-first rediscovery. The
+data pipeline, the adaptive layer and export=live parity are all confirmed working on fresh data.
+The next phase rebuilds signal selection around what demonstrably persists.

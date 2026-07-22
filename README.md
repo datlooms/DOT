@@ -33,7 +33,7 @@ The full DOT system is the convergence book **plus conviction self-scaling, gap-
 | Metric | **DOT full system (crown jewel)** | convergence base |
 |---|---|---|
 | Profit factor | **6.96** | 6.99 |
-| Net P&L | **+$29,326** | +$18,742 |
+| Net P&L | **+$29,190** | +$18,742 |
 
 The out-of-sample profit factor is *higher* than the in-sample figure — the system strengthens on data it never saw rather than collapsing. That is the central evidence the edge is real, not fitted.
 

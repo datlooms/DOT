@@ -71,7 +71,20 @@ mid-July to late-August). A directional convergence system faces its worst condi
 ## 4. WHAT PERSISTED (the core finding)
 
 ### 4.1 Signal-level persistence
-**26 of 51 signals fully persisted** — positive net AND PF>=2 AND WR>=75% in BOTH segments.
+**CORRECTED COUNT (this supersedes an earlier miscount of "51 signals").** The committed book is
+**50 signals: 48 F0 triple-convergence + 2 F1 sequential.** The 3 GAP fillers (GAP_HURST, GAP_FB,
+GAP_D2D) are separate gap-filler / conviction elements added after selection — they are NOT part of
+the 50. Total trading entities = **53**; 52 fired in both segments.
+
+Persistence (positive net AND PF>=2 AND WR>=75% in BOTH segments), by group:
+
+| Group | Persisted | Rate |
+|---|---|---|
+| F0 triple-convergence | 23 / 47 | 49% |
+| F1 sequential | 1 / 2 | 50% |
+| GAP fillers | 2 / 3 | 67% |
+| **ALL entities** | **26 / 52** | **50%** |
+
 Their combined NEW net: **+$9,841** (i.e. the persisters carried the whole book's +$8,407).
 
 **Null baseline test (is 51% skill or luck?):** 400 random triple-convergence signals were generated
@@ -80,9 +93,9 @@ from the same condition pool and scored on both segments.
 | | Passed OLD quality bar | Of those, persisted to NEW |
 |---|---|---|
 | Random triples | 15 of 201 (7%) | **4 (27%)** |
-| **BOOK-50** | 51 | **26 (51%)** |
+| **BOOK-50** | 52 fired in both | **26 (50%)** |
 
-**Selection persists at ~2x the random rate.** The selection process captures real signal — but 2x
+**Selection persists at ~2x the random rate (50% vs 27%).** The selection process captures real signal — but 2x
 is not sufficient rigor for funded deployment. This is the measured size of the gap.
 
 ### 4.2 Market-structure persistence — normalised per trading day
@@ -209,7 +222,18 @@ already live in the EA.
 - Split is near-even: 49% Regime==1, 51% Regime==0.
 
 **IMPLEMENTATION WARNING: the intuitive reading is backwards. `AT_Regime_ST == 0` is BULLISH.**
-Confirm against DOT.cs before wiring any live gate.
+CONFIRMED against DOT.cs (L3102: `curr_AnchorType_ST = (st_Slope > 0.0) ? 0 : 1`; corroborated
+L3113). This open item is CLOSED.
+
+**AT_Regime_ST IS NOT sign(AT_Slope_ST).** DOT.cs L3110 updates the anchor only when a slope sign
+change coincides with a qualifying flip (`isStandardFlip_ST || isStrongFlip_ST`); otherwise the prior
+state LATCHES through. The ~4% disagreement with slope sign is that hysteresis, not noise. Therefore
+the cross-check below (267 tr native vs 268 tr derived) is **two related variables agreeing closely,
+not one variable measured two ways.**
+
+**GATE DECISION: use the native binary `AT_Regime_ST` state.** It is the EA's own trend-strength
+output, requires no derivation, carries no export=live risk, and its latch resists whipsaw in flat
+regimes. Do not substitute `sign(AT_Slope_ST)`.
 
 **Gate result — BOOK-50 trades split by whether AT_Regime_ST direction matches trade direction:**
 
@@ -336,7 +360,7 @@ This should be treated as ONE dataset for rolling-window persistence testing, no
    Is there a repeatable timing sequence that can be traded (enter on AT_ST, size on D2D, max
    conviction on Hurst) rather than an AND-gate?
 5. **Quantify the gate-first paradigm**: run discovery restricted to gated bars and compare the
-   resulting book's out-of-split persistence against the current 51%.
+   resulting book's out-of-split persistence against the current 50%.
 6. **Long/short asymmetry**: shorts collapsed (PF 5.38 → 0.74, negative) while longs held
    (6.97 → 3.20). Systematic, or an artifact of an up-drifting doldrums regime? Do shorts require the
    gating the longs implicitly have?
@@ -346,8 +370,9 @@ This should be treated as ONE dataset for rolling-window persistence testing, no
 9. **Validate the `AT_Regime_ST` gate** (section 5.1) across rolling windows on the full stitched
    Jan–Jul series — does it hold continuously, and what is the optimal treatment of the misaligned
    pullback signals (gate on trend-presence vs remove)?
-10. **Confirm the `AT_Regime_ST` encoding against DOT.cs** (0 = bullish, 1 = bearish) before any live
-   wiring — the intuitive reading is inverted.
+10. ~~Confirm the `AT_Regime_ST` encoding against DOT.cs~~ **CLOSED** — confirmed at DOT.cs L3102/
+   L3113 and across 177,251 bars. Additionally established: AT_Regime_ST is a LATCHED anchor, not an
+   instantaneous slope sign. The native binary state is the ratified gate variable.
 
 ---
 
