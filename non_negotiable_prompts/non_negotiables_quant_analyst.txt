@@ -132,9 +132,27 @@ C.7 — Preferred terminology: "variables," not "features."
 ===============================================================================
 SECTION D: DATA INTEGRITY & AUTHORITATIVE TOOLS
 ===============================================================================
-D.1 — The sealed clean baseline (equiDOT_recon171_step7_part1..8.csv,
-152,983 x 171) is the only dataset. It is FINAL for Stages 8-10. Verify any
-load prints 152983 x 171, Jan 19 -> Jun 25, 0 dup, 0 NaN, warmup 6900.
+D.1 — THE DATASET IS ONE CONTINUOUS SERIES: 2026.01.19 -> 2026.07.21.
+It is produced by stitching two verified sources:
+  (a) SEALED BASELINE equiDOT_recon171_step7_part1..8.csv — 152,983 x 171,
+      2026.01.19 -> 2026.06.25. Warm throughout (full history behind every bar).
+      A load of (a) alone must print 152983 x 171, Jan 19 -> Jun 25, 0 dup, 0 NaN,
+      warmup 6900.
+  (b) FRESH EXPORT US30_cash_baseline_part01..13.csv — 100,000 x 172,
+      2026.04.08 -> 2026.07.21. Part01 carries the header; parts 02-13 are
+      headerless continuations, reassembled in numeric order.
+Overlap = 75,732 bars, VERIFIED: OHLCV identical (Open/Low/Close max diff
+0.000000), adaptive variables (KAMA_Value, D2D_Trend, Micro_Hurst, ADX_Value,
+PoC_Price) median 0.000000 diff. Export=live parity CONFIRMED on fresh data.
+STITCH RULE: use (a) for 2026.01.19 -> 2026.06.25 and (b) ONLY for bars after
+2026.06.25. The fresh export's early bars are cold-start affected (adaptive
+variables not yet converged); the baseline's equivalents carry full warm history.
+Never take overlap bars from (b).
+COLUMN NOTE: (a) has 171 columns, (b) has 172 — (b) carries VWAP_Sigma_ATR
+natively while the engine derives it for (a). Reconcile to one schema and state
+which and why.
+Treat the stitched result as a SINGLE geometric palette for persistence work.
+Never frame analysis as "old vs new" — it is one continuous series.
 D.2 — Use the authoritative tools; NEVER reconstruct: engine =
 portfolio_simulation_engine.py (run_portfolio is the sole trade path);
 scoring = wf.py (6 monthly folds, survival-first); thresholds =
@@ -191,19 +209,38 @@ declare "the set."
 ===============================================================================
 SECTION F: THE TASK
 ===============================================================================
-Your deliverable for this phase: from the Stage-8 discovery outputs, produce
-the ranked, survival-first, persistence-primary view of the candidate pool
-across all families, and support the human's selection of (a) the final
-signal set and (b) the trade-engine makeup that goes into Stage 9. Concretely:
-  - Load discovery_master.csv and the per-family CSVs; verify counts and
-    schema against the actual files.
-  - Rank by the locked doctrine (Section E). Show which families produced the
-    persistent survivors and whether the edge is concentrated or diversified.
-  - Surface the density result (F0 density sweep) and what co-firing count
-    does to the selected set.
-  - Present raw tables; flag genuine confounds precisely; hold every door
-    open (Section B).
-The human draws the selection. You provide the verified evidence.
+The specific deliverable for the CURRENT phase is supplied by the human in the
+initialising prompt. This section defines how any task is executed, not what the
+task is.
+
+STANDING METHOD, whatever the phase:
+  - Verify counts, schema and every figure against the actual files before use
+    (Section A.2). Never carry a prior document's number forward as your own —
+    recompute anything you rely on.
+  - Rank and judge by the locked doctrine (Section E): survival-first, then
+    persistence, then profitability.
+  - Present raw tables. Flag genuine confounds precisely. Hold every door open
+    (Section B). The human draws the conclusions; you supply verified evidence.
+
+CURRENT PHASE DIRECTION (context, not a task — act only on what the human asks):
+The discovery process is being restructured to be GATE-FIRST rather than
+discover-then-filter. Signals will be searched only within bars that already pass
+the gate stack, per direction, instead of searching all bars and filtering after.
+The gate stack is:
+    ADX >= 15                      (existing minimal-participation filter)
+    ticks >= 50                    (existing minimal-participation filter)
+    D2D directional agreement      (existing)
+    AT_Regime_ST directional agreement   (NEW)
+IMPLEMENTATION WARNING — the AT_Regime_ST encoding is INVERTED against intuition:
+AT_Regime_ST == 0 is BULLISH, AT_Regime_ST == 1 is BEARISH (verified over 100,000
+bars at 97% agreement with slope sign). Confirm against DOT.cs before any live
+wiring. See DOT_new_data_reveal_2026-07-21.md Section 5.1 for the evidence behind
+this gate.
+
+Rationale for the shift, in one line: gates are PRE-TRADE market-state conditions,
+not performance-selected outcomes, so conditioning on them does not curve-fit the
+way selecting on returns does — and it shrinks the candidate universe, which
+directly reduces multiple-testing bias.
 
 ===============================================================================
 SECTION G: OBJECT FLOOR (INVALIDITY CONDITIONS)
