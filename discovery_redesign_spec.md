@@ -6,6 +6,7 @@
 **Date:** 2026-07-23
 **Revision 2:** amended 2026-07-23 following external-review assessment and its correction round. Nine verified changes applied (§C.2, §C.3, §D.0, §F.4, §F.5, §F.6, §G.2, §H.1, §J); three provisionally-accepted items refuted by measurement and recorded as withdrawn (§10C).
 **Revision 3:** amended 2026-07-23 following Supervisor verification (APPROVE WITH AMENDMENTS). Defects A1–A5 corrected, gaps G1–G8 answered or assigned, three implementability blockers and three fake-step loopholes closed. **§0.1 is new and is the root fix**: depth, population and tolerance are now defined once and every depth-dependent figure is re-derived against them. Two Supervisor findings are disputed with measurement rather than absorbed — see §F.1.
+**Revision 6:** amended 2026-07-23 following Supervisor CONFIRM. `DOT_signal_discovery_mantra.md` (sha `e1da56f58085`) is now **binding doctrine** over this document; §D.0.1 records the reconciliation and one divergence returned to the doctrine's owner. §F.3.1 gains the N=5 tolerance table and withdraws the ungeneralised monotonic-decline claim. The MARKET/BOOK labelling construction is extended to five further sections. No figure changed except by addition.
 **Revision 5:** amended 2026-07-23 with four measured findings arising from an operator challenge to circular reasoning — market properties had been inferred *through* BOOK-50, which is the output of the funnel being replaced. §D.0.1 establishes a price-only **directional coverage baseline (50/50)** and **retires the upward-drift assumption** previously recorded in §C.3.1a. §D.0.2 separates reach from depth on the short side. §F.3.1 records the cluster arc and rules a normalised-position taper **unimplementable**. §C.3 gains the measured premise for weighting depth over standalone signal quality. Every finding is labelled MARKET (price-only) or BOOK. Three reproduction discrepancies are reported rather than smoothed — see §D.0.2 and §F.3.1.
 **Revision 4:** amended 2026-07-23 following Supervisor re-verification (APPROVE WITH AMENDMENTS, BUILD AUTHORISED SCOPED). O1 removes a directional bias in the objective — `DepthYield` is now per-direction and normalised (§C.1) and greedy selection runs per direction and merges (§C.3.1), with **no directional floor, quota or target encoded anywhere** (§C.3.1a). O2 corrects the §C.2 tail operating point to `tau = 0.20 / MIN_SHARED = 10` and recalibrates `T_max` to a per-segment permutation null. O3 keys two stale split-count references to the derived `K`. One O2 sub-finding is disputed with measurement — see §C.2. Structure and section numbering preserved.
 
@@ -314,7 +315,7 @@ DepthYield(B)   = the PAIR ( DepthYield_LONG , DepthYield_SHORT ) -- never summe
 
 **`DepthYield` IS EVALUATED WITHIN DIRECTION AND NORMALISED BY THAT DIRECTION'S SIGNAL COUNT. It is never pooled into a single scalar.** A pooled count is scale-dependent: it rewards whichever direction happens to hold more signals, for combinatorial reasons that have nothing to do with signal quality.
 
-**The measured defect it corrects.** On the committed book at S=5, N=5, BOOK, 121 traded days:
+**The measured defect it corrects — PROPERTY OF THE BOOK, and specifically of its 37/13 composition; it must be re-derived for any new book and says nothing about directional opportunity in US30 (for that, see §D.0.1).** On the committed book at S=5, N=5, BOOK, 121 traded days:
 
 | | clusters ≥5 | share | per day | signals |
 |---|---|---|---|---|
@@ -636,6 +637,14 @@ Against that baseline, BOOK-50's capture (**property of the BOOK**):
 
 *Fit risk:* six months, one instrument, two partial months. The symmetry holds in all seven monthly buckets, which is the strongest form of support available on this span, but a second export remains the test.
 
+**DOCTRINE RECONCILIATION — `DOT_signal_discovery_mantra.md` (280 lines, sha `e1da56f58085`).** The doctrine is binding and is not superseded by measurement. Every shared figure between this spec and the corrected mantra reconciles: §2's cross-reference to this spec's operating point (3,067 episodes at 4.1% / 3.0%), the 89.8% no-signal-fires figure, §4.1's arc table (7.74 / 19.43 / 8.32 / 6.79 at `j/(size−1)`), §4.1's N=5 tolerance caveat, §5's cluster structure (LONG 3.38 / SHORT 1.72), and §4.2's win-rate dispersion (sd 9.01 → 5.52). **No conflict stands.**
+
+**One divergence, recorded rather than left standing.** The mantra's §3 illustrative list quotes the directional-symmetry finding as "50.0% up / 50.0% down, down-moves larger (83.5 vs 76.5 pts median), strongest up-month 44.3% down-thrusts." This spec measures **49.8% / 50.2%, medians 82.0 / 77.1, April 45.4%**, and Supervisor robustness testing across six parameter and mask cells returned splits spanning 49.7%–50.6% — every cell inside a ±0.6pp band around 50/50, with the median down-move larger at every cell.
+
+**Resolution: the conclusion is identical and independently robust; the figures differ by calibration set, and no design decision turns on which cell is quoted.** §3 is an illustrative catalogue of past reasoning errors, not a measurement section, so this spec continues to use its own verified figures with parameters attached.
+
+**One observation returned to the doctrine's authors, not a change made here:** §3 bullet 1 quotes bare percentages without W, K, E, mask or N. That is the same class of omission the M1 correction just fixed in §2, and §2's own labelling note states that "a participation figure without its parameters is not a measurement." The doctrine holds itself to rule 1 in §2 and §4.1; §3 bullet 1 does not yet. Flagged for the doctrine owner — this spec does not amend doctrine.
+
 ### D.1 — Reach must not relax quality
 
 The acceptance bar for a signal recruited for coverage is **identical** to the bar for any other signal: §H.1 empirical-null, §H.2 stability, §H.3 regime-conditional positivity, and the §C.3 survival constraints. Coverage is a **tie-breaker among qualifying signals**, never a substitute for qualification.
@@ -725,6 +734,8 @@ The directional gate removes profitable trades. `sign(AT_Slope_ST)` is the panel
 
 The operation the record actually measured (`AT_Regime_ST == 1`, irrespective of direction) is genuinely interesting on the NEW segment. It does not survive regime-conditional examination.
 
+**PROPERTY OF THE BOOK — this measures how the incumbent's trades sort by a regime state, not whether that regime state carries information in the market. A gate that fails on this book has not been shown to fail on any other.**
+
 **Restated at the adopted boundary, bar 152,983 (§1.1). The record's boundary is shown alongside so the conclusion can be seen to be boundary-independent:**
 
 | boundary | segment | ungated | reg==1 | reg==0 |
@@ -785,6 +796,8 @@ S8B causal-strata ranking places the **long-term** adaptive family at the top of
 
 **All figures re-derived against §0.1. Every one states its population, basis and tolerance. The previous revision quoted four different depth measures in a single bullet list without labelling any; that is the defect this section corrects.**
 
+**PROPERTY OF THE BOOK throughout this section — solo economics, the cost of waiting and the non-separability of first entries all describe how *these 50 signals* behave, and must be re-derived for any new book. None of it is a claim about US30.** In particular, "solo entries are fragile" is a statement about the incumbent's solo population, not evidence that isolated opportunity in the market is fragile.
+
 **Solo economics** — F0 depth-1, FULL population (these are the tail figures and the tail lands on the account, so gap-filler days are included):
 - 1,135 trades, WR 88.5%, PF 3.16, **+$26,710**.
 - Structurally fragile: avg loss 2–3× avg win, breakeven-WR 64–75% versus 39–52% concurrent. They carry the tail — the −$574 worst day and the July bleed (2026.07 solo: WR 70.1%, PF 0.64, **−$1,208**).
@@ -826,6 +839,8 @@ S8B causal-strata ranking places the **long-term** adaptive family at the top of
 
 The base position opens on the existing trigger with no depth pre-condition; size scales as running depth crosses stated thresholds. Motivating ladder (pre-jar qualifying depth, executed trades bucketed by their entry bar's qualifying depth):
 
+**PROPERTY OF THE BOOK — the ladder describes what happens when *these* signals agree, and must be re-derived for any new book.**
+
 | qualifying depth | trades | WR% | PF | worst day $ |
 |---|---|---|---|---|
 | 1-2 | 2,008 | 89.3 | 3.52 | −639.1 |
@@ -849,7 +864,9 @@ Selecting a signal *because* it fires at shallow depth in episodes that deepen, 
 
 #### F.3.1 — THE CLUSTER ARC: the sizing curve is not monotonic, and the obvious taper is UNIMPLEMENTABLE
 
-**PROPERTY OF THE BOOK.** Outcome by normalised position within large clusters (size ≥ 8, N=10, BOOK, gaps excluded, 940 trades):
+**PROPERTY OF THE BOOK — it describes how *these* signals behave in company inside a cluster, and must be re-derived for any new book. It is not a property of the terrain.** Outcome by normalised position within large clusters (size ≥ 8, BOOK, gaps excluded, normalised position `j / (size − 1)` so the first entry sits at 0 and the last at 1):
+
+**N = 10 (940 trades):**
 
 | quartile of cluster | n | WR | PF | avg trade |
 |---|---|---|---|---|
@@ -858,9 +875,24 @@ Selecting a signal *because* it fires at shallow depth in episodes that deepen, 
 | third 25% | 218 | 95.4% | 8.32 | $32.14 |
 | last 25% | 239 | 93.3% | 6.79 | **$27.09** |
 
-**Profit factor arcs — rise to a peak in the second quarter, then decay to roughly a third of it. Average trade declines monotonically throughout, ending at 58% of where it started.** §F.2 specifies size scaling *up* as depth builds; within a large cluster the later entries are worth materially less than the earlier ones. Both can be true — the depth ladder compares *clusters*, this compares *positions inside one* — but the sizing curve must not be assumed monotonic on the strength of the ladder alone.
+**N = 5 (696 trades):**
 
-*Reproduction note.* The arc shape reproduces; two details do not. The quartile counts I measure (256/227/218/239) are close to the reverse of the supplied ones (218/239/227/256), which is the signature of a different normalised-position convention — I use `j / (size − 1)`, so the first entry sits at 0 and the last at 1. And on my measurement **average trade does not rise before it falls: it declines monotonically from the first quartile**, where the supplied figures peak in the second. PF arcs on both. The build must state its position convention; the conclusion — later entries in a large cluster are worth less — holds under either.
+| quartile of cluster | n | WR | PF | avg trade |
+|---|---|---|---|---|
+| first 25% | 194 | 93.8% | 7.94 | $44.01 |
+| second 25% | 165 | 95.2% | **14.06** | **$48.80** |
+| third 25% | 160 | **97.5%** | 12.74 | $35.12 |
+| last 25% | 177 | 95.5% | 9.01 | **$33.40** |
+
+**What holds at BOTH tolerances — the load-bearing part:**
+- **Profit factor ARCS**, peaking in the second quarter (19.43 at N=10, 14.06 at N=5) and decaying thereafter.
+- **The last quarter is worth materially less than the first** on both metrics — Q4 < Q1 on average trade at both tolerances ($27.09 vs $46.58 at N=10; $33.40 vs $44.01 at N=5).
+
+**What is TOLERANCE-SPECIFIC and must not be generalised:** the monotonic decline of average trade. **At N=10 average trade falls from the first quarter onward; at N=5 it RISES from Q1 to Q2 ($44.01 → $48.80) before falling.** The fixed tolerance is N=5 (§0.1.3), so the monotonic-decline description is the **N=10** behaviour and is stated as such. A previous revision asserted monotonic decline without the tolerance qualifier; that generality is withdrawn.
+
+§F.2 specifies size scaling *up* as depth builds; within a large cluster the later entries are worth materially less than the earlier ones at either tolerance. Both can be true — the depth ladder compares *clusters*, this compares *positions inside one* — but **the sizing curve must not be assumed monotonic on the strength of the ladder alone.**
+
+*Reproduction note.* The arc shape reproduces at both tolerances. The quartile counts I measure at N=10 (256/227/218/239) are close to the reverse of figures supplied earlier (218/239/227/256), which is the signature of the superseded `(j+1)/size` convention; `j/(size−1)` is adopted here and in the doctrine, and both conventions reproduce exactly under their own definition. The build must state its position convention.
 
 **WHY A NORMALISED-POSITION TAPER CANNOT BE BUILT.** Normalised position is `j / (size − 1)`, and **`size` is the cluster's final size, which is not knowable until the cluster has ended.** At fire time the EA knows how many entries have occurred; it cannot know how many more will follow, and therefore cannot know whether the current entry sits at 20% or 80% of the arc. **This is the first-entry problem (§F.1, §J) in mirror image — the same class of unknowable, at the other end of the cluster.**
 
@@ -916,7 +948,7 @@ This also **refutes** the related concern that concurrence measures duplicated i
 
 ### F.6 — Depth × volatility interaction
 
-Depth and volatility **interact**; the sizing curve should not be assumed one-dimensional. Measured, F0 trades, ATR terciles computed within the traded population:
+Depth and volatility **interact**; the sizing curve should not be assumed one-dimensional. **PROPERTY OF THE BOOK — measured on F0 trades of the incumbent book, and to be re-derived for any new one; it is not a claim that market volatility amplifies depth in general.** ATR terciles computed within the traded population:
 
 | ATR tercile | depth-5+ average trade |
 |---|---|
