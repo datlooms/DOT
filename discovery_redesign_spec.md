@@ -6,7 +6,9 @@
 **Date:** 2026-07-23
 **Revision 2:** amended 2026-07-23 following external-review assessment and its correction round. Nine verified changes applied (§C.2, §C.3, §D.0, §F.4, §F.5, §F.6, §G.2, §H.1, §J); three provisionally-accepted items refuted by measurement and recorded as withdrawn (§10C).
 **Revision 3:** amended 2026-07-23 following Supervisor verification (APPROVE WITH AMENDMENTS). Defects A1–A5 corrected, gaps G1–G8 answered or assigned, three implementability blockers and three fake-step loopholes closed. **§0.1 is new and is the root fix**: depth, population and tolerance are now defined once and every depth-dependent figure is re-derived against them. Two Supervisor findings are disputed with measurement rather than absorbed — see §F.1.
-**Revision 6:** amended 2026-07-23 following Supervisor CONFIRM. `DOT_signal_discovery_mantra.md` (sha `e1da56f58085`) is now **binding doctrine** over this document; §D.0.1 records the reconciliation and one divergence returned to the doctrine's owner. §F.3.1 gains the N=5 tolerance table and withdraws the ungeneralised monotonic-decline claim. The MARKET/BOOK labelling construction is extended to five further sections. No figure changed except by addition.
+**Revision 8:** amended 2026-07-23 with three corrections raised by the Developer and confirmed by the Auditor (documentation only; Build 2 is ratified at `master.py 296d612b7e9f` and Build 3 is authorised — these do not gate it). **§C.2's exclusion-bias direction is corrected to ANTI-CONSERVATIVE** and its root cause traced one level deeper than the notice reached — to the series definition, not only the k<3 degeneracy. **§C.2's independence annotation is corrected** (`lambda_L = 1.0` is perfect tail dependence; independence reads `tau`) and every λ figure re-derived on the corrected series, moving the headline lift from 3.548x to **1.69x**. **§C.1's `CoFire` gains the within-direction treatment `DepthYield` already had**, with cross-direction zero recorded as a property of the D2D alternating-bias design rather than as a market finding. Two provenance items recorded in §10C.
+**Revision 7:** amended 2026-07-23, Supervisor amendment C (documentation only, non-blocking; the Developer is building from `2b7f36d407f6` and this does not gate that). §D.0.1's reconciliation block restated against the current doctrine `fae943d40231` (305 lines): the recorded divergence **no longer exists** — the doctrine now states the six-cell robustness range this spec's figures sit inside — and the returned observation on unlabelled parameters is **closed, actioned in the doctrine as M3**. The doctrine's ≥15-trade filter claim is independently verified here and the standing "the filter is part of the finding" construction is adopted document-wide.
+**Revision 6:** amended 2026-07-23 following Supervisor CONFIRM. `DOT_signal_discovery_mantra.md` is now **binding doctrine** over this document; §D.0.1 records the reconciliation. §F.3.1 gains the N=5 tolerance table and withdraws the ungeneralised monotonic-decline claim. The MARKET/BOOK labelling construction is extended to five further sections. No figure changed except by addition.
 **Revision 5:** amended 2026-07-23 with four measured findings arising from an operator challenge to circular reasoning — market properties had been inferred *through* BOOK-50, which is the output of the funnel being replaced. §D.0.1 establishes a price-only **directional coverage baseline (50/50)** and **retires the upward-drift assumption** previously recorded in §C.3.1a. §D.0.2 separates reach from depth on the short side. §F.3.1 records the cluster arc and rules a normalised-position taper **unimplementable**. §C.3 gains the measured premise for weighting depth over standalone signal quality. Every finding is labelled MARKET (price-only) or BOOK. Three reproduction discrepancies are reported rather than smoothed — see §D.0.2 and §F.3.1.
 **Revision 4:** amended 2026-07-23 following Supervisor re-verification (APPROVE WITH AMENDMENTS, BUILD AUTHORISED SCOPED). O1 removes a directional bias in the objective — `DepthYield` is now per-direction and normalised (§C.1) and greedy selection runs per direction and merges (§C.3.1), with **no directional floor, quota or target encoded anywhere** (§C.3.1a). O2 corrects the §C.2 tail operating point to `tau = 0.20 / MIN_SHARED = 10` and recalibrates `T_max` to a per-segment permutation null. O3 keys two stale split-count references to the derived `K`. One O2 sub-finding is disputed with measurement — see §C.2. Structure and section numbering preserved.
 
@@ -305,13 +307,34 @@ cofire(i,j) = |bars where i and j both qualify| / |bars where i qualifies|
 computed on the **pre-jar qualifying masks** (S8B basis 2), not the executed trade list, so the jar's 6-lot cap does not truncate the measurement. Executed max depth is 6; pre-jar qualifying depth reaches **14**. Book-level statistic:
 
 ```
-CoFire(B)     = mean over pairs of cofire(i,j)
+CoFire_d(B)   = mean over SAME-DIRECTION pairs within direction d of cofire(i,j)
+                -- NEVER pooled across directions in any quantity entering the objective
+                   or a constraint. See "cross-direction co-firing" below.
 
 DepthYield_d(B) = ( count of direction-d BOOK clusters of size >= S )
                   / ( traded days ) / ( count of direction-d signals in B )
 
 DepthYield(B)   = the PAIR ( DepthYield_LONG , DepthYield_SHORT ) -- never summed
 ```
+
+**`CoFire` TAKES THE IDENTICAL WITHIN-DIRECTION TREATMENT, FOR THE SAME REASON.** A previous revision defined `CoFire` as a mean over all pairs. That is wrong, and the defect is in the scoring, not in the market.
+
+**Cross-direction co-firing is structurally zero — this is D2D behaving exactly as designed, and must NOT be written up as an empirical finding.** D2D implements an **alternating bias**: one directional bias at a time, by construction. `portfolio_simulation_engine.build_signal_masks` applies `mask = mask & (d2d_dir == direction)` (L103), so every LONG mask is a subset of `{bars: D2D_Trend_Dir == +1}` and every SHORT mask a subset of `{bars: D2D_Trend_Dir == −1}`. `D2D_Trend_Dir` is scalar per bar, so those sets are **disjoint**. A long signal and a short signal cannot co-fire, ever — not rarely, not in this sample: never, by construction.
+
+Measured (pre-jar qualifying masks with engine `entry_ok`, BOOK): **0 of 481 unordered cross-direction pairs share a single qualifying bar**, and **962 of 2,450 ordered pairs (39.3%) are structurally zero.**
+
+**Why an all-pairs mean is a defect.** It averages over 39.3% of pairs that are zero by design, deflating the statistic for reasons unrelated to signal quality — and, decisively, **it would mechanically reward a single-direction book**, since a book with no shorts carries no structurally-zero pairs dragging its mean down. That is the same failure mode §C.1 guards against for `DepthYield`, arriving by a different route, and it would have partially undone the O1 fix.
+
+**Specified basis, measured (BOOK, pre-jar qualifying, engine `entry_ok`):**
+
+| basis | value | consumed by §C? |
+|---|---|---|
+| all-pairs | 0.0271 | **NO — deflated by construction** |
+| same-direction (pooled) | 0.0447 | reported only |
+| **LONG within-direction** | **0.0480** | **YES** |
+| **SHORT within-direction** | **0.0162** | **YES** |
+
+**§C consumes the per-direction bases (0.0480 / 0.0162).** The all-pairs figure is emitted for continuity and explicitly marked deflated; the pooled same-direction figure is reported but does not enter the objective, since pooling still lets a large-pool direction dominate the mean.
 
 **`DepthYield` IS EVALUATED WITHIN DIRECTION AND NORMALISED BY THAT DIRECTION'S SIGNAL COUNT. It is never pooled into a single scalar.** A pooled count is scale-dependent: it rewards whichever direction happens to hold more signals, for combinatorial reasons that have nothing to do with signal quality.
 
@@ -370,31 +393,55 @@ Build the per-signal daily-loss series from S6's regenerated `signal_per_day_pnl
 ```
 tau            = 0.20      -- CORRECTED from 0.10
 MIN_SHARED     = 10        -- CORRECTED from 20
-q_i, q_j       = the tau-quantile of each signal's daily-loss series over shared active days
-coexceed(i,j)  = P( loss_i <= q_i  AND  loss_j <= q_j )
-lambda_L(i,j)  = coexceed(i,j) / tau          -- 1.0 == independence
-failcorr(i,j)  = Pearson correlation of the two daily-loss series   [RETAINED AS A REPORTED DIAGNOSTIC ONLY]
+series_i       = signal i's RAW DAILY P&L over its active days -- NOT floored at zero
+q_i, q_j       = the tau-quantile of each series over the pair's shared active days
+coexceed(i,j)  = P( series_i <= q_i  AND  series_j <= q_j )
+lambda_L(i,j)  = coexceed(i,j) / tau
+                 -- 1.0 == PERFECT LOWER TAIL DEPENDENCE
+                 -- independence reads tau (= 0.20), NOT 1.0
+lambda_over_independence(i,j) = coexceed(i,j) / (tau * tau)
+                 -- the LIFT form; 1.0 == independence. Emitted alongside, for the lift reading.
+failcorr(i,j)  = Pearson correlation of the two raw daily P&L series  [REPORTED DIAGNOSTIC ONLY]
 ```
+
+**ANNOTATION CORRECTED. The formula was right; the annotation was wrong.** A previous revision paired `lambda_L = coexceed / tau` with "1.0 == independence". Both cannot hold: under independence the joint probability is `tau^2`, so dividing by `tau` yields **`tau` = 0.20**, not 1.0. The 1.0-is-independence reading belongs to the `/tau^2` lift form, which is now emitted separately as `lambda_over_independence`. The spec's own step-size claim (`1/(k*tau) = 0.5` at k=10) is consistent with `/tau` and confirms the formula was the correct one. `lambda_L = 1.0` would require `coexceed = tau`, i.e. `P(both in tail) = P(one in tail)` — **perfect** lower tail dependence.
+
+**Verified: nothing downstream is affected.** `T_max` is a ratio to a permutation null computed with the identical estimator (§C.2 acceptance rule 1), so any constant scaling divides out. The Auditor confirmed `kappa` identical to ten decimal places under either scaling; the incumbent reads `lambda_L` 0.339 and `lambda_over_independence` 1.683.
+
+**SERIES DEFINITION CORRECTED — and this is a defect the correction notice did not reach.** "Daily-loss series" was ambiguous and I implemented it as `min(pnl, 0)`, flooring profitable days at zero. **That estimator is degenerate**: with most days profitable the series has heavy mass at exactly 0, the tau-quantile lands on 0, and `series <= q` is then satisfied by *every profitable day*. Measured, **73.4% of pairs returned `coexceed` of exactly 1.0** under that reading. The series is **raw daily P&L**, so that the tau-quantile is a genuine bad-day threshold. Every §C.2 figure below is re-derived on the corrected series.
 
 **THE OPERATING POINT WAS WRONG AND IS CORRECTED. `tau = 0.10 / MIN_SHARED = 20` is superseded.** Measured across the full C(50,2) = 1,225 pair space of the committed book:
 
-| operating point | pairs retained | mean λ retained | mean λ excluded | exclusion bias |
-|---|---|---|---|---|
-| **τ=0.10, k=20** *(superseded)* | **100 / 1,225 = 8.2%** | 3.96 | **4.34** | **ANTI-CONSERVATIVE** |
-| τ=0.20, k=20 | 100 / 1,225 = 8.2% | 4.24 | 3.93 | conservative |
-| τ=0.10, k=10 | 790 / 1,225 = 64.5% | 4.62 | 3.70 | conservative |
-| **τ=0.20, k=10 — ADOPTED** | **790 / 1,225 = 64.5%** | **4.13** | **3.61** | **conservative** |
+**THE PRIMARY FIX — retention — is confirmed and is the reason the change stands:**
 
-Three defects at the superseded point, all measured:
-1. **It retains only 8.2% of the pair space** — the hard constraint was calibrated on a twelfth of the structure it claims to bound.
-2. **The exclusion was ANTI-CONSERVATIVE.** The excluded pairs were *more* tail-dependent than the retained ones (4.34 vs 3.96), so the constraint systematically discarded the very pairs most likely to breach it.
-3. **The estimator was degenerate at the floor.** With `k = 20` and `τ = 0.10`, co-exceedance counts move in steps of `1/(k·τ) = 0.5`; among near-floor pairs only **8 distinct λ values** occurred across 83 pairs, clustered at 0.0 / 0.5 / 1.0 / 1.25 / 1.30 / 1.36 / 1.43 / 10.0 — a near-degenerate distribution barely distinguishable from independence.
+| | pairs retained |
+|---|---|
+| **τ=0.10, k=20** *(superseded)* | **100 / 1,225 = 8.2%** |
+| **τ=0.20, k=10 — ADOPTED** | **790 / 1,225 = 64.5%** |
 
-**Decomposition of the fix — the two changes do different work, and both are needed:**
-- `MIN_SHARED` 20 → 10 fixes **retention**: 8.2% → 64.5%. Retention depends only on the floor, not on τ.
-- `tau` 0.10 → 0.20 fixes the **bias direction**: at the same floor, τ=0.10 excludes the more-dependent pairs while τ=0.20 excludes the less-dependent ones.
+The superseded point calibrated a hard constraint on a twelfth of the structure it claims to bound, and was degenerate at the floor: with `k=20, τ=0.10` co-exceedance moves in steps of `1/(k·τ) = 0.5`, and among near-floor pairs only **8 distinct λ values** occurred across 83 pairs.
 
-*Departure from the Supervisor's measurement, reported rather than absorbed.* The structural findings reproduce exactly — 8.2% retention at k=20, and the bias flipping to conservative at τ=0.20/k=10. Two figures differ. My absolute λ levels are higher (3.96/4.34 versus the Supervisor's 1.21/1.82), which changes no decision since the comparison is between arms of the same estimator. More substantively, **the fire-frequency association is not removed by the correction and on my measurement is stronger at the adopted point** — Spearman(retained, fire-frequency) = +0.375 at k=20 versus **+0.584** at k=10 — where the Supervisor reported the adopted point dominating on every axis. Part of this is mechanical (an indicator retained 8.2% of the time has less variance to correlate), but the association is real at both points, it is **not** eliminated by the fix, and it is recorded in the residual limitation below rather than claimed as solved.
+**THE SECOND-ORDER CLAIM WAS WRONG AND IS CORRECTED. The exclusion bias at the adopted point is ANTI-CONSERVATIVE, not conservative.** A previous revision claimed the change flips the bias conservative. Re-derived on the corrected raw-P&L series at τ=0.20, k=10 (mean `lambda_L`, independence reads 0.20):
+
+| arm | mean λ | vs retained |
+|---|---|---|
+| retained, k ≥ 10 (n=790) | **0.3387** | — |
+| excluded RAW, 1 ≤ k < 10 (n=435) | **0.4433** | **ANTI-CONSERVATIVE** |
+| excluded degeneracy-guarded, 3 ≤ k < 10 (n=414) | **0.3571** | **ANTI-CONSERVATIVE** (narrows, does not flip) |
+
+**Mechanism, measured: degenerate pairs below k=3.** 21 pairs sit at k<3 — **5 at k=1** and **16 at k=2**. At k=1 the single shared day is trivially its own tau-quantile, so `coexceed = 1` and `lambda_L = 1/tau = 5.0` mechanically. Guarding at k≥3 removes them and narrows the gap from 0.4433 to 0.3571, but the excluded arm remains above the retained one. **The bias does not flip.**
+
+*Why my original claim was wrong, stated so the error is not repeated:* it was computed on the `min(pnl, 0)` series described above, under which 73.4% of pairs returned `coexceed = 1.0` and the arms were no longer distinguishable in a meaningful way. The k<3 degeneracy identified downstream is real and secondary; **the series definition is the deeper cause**, and correcting it alone reverses the reported direction.
+
+**MATERIALITY — immaterial in effect, and the reason is structural rather than fortunate.** `T_max` is a **ratio to a per-segment permutation null computed with the identical estimator and the identical `MIN_SHARED` exclusion** (acceptance rule 1). Both numerator and denominator therefore carry the same exclusion bias and it **substantially cancels**. Independently, §C.2's closing rule already subordinates this constraint: where `TailDep` and `FailConc` disagree, `FailConc` and the absolute bound carry the decision. **The direction is corrected because a reader must not later rely on a "conservative" label that is anti-conservative** — not because a design decision turns on it.
+
+**Made visible every run.** The build emits `exclusion_bias_degeneracy_guarded` and `degenerate_excluded_pairs_k_lt3`, so the direction and the degenerate-pair count are observable rather than assumed, in every segment and every §I split.
+
+**Decomposition of what each change does:**
+- `MIN_SHARED` 20 → 10 fixes **retention**: 8.2% → 64.5%. Retention depends only on the floor, not on τ. **This is the fix that matters and it reproduces exactly.**
+- `tau` 0.10 → 0.20 improves **granularity** (halves the step size at a given k). It does **not** flip the exclusion bias — that was the erroneous claim.
+
+*Residual, not removed by the correction.* The fire-frequency association persists at both operating points — Spearman(retained, fire-frequency) = +0.375 at k=20 versus **+0.584** at k=10. Part is mechanical (an indicator retained 8.2% of the time has less variance to correlate), but the association is real at both points and is **not** eliminated by the fix. It is recorded in the residual limitation below rather than claimed as solved.
 
 **MINIMUM-OVERLAP FLOOR (mandatory).** A 50-signal book yields 1,225 pairs, many sharing only a handful of active days, and Pearson `r` on `n = 2` is noise that must not enter an unweighted mean. **A pair contributes to `TailDep(B)` or `FailCorr(B)` only if it has `>= MIN_SHARED = 10` shared active days.** Pairs below the floor are:
 - **excluded** from both means;
@@ -413,22 +460,25 @@ mCVaR_i      = CVaR_i / (signal i's share of book lots)     -- marginal tail con
 
 `FailConc` remains the survival-first book-level quantity. `TailDep` replaces `FailCorr` as the pairwise measure. `mCVaR_i` identifies individual tail-risk concentrators — signals whose contribution to the worst days is disproportionate to their exposure — which is the per-signal diagnostic the FTMO daily ceiling actually needs and which no ranking on PF can surface.
 
-**VERIFICATION (measured on the committed book at the SUPERSEDED operating point, 122 pairs with >= 20 shared active days). The qualitative finding — Pearson materially understates joint tail failure — is what this establishes, and it is unchanged by the operating-point correction; the specific λ level is re-measured at the adopted point by the build.**
+**VERIFICATION — RE-DERIVED at the ADOPTED operating point on the CORRECTED raw-P&L series. PROPERTY OF THE BOOK; must be re-derived for any new book. Parameters: τ=0.20, MIN_SHARED=10, BOOK population, 790 qualifying pairs.**
 
 | measure | value |
 |---|---|
-| mean Pearson correlation of daily losses | **+0.0604** — reads as near-independent |
-| mean tail co-exceedance ratio `lambda_L` at tau = 0.10 | **3.548x independence** |
-| pairs with Pearson < 0.2 **but** `lambda_L` > 2.0 | **30 of 122 (24.6%)** |
-| rank correlation between the two measures | **+0.246** |
+| mean Pearson correlation of daily P&L | **+0.0992** — reads as near-independent |
+| mean `lambda_L` (`coexceed/tau`) | **0.3387**  *(independence reads 0.20)* |
+| **as lift over independence** (`lambda_over_independence`) | **1.69x** |
+| pairs with Pearson < 0.2 **but** tail lift > 2x independence | **162 of 790 (20.5%)** |
+| rank correlation between the two measures | **+0.382** |
 
-Pearson says the book's failures are essentially uncorrelated. In the tail they co-exceed at 3.5x independence, and roughly a quarter of pairs look benign under Pearson while concentrating risk exactly where the daily ceiling binds. The two measures rank pairs almost differently (rho +0.246), so one cannot be substituted for the other.
+**The qualitative finding survives the correction; its magnitude does not.** Pearson reads the book's failures as near-independent (+0.0992) while they co-exceed in the tail at **1.69x** independence, and one pair in five looks benign under Pearson while concentrating risk where the daily ceiling binds. The two measures rank pairs differently (rho +0.382), so neither substitutes for the other.
+
+*Superseded figures, recorded so they are not re-cited:* an earlier revision reported Pearson +0.0604, "3.548x independence", 24.6% and rho +0.246. Those were computed on the degenerate `min(pnl, 0)` series and at the superseded τ=0.10/k=20 point, and the "x independence" label additionally misapplied the `/tau` value as if it were the `/tau^2` lift. **The corrected lift is 1.69x, not 3.5x** — the direction of the finding holds, the strength was overstated by roughly a factor of two. The re-derived 1.69x reconciles with the build's independently-emitted `lambda_over_independence` of 1.6831.
 
 **ACCEPTANCE RULE (implementable and verifiable):**
 
-1. **Hard bound, CALIBRATED TO A PER-SEGMENT PERMUTATION NULL — not to a fixed reference.** `T_max` is expressed as a **ratio to the null**, never as an absolute λ level and never as the fixed 3.548 full-series figure.
+1. **Hard bound, CALIBRATED TO A PER-SEGMENT PERMUTATION NULL — not to a fixed reference.** `T_max` is expressed as a **ratio to the null**, never as an absolute λ level and never as a fixed full-series figure.
 
-   **Construction, per training segment:** permute each signal's daily-loss series independently across its own active days (destroying cross-signal alignment while preserving each signal's own loss distribution and activity pattern), recompute `TailDep` over the permuted book, repeat `P >= 500` times. This yields `TailDep_null(segment)` — the tail co-exceedance a book of this shape, activity and loss distribution produces **by chance alone** in **this** segment.
+   **Construction, per training segment:** permute each signal's raw daily P&L series independently across its own active days (destroying cross-signal alignment while preserving each signal's own P&L distribution and activity pattern), recompute `TailDep` over the permuted book, repeat `P >= 500` times. This yields `TailDep_null(segment)` — the tail co-exceedance a book of this shape, activity and loss distribution produces **by chance alone** in **this** segment.
 
    ```
    T_max = kappa * TailDep_null(segment)
@@ -436,14 +486,14 @@ Pearson says the book's failures are essentially uncorrelated. In the tail they 
 
    `kappa` is set from the incumbent book's own ratio `TailDep_incumbent / TailDep_null`, measured **on the active training segment**. A candidate book is rejected if its tail co-exceedance exceeds the incumbent's by more than that multiple of what chance produces in the same segment.
 
-   **Why a null rather than a level.** An absolute λ threshold is not portable: λ depends on `tau`, on `MIN_SHARED`, on book size, on activity density and on segment length, all of which differ across §I splits. A fixed 3.548 would be a different bar in every segment while appearing constant. The ratio-to-null is dimensionless and segment-comparable, and it is the same empirical-null logic §H.1 already uses for the selection statistic — applied here to a constraint.
+   **Why a null rather than a level.** An absolute λ threshold is not portable: λ depends on `tau`, on `MIN_SHARED`, on book size, on activity density and on segment length, all of which differ across §I splits. A fixed absolute level would be a different bar in every segment while appearing constant. The ratio-to-null is dimensionless and segment-comparable, and it is the same empirical-null logic §H.1 already uses for the selection statistic — applied here to a constraint.
 
    *Secondary refinement, NOT the primary fix:* partial pooling / empirical-Bayes shrinkage of per-pair λ toward the book mean, weighted by shared-day count, would further stabilise thinly-observed pairs. It is **recorded as a worthwhile refinement to evaluate after the null calibration is in place** — it is not the remedy for the operating-point defect and must not be substituted for it.
 2. **Hard bound, RELATIVE:** no single signal may carry `mCVaR_i` worse than `C_max` = the 90th percentile of the incumbent's `mCVaR` distribution, **measured on the ACTIVE TRAINING SEGMENT**.
 3. **Hard bound, ABSOLUTE — required, and not satisfied by 1 and 2.** A purely relative bar only guarantees the new book is no worse than the old; it cannot detect a book that is unsafe in absolute terms, and if the incumbent is itself unsafe the bar certifies the fault. The absolute constraint is the survival one and it is stated in units the account uses, not in multiples of the incumbent: **modelled worst day within the FTMO daily ceiling with stated margin, evaluated on the FULL population** (§0.1.1), since gap-filler P&L lands on the same calendar day as book P&L and the ceiling does not distinguish them.
 4. **Reported, not gating:** `FailCorr(B)` (Pearson) is retained in the output purely so the divergence between the two measures stays visible to the Auditor.
 
-**The full-series values are REPORTING REFERENCES ONLY** and must never enter a walk-forward constraint: the 3.548 figure (measured at the superseded operating point), and the `mCVaR` distribution from which p90 is drawn. Quoting either as a bound inside a §I split is a §I.4.2 violation.
+**The full-series values are REPORTING REFERENCES ONLY** and must never enter a walk-forward constraint: the `lambda_L` 0.3387 / lift 1.69x figures, and the `mCVaR` distribution from which p90 is drawn. Quoting either as a bound inside a §I split is a §I.4.2 violation.
 
 **RESIDUAL LIMITATION — stated plainly, and not to be presented away.** Even at the corrected operating point:
 - the pairwise tail structure is measured on **64.5% of the pair space**, a majority but far from all of it;
@@ -637,13 +687,17 @@ Against that baseline, BOOK-50's capture (**property of the BOOK**):
 
 *Fit risk:* six months, one instrument, two partial months. The symmetry holds in all seven monthly buckets, which is the strongest form of support available on this span, but a second export remains the test.
 
-**DOCTRINE RECONCILIATION — `DOT_signal_discovery_mantra.md` (280 lines, sha `e1da56f58085`).** The doctrine is binding and is not superseded by measurement. Every shared figure between this spec and the corrected mantra reconciles: §2's cross-reference to this spec's operating point (3,067 episodes at 4.1% / 3.0%), the 89.8% no-signal-fires figure, §4.1's arc table (7.74 / 19.43 / 8.32 / 6.79 at `j/(size−1)`), §4.1's N=5 tolerance caveat, §5's cluster structure (LONG 3.38 / SHORT 1.72), and §4.2's win-rate dispersion (sd 9.01 → 5.52). **No conflict stands.**
+**DOCTRINE RECONCILIATION — `DOT_signal_discovery_mantra.md`, 305 lines, sha256[:12] `fae943d40231`.** The doctrine is binding and is not superseded by measurement. **Verified against the current revision: the two documents agree, and no divergence stands.**
 
-**One divergence, recorded rather than left standing.** The mantra's §3 illustrative list quotes the directional-symmetry finding as "50.0% up / 50.0% down, down-moves larger (83.5 vs 76.5 pts median), strongest up-month 44.3% down-thrusts." This spec measures **49.8% / 50.2%, medians 82.0 / 77.1, April 45.4%**, and Supervisor robustness testing across six parameter and mask cells returned splits spanning 49.7%–50.6% — every cell inside a ±0.6pp band around 50/50, with the median down-move larger at every cell.
+Reconciled figures: §2's cross-reference to this spec's operating point (3,067 episodes at 4.1% / 3.0%), the 89.8% no-signal-fires figure, §4's depth ladder (N=10, BOOK, with N=5 values noted), §4.1's arc table at `j/(size−1)` (7.74 / 19.43 / 8.32 / 6.79) and its N=5 tolerance caveat, §4.2's win-rate dispersion (sd 9.01 → 4.67 → 5.52), and §5's cluster structure (N=5, BOOK: LONG 3.38 / SHORT 1.72).
 
-**Resolution: the conclusion is identical and independently robust; the figures differ by calibration set, and no design decision turns on which cell is quoted.** §3 is an illustrative catalogue of past reasoning errors, not a measurement section, so this spec continues to use its own verified figures with parameters attached.
+**The directional-symmetry figures now agree in form as well as substance.** The doctrine states the split as **~50% up / ~50% down, range 49.7–50.6%, never leaving a ±0.6pp band across six independent parameter cells**, with down-moves larger at every cell. This spec measures **49.8% / 50.2%** at its own stated cell (W=30 / K=p85 / E=p75 / post-warmup), which sits inside that band. **These are the same statement measured at different cells, not a disagreement** — an earlier revision of this block recorded a divergence against the doctrine's superseded point estimates (50.0/50.0, medians 83.5/76.5, April 44.3%); those were replaced by the robustness range and the divergence no longer exists.
 
-**One observation returned to the doctrine's authors, not a change made here:** §3 bullet 1 quotes bare percentages without W, K, E, mask or N. That is the same class of omission the M1 correction just fixed in §2, and §2's own labelling note states that "a participation figure without its parameters is not a measurement." The doctrine holds itself to rule 1 in §2 and §4.1; §3 bullet 1 does not yet. Flagged for the doctrine owner — this spec does not amend doctrine.
+**A previously-returned observation is now closed.** This block formerly flagged that the doctrine's §3 quoted bare percentages without W, K, E, mask or N — the same class of omission its own rule 1 forbids. **That was actioned in the doctrine; §3 now carries the six-cell range and its parameters, and every numeric table in the doctrine now states its parameters.** Nothing outstanding.
+
+**One doctrine result independently verified here, because it is the same construction this spec relies on.** The doctrine's §4.2 records that its ≥15-trade-per-band filter is load-bearing rather than cosmetic. Re-derived: without the filter the table reads **sd 13.21 / 5.68 / 14.85 with a 0.0% floor at depth**, and the finding **inverts** — dispersion appears to rise at depth instead of nearly halving. The mechanism is small-`n`: 15 of 48 deep-band signals hold fewer than 15 trades, their win rates are almost all 100%, and the 0.0% floor comes from a single signal holding **one** trade in the band. **This is exactly the argument that sets `MIN_SHARED` in §C.2** — an estimator computed over too few observations is not a weak measurement but a misleading one, and it can reverse a conclusion rather than merely widen it.
+
+**Standing construction, adopted for every finding in this document:** when a finding depends on a filter, threshold or restriction, **the filter is part of the finding.** A reader who cannot reproduce the restriction cannot reproduce the conclusion, and a table quoted without its restriction may support the opposite claim. §C.2's `MIN_SHARED = 10`, §0.1.3's `N = 5`, §F.3.1's tolerance split, §C.1's `S` grid and §H.2's ≥15-day equivalents are all stated on this principle.
 
 ### D.1 — Reach must not relax quality
 
@@ -1246,6 +1300,23 @@ Primary statistic: **AUC of `lambda(t_1)` as a classifier of "cluster reaches si
 
 ## 10C. WITHDRAWN — DO NOT RE-RAISE
 
+### 10C.1 — Figures withdrawn by their originating seat
+
+| figure | status |
+|---|---|
+| **`CoFire = 0.1757`** | **WITHDRAWN BY THE AUDITOR.** Computed on the first 12 raw conditions of the 249-condition vocabulary as a runnability smoke-test — **not** on the 50 book signals' qualifying masks — and reported without its basis. The Auditor's own characterisation: a breach of the standing construction it is charged with enforcing. The Developer was correct to flag it as unreproducible rather than ship a number it could not stand behind. **Do not carry 0.1757 forward anywhere.** The verified bases are in §C.1 (0.0271 all-pairs / 0.0447 same-direction / 0.0480 LONG / 0.0162 SHORT). |
+| **`min(pnl, 0)` tail figures** | **WITHDRAWN BY THIS SEAT.** Every §C.2 λ figure computed on the zero-floored series is superseded — see §C.2. The floored series returns `coexceed = 1.0` on 73.4% of pairs and is not a tail estimator. |
+
+### 10C.2 — The LONG greedy-optimality figure is a LOWER BOUND, not a tight result
+
+**The fixture's `exhaustive_optimum` is a lower bound, and the LONG headline of 88.41% should not be read as tight.** Enumeration runs to `max_k_enumerated` plus the all-signals set; for LONG `max_k_enumerated = 2`, so **the entire interior of the LONG search space is unenumerated.** A simple forward hill-climb reaches **0.027664 at size 24** against the reported optimum of **0.025033**, which puts the honest LONG figure at **≤ 80%**, not 88.41%.
+
+**SHORT's 100.00% IS exact**, because the SHORT optimum sits at k=2 and is therefore inside the enumerated region.
+
+The artifact header discloses the lower-bound restriction correctly; the point recorded here is that **the headline percentage must not be quoted as a tight optimality gap for LONG.** Per the standing construction, the enumeration limit is part of the finding.
+
+### 10C.3 — Items refuted by measurement
+
 Three items were proposed during external review, provisionally accepted, and then **refuted by measurement**. They are recorded here with their disproof so they are not re-introduced later as fresh insights.
 
 | withdrawn item | why it is wrong |
@@ -1294,7 +1365,9 @@ Everything runs under `master.py`. No standalone scripts.
 - §B.1 that `wf.FOLDS` excludes July and is unusable inside a split.
 - §G the **4** duplicate pairs and 7 dead conditions on the eligible universe, effective vocabulary **238** — and the finding that the identity-test domain changes the answer (all-bars gives 1 pair / 6 dead / 242).
 - The depth ladders and cluster statistics quoted throughout, on all three bases.
-- **§C.2 the inadequacy of Pearson** — mean +0.0604 vs mean tail co-exceedance 3.548x independence, 24.6% of pairs misread, rank correlation between measures only +0.246 (measured at the superseded operating point; the qualitative finding is unaffected by the correction).
+- **§C.2 the inadequacy of Pearson (BOOK)** — τ=0.20, k=10, raw daily P&L, 790 pairs: mean Pearson +0.0992 against a tail lift of **1.69x** independence, 20.5% of pairs misread, rank correlation +0.382.
+- **§C.2 the exclusion bias is ANTI-CONSERVATIVE (BOOK)** — retained 0.3387 vs excluded 0.4433 raw / 0.3571 degeneracy-guarded; 21 degenerate pairs at k<3 (5 at k=1, 16 at k=2).
+- **§C.1 cross-direction co-firing is structurally zero (DESIGN, not market)** — 0 of 481 unordered cross pairs share a qualifying bar; 962 of 2,450 ordered pairs (39.3%) are zero by construction.
 - **§C.2 the operating-point defect** — τ=0.10/k=20 retains 8.2% of the pair space and its exclusion is anti-conservative (excluded λ 4.34 vs retained 3.96); τ=0.20/k=10 retains 64.5% and flips the bias conservative.
 - **§D.0.1 directional opportunity is symmetric (PRICE-ONLY)** — 49.8% up / 50.2% down of thrust bars, median down-move larger (82.0 vs 77.1 pts), near-symmetric in all 7 monthly buckets including April (+3,437 pts, still 45.4% down-thrusts). BOOK-50 converts that into 86.2% / 13.8% of net at effectively equal win rates (90.9 vs 91.0).
 - **§D.0.2 the short-side shortfall is depth, not reach (BOOK)** — thrust episodes traded 4.1% up vs 3.0% down, missed set 50.3% down-side; but LONG mean cluster depth 3.38 / 19.3% reach ≥5 versus SHORT 1.72 / 3.0% reach ≥5 / 56.9% solo.
