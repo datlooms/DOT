@@ -23,21 +23,29 @@ without reference to the book or the jar, so "fires early in a thrust" is
 measured against market structure rather than against the sizing mechanism's own
 object.
 
-METRIC (g) IS SUPPRESSED ON BASIS 3.
-Trade-outcome attribution against a forward-looking label is circular: a basis-3
-episode in direction d is defined by Close[t+W] having moved strongly in
-direction d, so a trade entered in direction d inside that span wins by
-construction. On basis 3 the PF/WR/worst-day columns are therefore emitted
-empty. part_net, non_net and part_clusters are retained because they remain
-interpretable as exposure counts. Basis 3 is instead given COVERAGE
-ATTRIBUTION (cov_*), which is non-circular: it counts the episodes a condition
-fires in, splits them by whether the committed book traded that episode at all,
-and reports the book's net inside the traded ones. The missed set — episodes
-where the condition fires and the book is absent — is the population the basis
-exists to surface. The cov_* columns are emitted empty for bases 1 and 2, where
-they are meaningless by construction. Bases 1 and 2 keep the full (g) metric,
-which is sound there because their clusters are defined by executed or
-qualifying book signals, not by a forward price label.
+METRIC (g) IS SUPPRESSED ON BASIS 3 — EPISODE-STRENGTH SELECTION.
+The reason is not that a same-direction trade inside a thrust span wins by
+construction: both arms of the participated/non-participated contrast are
+already restricted to trades inside basis-3 episodes, so the shared forward-move
+conditioning largely cancels in the differential. The actual defect is
+episode-strength selection. A condition that fires preferentially in larger or
+longer episodes inherits bigger forward moves in its participating arm, so the
+contrast can be driven by the magnitude of the forward label rather than by any
+difference in entry quality. Every dollar-denominated and outcome-denominated
+column on basis 3 is exposed to this, so part_net, non_net, part_pf, part_wr,
+part_wd, non_pf, non_wr and non_wd are all emitted empty for cluster_basis = 3.
+Only part_clusters is retained, because it is a genuine count and not an
+outcome. Basis 3 is instead given COVERAGE ATTRIBUTION (cov_*), which is not
+outcome-denominated: it counts the episodes a condition fires in and splits them
+by whether the committed book traded that episode at all. The missed set —
+episodes where the condition fires and the book is absent — is the population
+the basis exists to surface. cov_episodes is an explicit alias of part_clusters,
+retained so the cov_* family is self-contained and so the identity
+cov_book_traded + cov_book_missed == cov_episodes serves as a consistency check.
+The cov_* columns are emitted empty for bases 1 and 2, where they are
+meaningless by construction. Bases 1 and 2 keep the full (g) metric, which is
+sound there because their clusters are defined by executed or qualifying book
+signals, not by a forward price label.
 
 SCOPE LIMIT.
 The vocabulary profiled here is SINGLE CONDITIONS; the book's signals are
@@ -61,8 +69,14 @@ masks at measurement time.
 
 All thresholds, including the basis-3 K and E, come from dots_thresholds via its
 own compute_adaptive_thresholds (mechanism D, rolling-2500, day-refreshed,
-floor-index). No percentile is computed locally. The oracle is left
-byte-identical: _D_SPEC is extended at runtime and restored.
+floor-index), including the basis-3 K and E and the ATR strata used for the
+volatility-proxy control. No percentile that defines a measured object, event,
+cluster, episode, stratum, threshold or entry is computed locally. The only
+local percentile calls remaining are pure descriptive output statistics — the
+timing quartiles (timing_q1, timing_q3) and depth_at_fire_p90 — which gate
+nothing, define nothing, and merely summarise the distribution of fires already
+selected by causal means. The oracle is left byte-identical: _D_SPEC is extended
+at runtime and restored.
 """
 
 import numpy as np
@@ -326,6 +340,8 @@ def profile_conditions(pool, cs, U, df, bk, trade_cid, basis, n_tol, grid, hours
             pnet, ppf, pwr, pwd = _outcome(pnl[in_part & in_band_tr], dates[in_part & in_band_tr])
             nnet, npf, nwr, nwd = _outcome(pnl[~in_part & in_band_tr], dates[~in_part & in_band_tr])
             if basis == 3:
+                pnet = ''
+                nnet = ''
                 ppf = ''
                 pwr = ''
                 pwd = ''
@@ -348,13 +364,11 @@ def profile_conditions(pool, cs, U, df, bk, trade_cid, basis, n_tol, grid, hours
                 rec[f'cov_book_traded_{k}'] = len(traded)
                 rec[f'cov_book_missed_{k}'] = missed
                 rec[f'cov_missed_share_{k}'] = round(missed / len(part_ids), 4) if part_ids else ''
-                rec[f'cov_book_net_{k}'] = round(float(pnl[np.isin(trade_cid, list(traded))].sum()), 1) if traded else 0.0
             else:
                 rec[f'cov_episodes_{k}'] = ''
                 rec[f'cov_book_traded_{k}'] = ''
                 rec[f'cov_book_missed_{k}'] = ''
                 rec[f'cov_missed_share_{k}'] = ''
-                rec[f'cov_book_net_{k}'] = ''
         num = 0.0
         den = 0
         for b in range(nb):
@@ -379,15 +393,19 @@ def profile_conditions(pool, cs, U, df, bk, trade_cid, basis, n_tol, grid, hours
 
 
 def atr_buckets(df, U, nb=ATR_BUCKETS):
-    atr = df['ATR_1M'].values.astype(float)
-    out = np.full(len(df), -1, np.int8)
-    vals = atr[U]
-    if len(vals) == 0:
+    n = len(df)
+    out = np.full(n, -1, np.int8)
+    if nb < 2:
         return out
-    edges = [np.percentile(vals, 100.0 * i / nb) for i in range(1, nb)]
-    b = np.zeros(len(df), np.int8)
-    for e in edges:
-        b = b + (atr > e).astype(np.int8)
+    pcts = [i / float(nb) for i in range(1, nb)]
+    spec = {}
+    for p in pcts:
+        spec[('ATR_1M', f'q{int(round(p * 100))}')] = ('ATR_1M', p)
+    thr = _swept(df, spec)
+    atr = df['ATR_1M'].values.astype(float)
+    b = np.zeros(n, np.int8)
+    for p in pcts:
+        b = b + (atr > thr[('ATR_1M', f'q{int(round(p * 100))}')]).astype(np.int8)
     out[U] = b[U]
     return out
 
