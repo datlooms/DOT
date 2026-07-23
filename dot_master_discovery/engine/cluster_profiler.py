@@ -23,6 +23,22 @@ without reference to the book or the jar, so "fires early in a thrust" is
 measured against market structure rather than against the sizing mechanism's own
 object.
 
+METRIC (g) IS SUPPRESSED ON BASIS 3.
+Trade-outcome attribution against a forward-looking label is circular: a basis-3
+episode in direction d is defined by Close[t+W] having moved strongly in
+direction d, so a trade entered in direction d inside that span wins by
+construction. On basis 3 the PF/WR/worst-day columns are therefore emitted
+empty. part_net, non_net and part_clusters are retained because they remain
+interpretable as exposure counts. Basis 3 is instead given COVERAGE
+ATTRIBUTION (cov_*), which is non-circular: it counts the episodes a condition
+fires in, splits them by whether the committed book traded that episode at all,
+and reports the book's net inside the traded ones. The missed set — episodes
+where the condition fires and the book is absent — is the population the basis
+exists to surface. The cov_* columns are emitted empty for bases 1 and 2, where
+they are meaningless by construction. Bases 1 and 2 keep the full (g) metric,
+which is sound there because their clusters are defined by executed or
+qualifying book signals, not by a forward price label.
+
 SCOPE LIMIT.
 The vocabulary profiled here is SINGLE CONDITIONS; the book's signals are
 TRIPLES. A single condition's profile cannot be read as a signal's value, and no
@@ -250,6 +266,7 @@ def profile_conditions(pool, cs, U, df, bk, trade_cid, basis, n_tol, grid, hours
     for k in SIZE_BANDS:
         cl = cs['clusters']
         band_cluster_ids[k] = set(cl[cl['size'] >= k]['cluster_id'].tolist()) if len(cl) else set()
+    traded_ids = set(np.unique(trade_cid[trade_cid >= 0]).tolist())
     nb = ATR_BUCKETS
     rows = []
     for name, mask in pool.items():
@@ -308,6 +325,13 @@ def profile_conditions(pool, cs, U, df, bk, trade_cid, basis, n_tol, grid, hours
             in_band_tr = np.isin(trade_cid, list(allowed)) if allowed else np.zeros(len(trade_cid), bool)
             pnet, ppf, pwr, pwd = _outcome(pnl[in_part & in_band_tr], dates[in_part & in_band_tr])
             nnet, npf, nwr, nwd = _outcome(pnl[~in_part & in_band_tr], dates[~in_part & in_band_tr])
+            if basis == 3:
+                ppf = ''
+                pwr = ''
+                pwd = ''
+                npf = ''
+                nwr = ''
+                nwd = ''
             rec[f'part_clusters_{k}'] = len(part_ids)
             rec[f'part_net_{k}'] = pnet
             rec[f'part_pf_{k}'] = ppf
@@ -317,6 +341,20 @@ def profile_conditions(pool, cs, U, df, bk, trade_cid, basis, n_tol, grid, hours
             rec[f'non_pf_{k}'] = npf
             rec[f'non_wr_{k}'] = nwr
             rec[f'non_wd_{k}'] = nwd
+            if basis == 3:
+                traded = part_ids & traded_ids
+                missed = len(part_ids) - len(traded)
+                rec[f'cov_episodes_{k}'] = len(part_ids)
+                rec[f'cov_book_traded_{k}'] = len(traded)
+                rec[f'cov_book_missed_{k}'] = missed
+                rec[f'cov_missed_share_{k}'] = round(missed / len(part_ids), 4) if part_ids else ''
+                rec[f'cov_book_net_{k}'] = round(float(pnl[np.isin(trade_cid, list(traded))].sum()), 1) if traded else 0.0
+            else:
+                rec[f'cov_episodes_{k}'] = ''
+                rec[f'cov_book_traded_{k}'] = ''
+                rec[f'cov_book_missed_{k}'] = ''
+                rec[f'cov_missed_share_{k}'] = ''
+                rec[f'cov_book_net_{k}'] = ''
         num = 0.0
         den = 0
         for b in range(nb):
