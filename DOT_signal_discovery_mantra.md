@@ -35,17 +35,30 @@ That is the position signal discovery has been operating from.
 ## 2. WHY THIS IS NOT A METAPHOR — IT IS THE MEASURED SITUATION
 
 The dataset is **177,251 bars x 172 variables**. Measured from price alone, with no signals involved,
-it contains **5,389 clean directional thrust episodes** — sustained moves that exceed a causal
+it contains thousands of clean directional thrust episodes — sustained moves exceeding a causal
 ATR-normalised threshold with a directional-efficiency filter.
 
 The committed book contains **50 signals**.
 
-Measured participation:
+**LABELLING NOTE — this document holds itself to rule 1.** Episode counts and participation rates are
+PARAMETER-SENSITIVE: they depend on the forward window W, the magnitude threshold K, the efficiency
+threshold E, and the clustering tolerance N. Measured on the same data, episode counts range from
+~2,400 (W=60) to ~4,700 (W=15), and the eligible-universe mask moves counts by a further ~2x. Any
+figure quoted below carries its parameters. A participation figure without its parameters is not a
+measurement.
+
+Measured participation, W=30 / K=p85 / E=p75 / post-warmup mask:
 
 | | Episodes | Book traded | Book missed |
 |---|---|---|---|
 | UP-thrusts | 2,684 | 11.6% | **88.4%** |
 | DOWN-thrusts | 2,705 | 10.6% | **89.4%** |
+
+At the spec's §D.0.2 operating point the same relationship reads 3,067 episodes at 4.1% / 3.0%
+traded. **The parameters move the level by several-fold. They do not move the conclusion at all:**
+across every cell tested, the book participates in a small single-digit-to-low-double-digit
+percentage of the market's clean directional moves, and the up/down split of the opportunity stays
+within +/-0.6pp of 50/50.
 
 And of the episodes it misses, **89.8% are places where not one signal in the book fires at all.**
 Not blocked. Not busy. Absent.
@@ -117,17 +130,37 @@ depth 3+ took **zero losses in both segments**.
 
 ### 4.1 The bites have a shape
 
-Within a large cluster, outcome by position:
+Within a large cluster (N=10, size >= 8, BOOK population, gaps excluded, normalised position
+j/(size-1) so the first entry sits at 0 and the last at 1):
 
-| Position in cluster | WR | PF | Avg trade |
-|---|---|---|---|
-| First 25% | 93.1% | 6.56 | $41.60 |
-| **Second 25%** | **96.7%** | **20.13** | **$48.80** |
-| Third 25% | 96.0% | 9.64 | $32.80 |
-| Last 25% | 93.0% | 6.36 | $26.30 |
+| Position in cluster | PF | Avg trade |
+|---|---|---|
+| First 25% | 7.74 | **$46.58** |
+| **Second 25%** | **19.43** | $41.91 |
+| Third 25% | 8.32 | $32.14 |
+| Last 25% | 6.79 | $27.09 |
 
-Rise, peak, decay. The last quarter of a cluster is worth roughly a third of the second quarter.
-**The cake has a middle, and the middle is where it is richest.**
+**Two different shapes, and the distinction matters.** Profit factor ARCS — it peaks in the second
+quarter at nearly 2.5x the first. Average trade DECLINES MONOTONICALLY from the first quarter
+onward. So the opening quarter carries the biggest wins *and* the biggest losses; the second quarter
+is the best risk-adjusted eating; everything after that falls away. The last quarter is worth roughly
+a third of the second on PF and 58% on average trade.
+
+*(An earlier version of this section used the convention (j+1)/size, which shifts every entry right
+and made average trade appear to peak in the second quarter alongside PF. Both conventions reproduce
+exactly under their own definition; j/(size-1) is the correct normalisation and is what the spec
+adopts. Note also that the monotonic-decline half is tolerance-specific: at N=5 average trade rises
+Q1 to Q2 before falling. Q4 < Q1 at both tolerances.)*
+
+**The cake has a shape, and it is not flat. Later bites are smaller and riskier than earlier ones.**
+
+**But — and this is the part that cannot be traded on — you cannot know where in the arc you are
+while you are eating.** Normalised position requires the cluster's final size, and the final size is
+unknowable until the cluster has ended. At fire time the system knows how many entries have already
+occurred and never how many will follow. This is the first-entry problem mirrored at the other end,
+and the spec correctly refuses to specify a taper on an uncomputable quantity. The arc is a measured
+property of the terrain; whether any causally-available proxy recovers it is an open measurement, and
+a documented negative is a permitted answer.
 
 ### 4.2 Inside a big enough bite, the fork does not matter
 
