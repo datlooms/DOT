@@ -6,6 +6,7 @@
 **Date:** 2026-07-23
 **Revision 2:** amended 2026-07-23 following external-review assessment and its correction round. Nine verified changes applied (§C.2, §C.3, §D.0, §F.4, §F.5, §F.6, §G.2, §H.1, §J); three provisionally-accepted items refuted by measurement and recorded as withdrawn (§10C).
 **Revision 3:** amended 2026-07-23 following Supervisor verification (APPROVE WITH AMENDMENTS). Defects A1–A5 corrected, gaps G1–G8 answered or assigned, three implementability blockers and three fake-step loopholes closed. **§0.1 is new and is the root fix**: depth, population and tolerance are now defined once and every depth-dependent figure is re-derived against them. Two Supervisor findings are disputed with measurement rather than absorbed — see §F.1.
+**Revision 5:** amended 2026-07-23 with four measured findings arising from an operator challenge to circular reasoning — market properties had been inferred *through* BOOK-50, which is the output of the funnel being replaced. §D.0.1 establishes a price-only **directional coverage baseline (50/50)** and **retires the upward-drift assumption** previously recorded in §C.3.1a. §D.0.2 separates reach from depth on the short side. §F.3.1 records the cluster arc and rules a normalised-position taper **unimplementable**. §C.3 gains the measured premise for weighting depth over standalone signal quality. Every finding is labelled MARKET (price-only) or BOOK. Three reproduction discrepancies are reported rather than smoothed — see §D.0.2 and §F.3.1.
 **Revision 4:** amended 2026-07-23 following Supervisor re-verification (APPROVE WITH AMENDMENTS, BUILD AUTHORISED SCOPED). O1 removes a directional bias in the objective — `DepthYield` is now per-direction and normalised (§C.1) and greedy selection runs per direction and merges (§C.3.1), with **no directional floor, quota or target encoded anywhere** (§C.3.1a). O2 corrects the §C.2 tail operating point to `tau = 0.20 / MIN_SHARED = 10` and recalibrates `T_max` to a per-segment permutation null. O3 keys two stale split-count references to the derived `K`. One O2 sub-finding is disputed with measurement — see §C.2. Structure and section numbering preserved.
 
 ---
@@ -469,6 +470,18 @@ The objective is applied **per direction**, and the constraints below are evalua
 
 **This inverts the old objective on axis (i) while preserving it on axis (ii).** Co-firing is now rewarded; correlated failure is still penalised.
 
+**THE MEASURED PREMISE — why participation in depth is weighted over standalone signal quality.** This was previously asserted. It is now evidenced. Spread of win rate **across individual signals**, by cluster depth band (N=10, BOOK, signals with ≥15 trades in the band):
+
+| depth band | signals | sd of WR | range | mean WR |
+|---|---|---|---|---|
+| shallow (1–2) | 20 | **9.01** | **70–100%** | 86.5% |
+| mid (3–7) | 36 | 4.67 | 80–100% | 91.3% |
+| deep (8+) | 33 | 5.52 | **81–100%** | **94.5%** |
+
+**At shallow depth, which signal fired matters — the spread is 9 points and the floor is 70%. At depth, the worst signal in the book still wins 81%.** Signal identity dissolves as corroboration accumulates: the dispersion nearly halves and the floor rises 11 points.
+
+This is the core premise of the redesign and the reason the objective maximises a depth quantity rather than ranking signals on standalone PF. **A selection process that ranks individual signals is optimising the variable that stops mattering.** (Property of the BOOK, not the market — it describes how *these* signals behave in company, and must be re-derived for any new book.)
+
 #### C.3.1 — The search procedure
 
 The objective above specifies **what** to optimise. The search over candidate books is **greedy forward selection with CELF (Cost-Effective Lazy Forward) evaluation**, **RUN SEPARATELY PER DIRECTION AND MERGED**: for each direction independently, start from the empty book, iteratively add the signal producing the largest marginal gain in that direction's objective, maintain a priority queue of upper-bound marginal gains and re-evaluate lazily, stop when the marginal gain falls below a stated threshold or a hard constraint binds. Then merge the per-direction books and evaluate the merged book against every constraint in §C.3.
@@ -476,6 +489,8 @@ The objective above specifies **what** to optimise. The search over candidate bo
 **WHY PER DIRECTION — this is the structural fix, and it is load-bearing.** Under a pooled greedy search, a short signal's marginal `DepthYield` contribution is roughly an order of magnitude below a long signal's **regardless of its quality**, for the combinatorial reasons measured in §C.1 (raw 9.42:1 against a 2.85:1 signal-count ratio, tracking the 8.54:1 pair-availability ratio). Pooled greedy would therefore add longs almost exclusively — and the effect is **self-reinforcing**: each long added raises long co-firing opportunity and depresses the relative marginal value of every remaining short.
 
 **The failure would have been silent.** §H.3.1's directional protections are triggered by *removal*, and a book that never acquires shorts never reaches the "last short signal" trigger. The operator's directive would have been protected at three stages and unguarded at the decisive one. Running the search per direction removes the bias **structurally** — shorts compete only against shorts, so no cross-direction marginal comparison is ever made during selection.
+
+**The strongest evidence for this fix is §D.0.2, and it is worth restating here because it separates two things that are easily conflated.** The incumbent book *reaches* both directions at near-equal rates (thrust episodes traded: 4.1% up, 3.0% down; missed set 50.3% down-side) and then builds depth on only one: LONG mean cluster depth **3.38** with 19.3% reaching size ≥5, SHORT mean depth **1.72** with **3.0%** reaching size ≥5 and **56.9% left solo**. The short side is not failing to find opportunity and it is not losing more often — its win rate is 91.0% against the long side's 90.9%. **It is failing to accumulate corroboration, because thirteen signals cannot co-fire the way thirty-seven can.** A pooled search would read that combinatorial shortfall as a quality signal and deepen it.
 
 Note the division of labour between the two O1 fixes: **§C.1's normalisation makes the two directions' numbers comparable for REPORTING**; **this per-direction search is what actually prevents the bias in SELECTION.** The normalisation alone would not have been sufficient, because a residual disparity remains at S≥5 (§C.1) and pooled greedy would still have exploited it.
 
@@ -506,7 +521,11 @@ Headline reporting requirements, in the run report and not buried in a CSV:
 3. **Per-direction constraint outcomes** — which direction, if either, was stopped by a constraint rather than by marginal gain, and which constraint.
 4. **Per-direction §H outcomes** — empirical-null pass rate, stability retention, and §H.3 bucket results, each within direction.
 
-**Interpretive context, recorded so the result is read correctly.** US30 is an equity index with structural upward drift. **A long-dominant book is a plausible and legitimate outcome for this instrument, not prima facie evidence of bias** — that is a hypothesis this run tests, not an assumption it encodes. Equally, directional composition is **regime-dependent** and this span is predominantly bullish, so a composition measured here must not be treated as a permanent property of the system. Whatever emerges — heavily long, balanced, or short-dominant — is a finding.
+**Interpretive context — CORRECTED, and the previous assumption is RETIRED.** An earlier revision of this section recorded that "US30 is an equity index with structural upward drift, so a long-dominant book is a plausible and legitimate outcome for this instrument." **That assumption has been measured and it does not hold. It is withdrawn.** See §D.0.1: thrust opportunity computed from price alone is **symmetric and marginally larger to the downside** — 49.8% up / 50.2% down of thrust bars, with a larger median down-move (82.0 vs 77.1 pts) — and it stays close to symmetric in every month including the strongest up-month. Upward drift in the *price level* does not produce upward asymmetry in *directional thrust opportunity*, and the two were conflated.
+
+**What remains true:** directional composition is **regime-dependent** and this span is predominantly bullish in net level, so a composition measured here must not be treated as a permanent property of the system. Whatever emerges — heavily long, balanced, or short-dominant — is a finding.
+
+**What is no longer available as an explanation:** a long-dominant book cannot be justified by appeal to the instrument's drift. If the redesign produces one, that is a property of the selection process and must be reported as such, measured against the symmetric baseline in §D.0.1.
 
 *What would falsify the combinatorial diagnosis:* if, with the per-direction search in place, shorts still enter at a rate far below longs *after* clearing identical within-direction §H bars, the disparity is not purely structural and the residual cause must be measured rather than assumed.
 
@@ -554,6 +573,68 @@ The reach programme rests on knowing the *mechanism* of the shortfall, not merel
 *What would falsify the reach programme:* if, after the full funnel, no signal qualifying under §H shows materially higher `cov_missed_share` than the incumbent book, the vocabulary cannot reach the missed set and the programme should be closed in favour of deepening existing coverage. That is a legitimate and reportable outcome.
 
 *Fit risk:* the decomposition is computed at one thrust parameterisation. The build repeats it across the §D.2 grid before the conclusion is treated as stable.
+
+#### D.0.1 — DIRECTIONAL COVERAGE BASELINE (price-only) — the symmetry the redesign is measured against
+
+**PROPERTY OF THE MARKET, not of the book.** Computed from OHLC alone, no signals involved: W=30, K = p85 of |disp|/`ATR_1M`, E = p75 directional efficiency, post-warmup.
+
+**This measurement exists because a market property was previously inferred *through* BOOK-50, which is the output of the funnel being replaced. Reading the instrument through the incumbent book is circular, and it produced the withdrawn drift assumption in §C.3.1a.**
+
+| | thrust bars | share | median move |
+|---|---|---|---|
+| **UP** | 11,528 | **49.8%** | 77.1 pts |
+| **DOWN** | 11,603 | **50.2%** | **82.0 pts** |
+
+Monthly down-share of thrust bars, against monthly net price change:
+
+| month | down-share | net price change |
+|---|---|---|
+| 2026.01 | 53.2% | −546 |
+| 2026.02 | 52.6% | +99 |
+| 2026.03 | 54.7% | −2,082 |
+| **2026.04** | **45.4%** | **+3,437** |
+| 2026.05 | 49.2% | +1,234 |
+| 2026.06 | 47.7% | +1,238 |
+| 2026.07 | 51.3% | −84 |
+
+**Directional opportunity is symmetric and marginally larger to the downside — in every month, including April, the strongest up-month at +3,437 pts, which still ran 45.4% down-thrusts.**
+
+Against that baseline, BOOK-50's capture (**property of the BOOK**):
+
+| | trades | WR | PF | net | share of net |
+|---|---|---|---|---|---|
+| LONG | 2,349 | 90.9% | 5.45 | $84,643 | **86.2%** |
+| SHORT | 708 | 91.0% | 3.65 | $13,562 | **13.8%** |
+
+**A ~50/50 opportunity set converted into an 86/14 capture. That gap is a property of the SELECTION PROCESS, not of US30.** Note the win rates are effectively identical (90.9 vs 91.0) — the short side is not losing more often, it is capturing less.
+
+**This is the directional coverage baseline the redesign is measured against.** §C.3.1a's reporting requirements are evaluated against 50/50, not against the incumbent's 86/14.
+
+#### D.0.2 — The short-side shortfall is DEPTH, not REACH
+
+**Reach is engaged near-symmetrically. Depth is not.** Thrust episodes (N=5 chaining) versus book participation — **market property on the left, book property on the right**:
+
+| | episodes | traded | missed |
+|---|---|---|---|
+| UP | 1,534 | 4.1% | 95.9% |
+| DOWN | 1,533 | 3.0% | 97.0% |
+
+**The missed set is 50.3% down-side — essentially symmetric.** The book *reaches* both directions at near-equal rates. What differs is what happens after it arrives (**property of the BOOK**, N=5):
+
+| | signals | clusters | mean depth | max | reach ≥5 | solo |
+|---|---|---|---|---|---|---|
+| **LONG** | 37 | 587 | **3.38** | 39 | **19.3%** | 28.4% |
+| **SHORT** | 13 | 404 | **1.72** | 11 | **3.0%** | **56.9%** |
+
+**57% of short clusters are solo — the fragile population that carries the tail (PF ~3) — against 3% reaching depth 5+ where PF runs 11–87.** The book engages both directions and then builds depth on only one.
+
+**This is combinatorial and it is a property of the incumbent book, not the market** — thirteen signals cannot co-fire into depth the way thirty-seven can (§C.1: pair availability 8.54:1). **It is the strongest available justification for the per-direction search adopted in §C.3.1**, and it is recorded there as such.
+
+**It is NOT a justification for a directional floor, quota or target.** That remains prohibited under §C.3.1a. The fix is to stop the *search* from penalising a small pool, not to mandate an outcome.
+
+*Reproduction notes, stated rather than smoothed:* the book-side figures above reproduce **exactly** — 708 shorts / WR 91.0 / PF 3.65 / $13,562 / 13.8%, and every cluster-structure figure at N=5. The price-only thrust bar counts run ~10% above the values supplied to me (11,528/11,603 versus 10,513/10,528) under a post-warmup mask, with medians close (77.1/82.0 versus 76.5/83.5) and shares essentially identical; under an eligible-universe mask the split is 49.1/50.9. **The symmetry conclusion is robust to the masking choice; the absolute counts are not, and the build must state its mask.** Episode counts and traded rates likewise depend on chaining tolerance and on whether "traded" means an entry inside the span — mine use N=5 and entry-bar-inside-span, and differ in level from the supplied figures while agreeing on the near-symmetric ratio.
+
+*Fit risk:* six months, one instrument, two partial months. The symmetry holds in all seven monthly buckets, which is the strongest form of support available on this span, but a second export remains the test.
 
 ### D.1 — Reach must not relax quality
 
@@ -765,6 +846,34 @@ Selecting a signal *because* it fires at shallow depth in episodes that deepen, 
 3. Selection and sizing are validated on **different splits** of the §I walk-forward.
 
 *Falsification:* if the depth-sized book's advantage over flat sizing disappears when the curve is fixed a priori rather than fitted, the ladder's economic value was an artifact of the fitting.
+
+#### F.3.1 — THE CLUSTER ARC: the sizing curve is not monotonic, and the obvious taper is UNIMPLEMENTABLE
+
+**PROPERTY OF THE BOOK.** Outcome by normalised position within large clusters (size ≥ 8, N=10, BOOK, gaps excluded, 940 trades):
+
+| quartile of cluster | n | WR | PF | avg trade |
+|---|---|---|---|---|
+| first 25% | 256 | 93.4% | 7.74 | **$46.58** |
+| second 25% | 227 | **96.9%** | **19.43** | $41.91 |
+| third 25% | 218 | 95.4% | 8.32 | $32.14 |
+| last 25% | 239 | 93.3% | 6.79 | **$27.09** |
+
+**Profit factor arcs — rise to a peak in the second quarter, then decay to roughly a third of it. Average trade declines monotonically throughout, ending at 58% of where it started.** §F.2 specifies size scaling *up* as depth builds; within a large cluster the later entries are worth materially less than the earlier ones. Both can be true — the depth ladder compares *clusters*, this compares *positions inside one* — but the sizing curve must not be assumed monotonic on the strength of the ladder alone.
+
+*Reproduction note.* The arc shape reproduces; two details do not. The quartile counts I measure (256/227/218/239) are close to the reverse of the supplied ones (218/239/227/256), which is the signature of a different normalised-position convention — I use `j / (size − 1)`, so the first entry sits at 0 and the last at 1. And on my measurement **average trade does not rise before it falls: it declines monotonically from the first quartile**, where the supplied figures peak in the second. PF arcs on both. The build must state its position convention; the conclusion — later entries in a large cluster are worth less — holds under either.
+
+**WHY A NORMALISED-POSITION TAPER CANNOT BE BUILT.** Normalised position is `j / (size − 1)`, and **`size` is the cluster's final size, which is not knowable until the cluster has ended.** At fire time the EA knows how many entries have occurred; it cannot know how many more will follow, and therefore cannot know whether the current entry sits at 20% or 80% of the arc. **This is the first-entry problem (§F.1, §J) in mirror image — the same class of unknowable, at the other end of the cluster.**
+
+**Specified: NO taper on normalised position is adopted, because it is not implementable causally.** Specifying one would put an unbuildable rule in a build document.
+
+**What IS specified — measure whether a causal proxy recovers the arc.** Two quantities *are* knowable at fire time: **bars elapsed since the cluster's first entry**, and **running depth so far**. The build measures the same quartile table against each, and reports:
+1. whether either proxy reproduces the PF arc and the average-trade decline;
+2. the rank correlation between each causal proxy and true normalised position;
+3. whether a taper keyed to the proxy improves net or worst-day over flat sizing beyond the §H.2 stability noise band.
+
+**If neither proxy recovers the arc, that is the answer and it is recorded as a documented negative** — sizing stays monotonic in running depth per §F.2, and the arc remains a measured property with no implementable consequence. **Do not specify a taper on a quantity the EA cannot compute.**
+
+*Fit risk:* the arc is measured on 940 trades in size≥8 clusters over six months, and the quartile bins are a presentation choice. Any proxy-based taper adds free parameters to a curve §F.3 already requires to be fixed a priori, and inherits the same coupling constraint.
 
 ### F.4 — Minimum unique-variable count at depth — A FORWARD GUARD, NOT A REPAIR
 
@@ -1155,6 +1264,10 @@ Everything runs under `master.py`. No standalone scripts.
 - The depth ladders and cluster statistics quoted throughout, on all three bases.
 - **§C.2 the inadequacy of Pearson** — mean +0.0604 vs mean tail co-exceedance 3.548x independence, 24.6% of pairs misread, rank correlation between measures only +0.246 (measured at the superseded operating point; the qualitative finding is unaffected by the correction).
 - **§C.2 the operating-point defect** — τ=0.10/k=20 retains 8.2% of the pair space and its exclusion is anti-conservative (excluded λ 4.34 vs retained 3.96); τ=0.20/k=10 retains 64.5% and flips the bias conservative.
+- **§D.0.1 directional opportunity is symmetric (PRICE-ONLY)** — 49.8% up / 50.2% down of thrust bars, median down-move larger (82.0 vs 77.1 pts), near-symmetric in all 7 monthly buckets including April (+3,437 pts, still 45.4% down-thrusts). BOOK-50 converts that into 86.2% / 13.8% of net at effectively equal win rates (90.9 vs 91.0).
+- **§D.0.2 the short-side shortfall is depth, not reach (BOOK)** — thrust episodes traded 4.1% up vs 3.0% down, missed set 50.3% down-side; but LONG mean cluster depth 3.38 / 19.3% reach ≥5 versus SHORT 1.72 / 3.0% reach ≥5 / 56.9% solo.
+- **§F.3.1 the cluster arc (BOOK)** — within size≥8 clusters, PF 7.74 → 19.43 → 8.32 → 6.79 and average trade declining monotonically $46.58 → $27.09.
+- **§C.3 signal identity dissolves at depth (BOOK)** — WR spread across signals falls from sd 9.01 (floor 70%) at depth 1–2 to sd 5.52 (floor 81%) at depth 8+.
 - **§C.1 the directional disparity is combinatorial** — raw 9.42:1 at S=5/N=5 against a 2.85:1 signal-count ratio and an 8.54:1 pair-availability ratio, with short signals active on *more* days per signal (38 vs 31) and comparable trades (49 vs 51). Normalisation collapses it to 3.31:1.
 - **§D.0 the missed-episode decomposition** — 89.8% no qualifying signal, 10.2% qualified without entry, 1.4% occupancy-blocked.
 - **§F.4 that the decision-6 population is empty** — 0 of 623 depth≥2 events at ≤3 unique variables; unique variables rise 3 → 12 with depth; the original observation was a lookup artifact covering 48 of 50 signals.
