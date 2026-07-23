@@ -4,7 +4,8 @@
 **Author seat:** Quant Analyst
 **Status:** specification for Developer build and Auditor verification
 **Date:** 2026-07-23
-**Revision:** amended 2026-07-23 following external-review assessment and its correction round. Nine verified changes applied (§C.2, §C.3, §D.0, §F.4, §F.5, §F.6, §G.2, §H.1, §J); three provisionally-accepted items refuted by measurement and recorded as withdrawn (§10C). Structure and section numbering preserved.
+**Revision 2:** amended 2026-07-23 following external-review assessment and its correction round. Nine verified changes applied (§C.2, §C.3, §D.0, §F.4, §F.5, §F.6, §G.2, §H.1, §J); three provisionally-accepted items refuted by measurement and recorded as withdrawn (§10C).
+**Revision 3:** amended 2026-07-23 following Supervisor verification (APPROVE WITH AMENDMENTS). Defects A1–A5 corrected, gaps G1–G8 answered or assigned, three implementability blockers and three fake-step loopholes closed. **§0.1 is new and is the root fix**: depth, population and tolerance are now defined once and every depth-dependent figure is re-derived against them. Two Supervisor findings are disputed with measurement rather than absorbed — see §F.1. Structure and section numbering preserved.
 
 ---
 
@@ -23,6 +24,55 @@
 Every figure in this document was computed in-session through the ratified path. Figures quoted from prior documents are labelled as such and were re-derived before use.
 
 **Governing principle (Step 2, binding):** the redesign is **ADDITIVE**. The measured problem is reach, not excess. No variable, condition, mechanism or family is removed on a single measurement. Where a component looks weak, this spec states what will be measured to decide. Gates are state columns; no bar is ever deleted.
+
+---
+
+## 0.1 CANONICAL DEFINITIONS — DEPTH, POPULATION, TOLERANCE
+
+**Binding for the whole document. Every depth-dependent figure below is stated against these definitions and no other. Any figure quoted without a basis and tolerance label is a defect.**
+
+Prior revisions of this spec used four different depth measures without labelling any of them. That ambiguity produced figures that could not be reproduced. It is closed here.
+
+### 0.1.1 — POPULATION
+
+| population | definition | count | net |
+|---|---|---|---|
+| **BOOK** | F0 + F1 executed trades. Gap fillers excluded — they fire only when flat and are solo by construction, so they cannot participate in depth. | **2,678** | **$77,239** |
+| FULL | BOOK + the 3 gap fillers | 3,057 | $98,205 |
+
+**BOOK is the population for every depth measure, every cluster construction, and the §C.3 objective.** FULL is used only for whole-system survival figures (worst day, daily mDD), where gap-filler P&L genuinely lands on the same day. Each figure states which.
+
+### 0.1.2 — THE TWO DEPTH MEASURES
+
+Both are needed; they answer different questions and must never be conflated.
+
+**(A) BAR-LEVEL QUALIFYING DEPTH — `qd(t)`.** The number of BOOK signals whose mask qualifies at bar `t`, computed from `build_signal_masks` with `entry_ok` applied, **before** the position jar. No tolerance parameter. This is market-state: what the book agreed on, independent of what the jar admitted. Executed depth caps at 6 (`MAX_POSITIONS`); `qd` reaches **14**.
+
+Use: the quality ladder, the §F.3 sizing curve, and any statement about signal agreement.
+
+**(B) TEMPORAL CLUSTER SIZE — `cs_N(i)`.** Maximal run of same-direction BOOK entries where each entry's bar is within `N` bars of the **previous entry** in that direction. Cluster size is the count of entries in the run.
+
+Use: `DepthYield`, coverage, and any statement about a move unfolding over time.
+
+### 0.1.3 — THE TOLERANCE `N` IS FIXED AT **N = 5**
+
+`N` materially changes the objective and a Developer cannot be left to choose it:
+
+| | N=5 | N=10 |
+|---|---|---|
+| clusters | 991 | 790 |
+| size ≥ 5 | 125 | 152 |
+| solo (size 1) | 397 | 256 |
+| max size | 39 | 53 |
+| `DepthYield` (size≥5 per traded day) | **1.033** | 1.256 |
+
+**N = 5 is fixed as primary, for a stated reason: `DepthYield` is MAXIMISED by the objective, so the tolerance must be the stricter of the candidates.** A looser tolerance mechanically manufactures larger clusters and would let the search improve its score by exploiting the definition rather than the market. N=5 also stays closer to the mechanism actually being claimed — near-simultaneous convergence — where N=10 admits entries ten minutes apart as one event.
+
+**N = 10 is reported as mandatory sensitivity on every cluster-derived figure.** If a conclusion holds at N=5 but reverses at N=10 it is not a conclusion.
+
+*Falsification:* if `DepthYield` rankings of candidate books differ materially between N=5 and N=10 (rank correlation < 0.8), the objective is tolerance-sensitive and neither value can be treated as settled; the build reports the rank correlation.
+
+*Fit risk:* N is chosen on six months. It is fixed a priori and never tuned against a selected book, and must be re-stated (not re-fitted) inside each §I split.
 
 ---
 
@@ -46,6 +96,20 @@ All 375 NEW-segment trades, three candidate readings:
 | *record as written* | *267 / 108* | *87 / 68* | *3.83 / 0.78* | *9,228 / −821* | *−116 / −535* |
 
 Reading C reproduces the record to every published digit. The arithmetic in the record is correct; **the label is wrong.** What was measured is not what was decided.
+
+**SEGMENT BOUNDARY — stated explicitly (was previously undefined).** The 375-trade NEW population above begins at **bar index 152,814 = 2026.06.25 15:30**. This is the boundary the record used, and it is used here **only** because §1.1 is a forensic reproduction of the record's own figures — reproducing them requires reproducing their population. It is **not** the doctrinally correct boundary and is not used anywhere else in this document.
+
+**The doctrinally correct boundary is bar 152,983 = 2026.06.25 18:19** — the first bar after the sealed baseline's final bar (152,982 = 18:18). Measured at all three candidates:
+
+| boundary | NEW trades | NEW net | OLD trades | OLD net |
+|---|---|---|---|---|
+| bar 152,814 (record) | 375 | $8,407 | 2,682 | $89,797 |
+| **bar 152,983 (sealed endpoint — ADOPTED)** | **359** | **$5,909** | **2,698** | **$92,296** |
+| end of day 2026.06.25 | 337 | $5,511 | 2,720 | $92,694 |
+
+**The natural boundary reproduces the canonical committed trade count exactly — 2,698 — at PF 6.40.** (Net $92,296 vs the canonical $92,347; the $51 difference is trades spanning the seam when the full stitched series is scored and then split, rather than the baseline being scored alone.) The record's choice was 169 bars early and cost that agreement.
+
+**ADOPTED: bar 152,983 for every segment-split figure in this document except §1.1's forensic reproduction, which is labelled as such.** §E.3 is restated against it below.
 
 **Consequence:** recorded decision 2 — "`AT_Regime_ST` **directional agreement** joins the gate stack" — cites evidence for a different operation. The directional gate as decided (reading A) is **PF 0.97 and net −$111 on the NEW segment**: it removes the book's profit. This is consistent with my earlier independent measurements on F0 concurrent (ungated PF 9.76 → AT_Regime_ST-aligned 6.85 → sign(AT_Slope_ST)-aligned 6.97).
 
@@ -181,12 +245,36 @@ Per-stage audit. `feeds selection today` is a factual statement about the curren
 | **S2 pool** | 249 conditions, `anchor`, warm-up floor `w` | yes | Feeds everything. §G specifies selection-time handling of duplicates and dead conditions **without modifying the pool** (S.10 sacred). |
 | **S3 discovery** | `results_F*.csv` for all families | **F0 and F1 only** | §A.1. All families' output enters the evidence review. This is the largest unused surface in the pipeline. |
 | **S4 schema** | `results/discovery_master.csv` (all families collated) | no — collated then filtered | **This file already contains every family's output in one schema.** It is the natural input to §A.1 and is currently consumed only by S5's three-condition filter. Requirement: §A.1's evidence table is built from `discovery_master.csv`, not from per-family files, so nothing is silently dropped. |
-| **S5 filter** | `candidates.csv` — `trades>=30 & folds_plus>=4 & agg_pf>=2.0` | yes | **Three hard thresholds with no trial-count adjustment and no regime conditioning.** They are the funnel's only quality bar. §H replaces them: the thresholds stay as a *participation floor* but acceptance moves to the empirical-null bar (§H.1) plus stability (§H.2) plus regime-conditional positivity (§H.3). Measurement: report how many candidates each criterion removes independently, so the filter's actual selectivity is visible rather than assumed. |
+| **S5 filter** | `candidates.csv` — `trades>=30 & folds_plus>=4 & agg_pf>=2.0` | yes | **Three hard thresholds with no trial-count adjustment and no regime conditioning.** They are the funnel's only quality bar. §H replaces them: the thresholds stay as a *participation floor* but acceptance moves to the empirical-null bar (§H.1) plus stability (§H.2) plus regime-conditional positivity (§H.3). Measurement: report how many candidates each criterion removes independently, so the filter's actual selectivity is visible rather than assumed. **`folds_plus` is not usable as written — see §B.1.** |
 | **S6 regen** | `signal_full_records.csv`, `signal_per_day_pnl.jsonl` | no | Regenerates artifacts documented stale (`746102aae415` / `0910f360a628`). **Measurement to decide:** these carry per-signal per-day P&L, which is exactly the input §C.2 needs for the failure-correlation matrix. Requirement: S6's output becomes the source for §C.2 rather than being regenerated and unused. |
 | **S7 contenders** | C0–C5 conviction-variant scores | no — reporting only | Six sizing variants scored on the same book. **DIAGNOSTIC today, but §F.3 requires the depth-size curve to be validated independently of selection.** S7 is the correct home for that: add the depth-conditioned variant as a contender row and report it beside C0–C5. |
 | **S8 committed** | committed-book replay + canary | no — verification | **DIAGNOSTIC — justified.** The $92,347 / 2,698-trade canary is an engine-integrity check, not a selection input. Keep as is. |
 | **S8B cluster profile** | `cluster_participation_profile.csv`, 2,988 × 69 | **no — built, never consumed** | §D.3 makes its coverage columns a selection input. This is the specification's single largest change to what feeds selection. |
 | **S9 report + split** | `master_report.md`, split artifacts | no | **DIAGNOSTIC — justified.** Packaging and reporting. Requirement: the report must surface the §A.1 evidence table and the §H acceptance decisions, not just the committed-book headline. |
+
+### B.1 — `wf.FOLDS` and `OOS_MONTHS` are hardcoded and cannot be used as-is
+
+**`wf.py` is SACRED and byte-locked (`793e6e5f8d9a`). `FOLDS` is hardcoded to the Jan–Jun months. It cannot be edited, so the SELECTION LAYER must handle it explicitly — this is specified, not left to the build.**
+
+Two concrete failures:
+1. **On the full stitched series**, 300 July trades (9.8% of the book) are scored against a fold set that does not contain July. A signal trading only in July scores `folds_plus = 0` and is culled for a reason that has nothing to do with its quality.
+2. **Inside a §I training segment**, `folds_plus` is undefined — the segment's months and `FOLDS`' months need not intersect at all.
+
+**Specified handling, without touching `wf.py`:**
+- `wf.daily_pnl_points` (the daily series builder) **is** used — it is month-agnostic and is the reason `wf.py` is imported at all.
+- **`folds_plus` and `min_fold_pf` are NOT used as selection criteria anywhere in the new layer.** They are superseded by §H.3, which buckets by whatever months the active segment contains and is therefore segment-correct by construction. S5's `folds_plus>=4` is retained only as a legacy participation floor on the full-series run and is **disabled inside §I splits**, with the disabling reported.
+- `selection.py` computes its own segment-local monthly buckets. It does not import `FOLDS`.
+
+**`OOS_MONTHS = ['2026.05','2026.06']` is hardcoded in `master.py`** (not sacred, but load-bearing): S7's `oos_pf` and `oos_net` are computed against two fixed calendar months. On the stitched series this is neither out-of-sample nor segment-relative — May and June are now interior. Reveal open item #7 (data-relative OOS) remains unresolved.
+
+**Specified:** `master.py`'s S7 `oos_*` columns are **reported as legacy diagnostics with an explicit staleness flag**, and are not selection inputs. The §I walk-forward is the OOS mechanism in the new design; a second fixed-month OOS is redundant and misleading. Making `OOS_MONTHS` data-relative is assigned as a `master.py` change under §11.
+
+*What would falsify this handling:* if §H.3's segment-local bucketing and `folds_plus` agree on the full series (same accept/reject on >95% of candidates), the legacy criterion is harmless and may be retained for continuity. The build reports the agreement rate.
+
+### B.2 — Reveal open items 4 and 8
+
+- **Open item 4 — lead–lag timing structure.** **ASSIGNED IN SCOPE, to §A.1.** F11 (`rolling_leadlag.py`) is one of the fourteen families and its evidence row already requires `depth_participation` and `co_fire_with_F0`. Lead–lag *is* the question of whether one family's fires systematically precede another's, which is measured directly by the §A.4 cross-family co-firing work. No separate mechanism is specified; if §A.4 shows mixed-family clusters forming with consistent ordering, that is the lead–lag result.
+- **Open item 8 — per-trade CSV export from `master.py`.** **ASSIGNED IN SCOPE, to §11.** Every measurement in this document was produced from a per-trade table (entry/exit bar, time, price, direction, lots, pnl, exit type, signal index). The pipeline currently reconstructs it ad hoc for each analysis, which is how definitional drift enters. `master.py` S8 must emit `discovery/committed/trades.csv` with those columns, and §11 records it. It is a prerequisite for the Auditor reproducing §F.1 independently.
 
 **Standing requirement:** no stage output may be described as diagnostic-only in the final build without an explicit justification in the run report. Three are justified above (S0, S8, S9). Every other stage either feeds selection or has a named measurement that decides whether it should.
 
@@ -214,11 +302,25 @@ cofire(i,j) = |bars where i and j both qualify| / |bars where i qualifies|
 computed on the **pre-jar qualifying masks** (S8B basis 2), not the executed trade list, so the jar's 6-lot cap does not truncate the measurement. Executed max depth is 6; pre-jar qualifying depth reaches **14**. Book-level statistic:
 
 ```
-CoFire(B) = mean over pairs of cofire(i,j)
-DepthYield(B) = count of same-direction clusters of size >= 5 the book produces per trading day
+CoFire(B)     = mean over pairs of cofire(i,j)
+DepthYield(B) = count of same-direction BOOK clusters of size >= S, per traded day,
+                clusters built per §0.1.2(B) at the fixed tolerance N = 5
 ```
 
+**`S` is NOT hardcoded at 5.** A previous revision fixed `S = 5` while §F.4 declined to fix `U` on the grounds that "setting `U` here would be fitting a threshold to six months without seeing the curve." That argument applies to `S` with identical force, and the inconsistent treatment is removed: **both are deferred to the build, both reported over a grid, both set by the operator on the evidence.**
+
+`DepthYield` is reported over `S ∈ {3, 4, 5, 6, 7}` at N=5 and at N=10. **`S = 5` is the stated default** — not because it is arbitrary but because the measured quality break sits there (bar-level qualifying depth 5-6: PF 87.58, WR 98.6%, worst day positive) — and the default is a starting point the operator may move, not a fixed constant.
+
+Measured reference on the committed book, BOOK population, 123 traded days:
+
+| | N=5 | N=10 |
+|---|---|---|
+| clusters of size ≥ 5 | 125 | 152 |
+| `DepthYield` | **1.033 / day** | 1.256 / day |
+
 `DepthYield` is the objective-relevant quantity — co-firing matters only insofar as it produces depth.
+
+*Fit risk:* `S` and `N` are both six-month choices. `N` is fixed a priori (§0.1.3); `S` is left open and reported over a grid so the sensitivity is visible rather than buried in a constant.
 
 ### C.2 — Measuring failure correlation, separately
 
@@ -228,11 +330,19 @@ Build the per-signal daily-loss series from S6's regenerated `signal_per_day_pnl
 
 ```
 tau            = 0.10
+MIN_SHARED     = 20        -- minimum shared active days for a pair to contribute
 q_i, q_j       = the tau-quantile of each signal's daily-loss series over shared active days
 coexceed(i,j)  = P( loss_i <= q_i  AND  loss_j <= q_j )
 lambda_L(i,j)  = coexceed(i,j) / tau          -- 1.0 == independence
 failcorr(i,j)  = Pearson correlation of the two daily-loss series   [RETAINED AS A REPORTED DIAGNOSTIC ONLY]
 ```
+
+**MINIMUM-OVERLAP FLOOR (mandatory).** A 50-signal book yields 1,225 pairs, many sharing only a handful of active days. Pearson `r` on `n = 2` is noise and must not enter an unweighted mean. **A pair contributes to `TailDep(B)` or `FailCorr(B)` only if it has `>= MIN_SHARED = 20` shared active days.** Pairs below the floor are:
+- **excluded** from both means;
+- **counted and reported** — the run report states how many pairs qualified, how many were excluded, and the excluded share, so a book whose pairwise structure is mostly unmeasurable is visible rather than silently averaged;
+- **flagged as a book-level risk** if more than 50% of pairs fall below the floor, since in that case the pairwise constraint is not meaningfully binding and `FailConc` (which needs no pair overlap) must carry the survival decision alone.
+
+The floor of 20 is the value used in the verification below: on the committed book **122 of 1,225 pairs qualified**. That is a low qualifying share and is itself a finding — the pairwise tail structure of a 50-signal book on six months is thinly measured, and the build must not present `TailDep` as more precise than that supports.
 
 Book-level:
 
@@ -258,9 +368,12 @@ Pearson says the book's failures are essentially uncorrelated. In the tail they 
 
 **ACCEPTANCE RULE (implementable and verifiable):**
 
-1. **Hard bound:** no candidate book may have `TailDep(B) > T_max`, where `T_max` is set to the committed book's measured `TailDep` (3.548) as the reference point — **not tuned**. A book that concentrates tail failure more than the incumbent is rejected regardless of net.
-2. **Hard bound:** no single signal may carry `mCVaR_i` worse than `C_max`, set to the 90th percentile of the committed book's measured `mCVaR` distribution — again a reference, not a fitted parameter.
-3. **Reported, not gating:** `FailCorr(B)` (Pearson) is retained in the output purely so the divergence between the two measures stays visible to the Auditor.
+1. **Hard bound, RELATIVE:** no candidate book may have `TailDep(B) > T_max`, where `T_max` is the incumbent book's `TailDep` **measured on the ACTIVE TRAINING SEGMENT** — never the full-series value.
+2. **Hard bound, RELATIVE:** no single signal may carry `mCVaR_i` worse than `C_max` = the 90th percentile of the incumbent's `mCVaR` distribution, **measured on the ACTIVE TRAINING SEGMENT**.
+3. **Hard bound, ABSOLUTE — required, and not satisfied by 1 and 2.** A purely relative bar only guarantees the new book is no worse than the old; it cannot detect a book that is unsafe in absolute terms, and if the incumbent is itself unsafe the bar certifies the fault. The absolute constraint is the survival one and it is stated in units the account uses, not in multiples of the incumbent: **modelled worst day within the FTMO daily ceiling with stated margin, evaluated on the FULL population** (§0.1.1), since gap-filler P&L lands on the same calendar day as book P&L and the ceiling does not distinguish them.
+4. **Reported, not gating:** `FailCorr(B)` (Pearson) is retained in the output purely so the divergence between the two measures stays visible to the Auditor.
+
+**The full-series values are REPORTING REFERENCES ONLY** and must never enter a walk-forward constraint: `TailDep` 3.548, and the `mCVaR` distribution from which p90 is drawn. Quoting them as a bound inside a §I split is a §I.4.2 violation.
 
 *What would falsify this:* if `TailDep` and `FailConc` rank candidate books identically (rank correlation > 0.9), the pairwise tail measure adds nothing over the book-level one and the simpler quantity should govern. The build reports both for every candidate book.
 
@@ -273,7 +386,7 @@ Pearson says the book's failures are essentially uncorrelated. In the tail they 
 Formally, the build implements a lexicographic objective consistent with survival-first doctrine:
 
 1. **Hard constraint:** worst modelled day within the FTMO ceiling with stated margin. Any book violating this is rejected regardless of other properties.
-2. **Hard constraint:** `FailConc(B) <= F_max`, with `F_max` set from the committed book's measured value as the reference point, not tuned.
+2. **Hard constraint:** `FailConc(B) <= F_max`, with `F_max` set from the incumbent book's value **measured on the ACTIVE TRAINING SEGMENT** — never the full-series figure (§I.4.2).
 3. **Hard constraint:** `TailDep(B) <= T_max` and per-signal `mCVaR_i <= C_max` per §C.2.
 4. **Maximise:** `DepthYield(B)`.
 5. **Tie-break (§D.1):** higher `Coverage(B)` among books within tolerance of the best `DepthYield`.
@@ -307,7 +420,7 @@ The following are added because they improve what the operator can see when deci
 
 *What would falsify the inversion:* if a book selected for high `DepthYield` shows `FailConc` materially worse than the committed book at equal net, co-firing and correlated failure are not separable in practice and the two-axis model is wrong. The build must report both axes for every candidate book so this is visible rather than assumed.
 
-*Fit risk:* `F_max` anchored to the committed book's measured value imports that book's six-month history as the reference. Stated openly; the alternative (a free parameter) is worse.
+*Fit risk:* `F_max`, `T_max` and `C_max` are all anchored to the incumbent book. Anchoring is preferable to free parameters, but it is **relative** — it certifies only that the new book is no worse than the old, and would certify a fault if the incumbent carried one. That is why §C.2.3's **absolute** survival constraint is mandatory and is evaluated independently of all three. Each is recomputed inside every §I training segment; the full-series values are reporting references only.
 
 ---
 
@@ -360,7 +473,21 @@ Because missed episodes are smaller, `Coverage` is additionally reported **strat
 `cov_book_traded`, `cov_book_missed`, `cov_missed_share` become inputs to candidate ranking, subject to three constraints established in the S8B review:
 
 1. **Lift, not raw rate.** Raw participation is confounded by fire frequency; cluster-span coverage of the eligible universe is 1.18–2.28% at size≥5, while conditions fire at a median 20.0% of eligible bars. Rank on `lift`, with the absolute participating-fire count reported alongside.
-2. **ATR-controlled.** The volatility-proxy check must be applied. Its necessity is measured: `ATR_1M:hi` lift collapses 4.118 → 1.302 under ATR control, `Bar_Range:hi` 3.937 → 1.244, `Volume:hi` 4.524 → 2.243. Conditions that rise under control (`Slope_Accel_LT:hi` 3.907 → 5.814, `OR_Low_Side:==-1` 4.434 → 4.979) are the informative ones.
+2. **ATR-controlled.** The volatility-proxy check must be applied. Its necessity is measured — **all figures below are basis 1, N=5, post-remediation causal mechanism-D strata**, and every lift quoted anywhere in this document carries its basis and N for the same reason:
+
+| condition (basis 1, N=5) | raw `lift_5` | ATR-controlled |
+|---|---|---|
+| `ATR_1M:hi` | 4.118 | **1.000** |
+| `Bar_Range:hi` | 3.937 | **1.107** |
+| `Volume:hi` | 4.524 | **2.050** |
+| `Slope_Accel_LT:hi` | 3.907 | **6.401** |
+| `OR_Low_Side:==-1` | 4.434 | **4.025** |
+
+Pure volatility proxies collapse to the independence line: `ATR_1M:hi` from 4.118 to **exactly 1.000**. `Slope_Accel_LT:hi` **rises** under control, 3.907 → 6.401 — it is the informative exemplar, and it is the same 6.40 quoted in §E.4, now consistent.
+
+**`OR_Low_Side:==-1` is NOT a rise exemplar and was previously misused as one.** At N=5 — the tolerance its raw 4.434 comes from — it **falls** (4.434 → 4.025). It rises only at N=10 (3.888 → 4.386). Quoting the N=5 raw against the N=10 direction is exactly the unlabelled-tolerance error §0.1.3 exists to prevent.
+
+*Superseded values, recorded so they are not re-introduced:* an earlier revision quoted 1.302 / 1.244 / 2.243 / 5.814 / 4.979 for these five. Those were the Developer's **pre-fix full-sample** ATR strata, which carried look-ahead into a ranking column. They were superseded by the causal-strata remediation and must not be cited.
 3. **Single conditions are not signals.** The vocabulary is single conditions; the book's signals are triples. No book may be selected from the S8B CSV. It ranks *ingredients*, and the triple built from them is scored on its own merits through the full funnel.
 
 *What would falsify the reach programme:* if signals recruited for coverage qualify under §H but their clusters show materially worse depth-ladder behaviour than the incumbent population at equal size band, the missed set is structurally lower-quality and reach should be abandoned in favour of deepening existing coverage. **The measurement that decides this is the depth ladder computed separately for reach-recruited and incumbent clusters.** The build must produce it.
@@ -373,7 +500,25 @@ Because missed episodes are smaller, `Coverage` is additionally reported **strat
 
 ### E.1 — Unchanged
 
-`ADX >= 15` and `Volume > 50` (**strictly greater** — `portfolio_simulation_engine.py` L146, `dots_thresholds.py` L87; the record's "ticks >= 50" is imprecise) stay as minimal-participation filters removing dead bars. The reveal doc §5 measured ADX≥15 as redundant in practice — every trade already clears it. They are a floor, not an edge, and are not to be presented as one. D2D directional agreement is existing and unchanged.
+`ADX >= 15` and `Volume > 50` (**strictly greater** — `portfolio_simulation_engine.py` L146, `dots_thresholds.py` L87; the record's "ticks >= 50" is imprecise) stay as minimal-participation filters removing dead bars. The reveal doc §5 measured ADX≥15 as redundant in practice — every trade already clears it. They are a floor, not an edge, and are not to be presented as one.
+
+**D2D directional agreement stays in the stack — and is UNMEASURED. That is a defect in the evidence, not in the gate.**
+
+A previous revision stated "D2D directional agreement is existing and unchanged" and left it there. That is structurally the same position the AT episode just produced: a gate carried in the stack whose only supporting measurement is known to be invalid. The reveal withdrew the sole measurement of D2D's contribution as confounded and made re-measuring it open item #3; that item is still open. The document that exists to fix unmeasured gates cannot exempt one.
+
+**This is not a claim that D2D is weak. It is a claim that nobody knows, and the redesign must not inherit an unknown as a settled component.**
+
+**SPECIFIED MEASUREMENT (§E.5 protocol, applied to D2D):**
+1. Score the committed book with the D2D directional agreement condition **removed from `build_signal_masks`**, all else identical, on the full stitched series. Report the delta in trades, net, PF, worst day, and `DepthYield`.
+2. Report the same **per §H.3 bucket**, never aggregate — this is what disqualified the §E.3 regime-state filter and is the standing requirement for any gate.
+3. Report separately for **BOOK, F0-solo and F0-concurrent** populations, since §1.1 established that whole-book and concurrent-only populations respond oppositely to a directional gate.
+4. Report against **both D2D polarities** and with the gate inverted, so an encoding error cannot pass silently — the same failure mode that produced the AT_Regime_ST inversion.
+
+**The gate is NOT removed pending this measurement.** Removing a component on an absent measurement is the subtractive error the governing principle prohibits; the measurement decides.
+
+*What would falsify keeping it:* if removing D2D agreement leaves net, PF and worst day statistically indistinguishable across all §H.3 buckets, the gate is inert and its retention is a complexity cost with no benefit — a finding, and an actionable one.
+
+*Fit risk:* the measurement runs on the same six months as everything else, and must be repeated inside the §I splits before the verdict is treated as settled.
 
 ### E.2 — The AT gate: not adopted, on evidence
 
@@ -390,12 +535,18 @@ The directional gate removes profitable trades. `sign(AT_Slope_ST)` is the panel
 
 ### E.3 — The regime-state variant: measured, and it does not persist
 
-The operation the record actually measured (`AT_Regime_ST == 1`, irrespective of direction) is genuinely interesting on the NEW segment. It does not survive regime-conditional examination:
+The operation the record actually measured (`AT_Regime_ST == 1`, irrespective of direction) is genuinely interesting on the NEW segment. It does not survive regime-conditional examination.
 
-| segment | ungated | reg==1 | reg==0 |
-|---|---|---|---|
-| OLD | PF 6.25, $89,797 | PF 6.33, $52,750 | PF 6.14, $37,047 |
-| NEW | PF 2.19, $8,407 | **PF 3.83, $9,228** | PF 0.78, −$821 |
+**Restated at the adopted boundary, bar 152,983 (§1.1). The record's boundary is shown alongside so the conclusion can be seen to be boundary-independent:**
+
+| boundary | segment | ungated | reg==1 | reg==0 |
+|---|---|---|---|---|
+| **152,983 (adopted)** | OLD | PF 6.40, $92,296 | PF 6.57, $55,146 | PF 6.16, $37,149 |
+| **152,983 (adopted)** | NEW | PF 1.84, $5,909 | **PF 3.10, $6,832** | PF 0.76, **−$923** |
+| 152,814 (record) | OLD | PF 6.25, $89,797 | PF 6.33, $52,750 | PF 6.14, $37,047 |
+| 152,814 (record) | NEW | PF 2.19, $8,407 | PF 3.83, $9,228 | PF 0.78, −$821 |
+
+The shape is identical at both boundaries: near-neutral on OLD (6.57 vs 6.40 adopted; 6.33 vs 6.25 record), large on NEW, with `reg==0` negative. **The conclusion below is unchanged by the boundary correction.**
 
 Monthly (whole book, net $):
 
@@ -444,14 +595,46 @@ S8B causal-strata ranking places the **long-term** adaptive family at the top of
 
 ### F.1 — The measured facts
 
-- Solo entries are **profitable**: 1,135 trades, WR 88.5%, PF 3.16, **+$26,710** full series. Early entries in clusters that stayed shallow: WR 86.4%, PF 2.62, +$12,561.
-- They are **structurally fragile**: avg loss 2–3× avg win, breakeven-WR 64–75% vs 39–52% concurrent, and they carry the tail — the −$574 worst day and the July bleed (2026.07 solo: WR 70.1%, PF 0.64, **−$1,208**).
-- The first entry of a large cluster is **indistinguishable from a solo at fire time.** I measured this and found no predictor. Early entries (position 1–2) of clusters that became size≥8: WR 92.2%, PF 5.31, avg **$43.7**; of clusters that stayed 1–2: WR 86.4%, PF 2.62, avg **$17.3** — better, but not separable *before the second entry arrives*.
-- Waiting for depth destroys the edge: take-all book net **$77,239**; commit only at running-depth≥3 → **$45,430**; at ≥5 → **$28,004**.
+**All figures re-derived against §0.1. Every one states its population, basis and tolerance. The previous revision quoted four different depth measures in a single bullet list without labelling any; that is the defect this section corrects.**
+
+**Solo economics** — F0 depth-1, FULL population (these are the tail figures and the tail lands on the account, so gap-filler days are included):
+- 1,135 trades, WR 88.5%, PF 3.16, **+$26,710**.
+- Structurally fragile: avg loss 2–3× avg win, breakeven-WR 64–75% versus 39–52% concurrent. They carry the tail — the −$574 worst day and the July bleed (2026.07 solo: WR 70.1%, PF 0.64, **−$1,208**).
+
+**Cost of waiting for depth** — BOOK population, take-all baseline **$77,239** (2,678 trades). Measured under **all three** depth definitions, because the answer is definition-sensitive and the previous revision quoted one without saying which:
+
+| commit rule | trades | WR% | PF | net | cost vs take-all |
+|---|---|---|---|---|---|
+| take-all | 2,678 | — | — | **$77,239** | — |
+| bar-level `qd >= 3` (§0.1.2A) | 670 | 97.0 | 30.66 | $33,105 | **57%** |
+| bar-level `qd >= 5` | 253 | 99.2 | 119.18 | $17,869 | **77%** |
+| cluster position ≥ 3, **N=5** | 1,093 | 94.6 | 9.08 | $40,429 | **48%** |
+| cluster position ≥ 5, **N=5** | 624 | 96.3 | 11.98 | $23,102 | **70%** |
+| cluster position ≥ 3, N=10 | 1,354 | 93.6 | 7.65 | $45,430 | 41% |
+| cluster position ≥ 5, N=10 | 846 | 94.8 | 8.97 | $28,004 | 64% |
+
+**At the fixed tolerance N=5 the cost of a depth filter is 48% and 70% of book net.** The previously-quoted $45,430 / $28,004 (41% / 64%) are the **N=10** running-position figures — they reproduce exactly under that definition, but N=10 is not the fixed tolerance and quoting them unlabelled was the defect.
+
+*Note on a Supervisor finding.* The Supervisor reported these two figures as matching no definition in the ratified toolchain, within a measured range of $33,105–$55,283 at ≥3 and $17,869–$43,631 at ≥5. My re-derivation reproduces them **exactly** at N=10 cluster position on the BOOK population, and reproduces the Supervisor's lower bounds exactly at bar-level `qd`. The disagreement is therefore about which definitions were enumerated, not about arithmetic. **The Supervisor's substantive point stands in full and is the reason this table exists: the figures were unlabelled, and unlabelled figures are not reproducible.** The direction is also confirmed — **no definition makes depth-as-filter cheap**, the cost spanning 41–57% at ≥3 and 64–77% at ≥5.
+
+**Non-separability of the first entry** — BOOK population, early entries = cluster position ≤ 2, cohorts by eventual cluster size:
+
+| cohort (position ≤ 2) | **N=5** | N=10 |
+|---|---|---|
+| cluster stayed 1–2 | n=1,009, WR 87.0, PF 2.78, avg **$17.6** | n=728, WR 86.4, PF 2.62, avg **$17.3** |
+| cluster → 3–4 | n=326, WR 91.1, PF 5.20, avg $24.9 | n=292, WR 89.0, PF 4.20, avg $23.0 |
+| cluster → 5–7 | n=148, WR 95.3, PF 9.54, avg $45.7 | n=176, WR 96.6, PF 10.79, avg $39.5 |
+| cluster → 8+ | n=102, WR 92.2, PF 5.31, avg **$41.4** | n=128, WR 92.2, PF 5.31, avg **$43.7** |
+
+*Second Supervisor disagreement, reported rather than absorbed.* The Supervisor measured the → 8+ cohort at WR 85.3 / PF 2.50 / avg $28.7 (N=10) and WR 85.2 / PF 2.18 / avg $21.5 (N=5). My re-derivation gives WR 92.2 / PF 5.31 / avg $43.7 at N=10 — reproducing the original figures exactly — while agreeing with the Supervisor to the cent on the paired "stayed 1–2" cohort ($17.3). Identical agreement on one cohort and material disagreement on the other points to a **cluster-construction difference**, most plausibly whether gap-filler trades participate in cluster formation: including them enlarges clusters and dilutes the → 8+ cohort. §0.1.1 now fixes this — **gap fillers are excluded from all cluster construction** — and the build must report which value obtains under that definition.
+
+**The conclusion is unaffected either way, and this is the point that matters:** whichever cohort statistics obtain, they are *ex-post* properties of clusters that had already formed. Non-separability is a claim about what is knowable **at fire time**, and no predictor available at the first entry was found under either measurement. If the Supervisor's figures obtain, the case is stronger still — the "became big" cohort would then be indistinguishable in win rate and *worse* in profit factor than the cohort that stayed shallow, leaving nothing to separate on at all.
+
+*Fit risk:* every figure here is six months, one instrument. The definitional sensitivity now visible in the tables is itself the argument for §I re-deriving all of them inside each split.
 
 ### F.2 — Depth enters SIZING, not selection-time filtering
 
-**Specified: depth is a sizing input applied live as the cluster develops, not a pre-trade filter.** A depth filter costs 41–64% of book net (F.1) to buy a WR improvement, and discards the front of every large move.
+**Specified: depth is a sizing input applied live as the cluster develops, not a pre-trade filter.** A depth filter costs **48–70% of book net at the fixed tolerance N=5**, and 41–77% across every definition measured (§F.1), to buy a WR improvement — and it discards the front of every large move.
 
 The base position opens on the existing trigger with no depth pre-condition; size scales as running depth crosses stated thresholds. Motivating ladder (pre-jar qualifying depth, executed trades bucketed by their entry bar's qualifying depth):
 
@@ -467,7 +650,7 @@ The base position opens on the existing trigger with no depth pre-condition; siz
 
 ### F.3 — The coupling constraint (binding)
 
-Selecting a signal *because* it fires at shallow depth in episodes that deepen, and then *sizing* by depth, fits the book to its own sizing mechanism. The measured pull is not small ($43.7 vs $17.3 on the same trigger).
+Selecting a signal *because* it fires at shallow depth in episodes that deepen, and then *sizing* by depth, fits the book to its own sizing mechanism. The measured pull is not small ($41.4 vs $17.6 on the same trigger at N=5; $43.7 vs $17.3 at N=10).
 
 **Mandatory mitigations, all three:**
 1. The depth→size curve is **fixed a priori** and never tuned against the selected book. It is scored as an S7 contender row (§B) against C0–C5, independently of selection.
@@ -507,7 +690,7 @@ This also **refutes** the related concern that concurrence measures duplicated i
 
 **AUTHORISATION REQUIRED BEFORE BUILD.** `MAX_POSITIONS` lives in `portfolio_simulation_engine.py`, which is **byte-locked** (`bb498eb13ce3`). Any behaviour-changing edit without documented human authorisation is INVALID regardless of merit. This section specifies the option; it does not authorise it.
 
-§F.2 framed the choice as filter-or-size and measured that filtering costs 41–64% of book net ($77,239 → $45,430 at depth≥3 → $28,004 at depth≥5). A depth-conditional **cap** is a third mechanism: take every first entry, but limit how much shallow risk can accumulate concurrently.
+§F.2 framed the choice as filter-or-size and measured that filtering costs **48–70% of book net at N=5** ($77,239 → $40,429 at position≥3 → $23,102 at position≥5; §F.1). A depth-conditional **cap** is a third mechanism: take every first entry, but limit how much shallow risk can accumulate concurrently.
 
 **Specified form:** `cap = 2` while running same-direction depth is 1; `cap = 6` once depth ≥ 3. Intermediate value at depth 2 to be reported, not assumed.
 
@@ -537,19 +720,35 @@ The same depth band is worth ~5x more in the top volatility tercile than the bot
 
 ## 8. SECTION G — VOCABULARY HYGIENE
 
-**Verified exact duplicate pairs** (5): `OBVf_Signal:==1` ≡ `OBVf_Trend_Dir:==1`; `OBVf_Signal:==-1` ≡ `OBVf_Trend_Dir:==-1`; `Trend_Concordance:==0` ≡ `Trend_Conflict:==1`; `Trend_Concordance:==1` ≡ `Trend_Conflict:==0`; `PrevDay_Close_Side:==0` ≡ `DailyOpen_Side:==0`.
+**THE IDENTITY TEST DOMAIN IS THE ELIGIBLE UNIVERSE.** This was previously unstated and it changes the answer. Equivalence is tested on the bars where triples are actually formed and evaluated — `(ADX_Value >= 15) & (Volume > 50) & post-warmup`, 103,214 bars — not over all 177,251:
 
-**Verified zero-firing conditions** (7): `D2D_Dn_Count:lo`, `D2D_Dynamic_Sensitivity:hi`, `D2D_Up_Count:lo`, `AT_Lookback_LT:lo`, `AT_Lookback_ST:lo`, `OR_High_Dist_ATR:lo`, `OR_Low_Dist_ATR:lo`.
+| identity tested over | dead | exact duplicate pairs | effective vocabulary |
+|---|---|---|---|
+| **ELIGIBLE 103,214 bars — CORRECT** | **7** | **4** | **238** |
+| all 177,251 bars | 6 | 1 | 242 |
 
-Effective live vocabulary ≈ **237**, not 249. **0 of the 50 committed triples are affected.**
+**Verified exact duplicate pairs (4), by bitwise mask identity on the eligible universe:**
+`OBVf_Signal:==1` ≡ `OBVf_Trend_Dir:==1`; `OBVf_Signal:==-1` ≡ `OBVf_Trend_Dir:==-1`; `Trend_Concordance:==0` ≡ `Trend_Conflict:==1`; `Trend_Concordance:==1` ≡ `Trend_Conflict:==0`.
+
+**`PrevDay_Close_Side:==0` ≡ `DailyOpen_Side:==0` IS NOT A DUPLICATE PAIR and was previously listed in error.** Measured: 30 eligible fires each with **intersection 0**; 285 and 48 fires respectively over all 177,251 bars, again with **intersection 0**. The two conditions are **disjoint** — they never fire on the same bar. The matching eligible fire count is coincidence, and inferring duplication from matching aggregate statistics rather than from mask identity is the weaker test that produced the false pair.
+
+**Verified zero-firing conditions on the eligible universe (7):** `D2D_Dn_Count:lo`, `D2D_Dynamic_Sensitivity:hi`, `D2D_Up_Count:lo`, `AT_Lookback_LT:lo`, `AT_Lookback_ST:lo`, `OR_High_Dist_ATR:lo`, `OR_Low_Dist_ATR:lo`. (`D2D_Dynamic_Sensitivity:hi` fires only outside the eligible universe, which is why the all-bars count is 6.)
+
+**Effective live vocabulary = 238**, not 237 and not 249. **238 is the number entering §H.1's trial count.** **0 of the 50 committed triples are affected.**
+
+**NOTE ON THE MECHANISM.** §G.1.1 specifies bitwise mask identity, re-derived each run, never hardcoded — and a build implementing that mechanism produces 4 and never inherits this error. The defect was in the stated fact, not in the mechanism. It is corrected here because an Auditor checking a compliant build against the previous text would have flagged correct output as non-compliant.
 
 ### G.1 — Handling, at SELECTION time only
 
 `build_condition_pool` is S.10 sacred and is **not modified**. All handling occurs downstream, in the selection layer, against the pool the oracle produces.
 
-1. **Duplicate collapsing.** Maintain a canonical-equivalence map, built by measuring bitwise mask identity on the stitched series (not hardcoded — re-derived each run, since equality-arm membership is data-dependent). For ranking and for triple formation, the members of an equivalence class count as **one** condition. A triple containing both members of a pair is a two-condition signal and must be **rejected at formation**, not discovered and then explained.
-2. **Dead conditions.** The 7 zero-firing conditions are **excluded from RANKING and from triple formation**, and are **NOT deleted from the vocabulary.** They are reported in the run report with their fire count of 0. If a future dataset makes one live, it re-enters automatically — the exclusion is a computed property of the run, never a hardcoded list.
-3. **Trial-count impact.** The effective vocabulary of 237 (not 249) is the number entering §H.1's trial count. Duplicates manufacture false corroboration in ranking; collapsing them is also what makes the multiple-testing correction honest.
+**ORDER IS BINDING: dead conditions are excluded BEFORE equivalence classes are formed.** The 7 zero-firing masks are all-zero and therefore all identical to each other; forming equivalence classes first would collapse them into a spurious 7-member class and corrupt both the duplicate count and the trial count. Exclude, then classify.
+
+**SCOPE IS BINDING: both the equivalence map and the dead-condition list are derived PER TRAINING SEGMENT, not once per `master.py` invocation.** A single full-series derivation would compute the trial count entering §H.1 on every split with sight of the test segments — a §I.4.2 violation hidden inside a hygiene step. "Re-derived each run" was ambiguous and is replaced by this.
+
+1. **Duplicate collapsing.** Maintain a canonical-equivalence map, built by measuring bitwise mask identity **on the eligible bars of the active training segment** — never hardcoded, since equality-arm membership is data-dependent. For ranking and for triple formation, the members of an equivalence class count as **one** condition. A triple containing both members of a pair is a two-condition signal and must be **rejected at formation**, not discovered and then explained.
+2. **Dead conditions.** Zero-firing conditions are **excluded from RANKING and from triple formation**, and are **NOT deleted from the vocabulary.** They are reported with their fire count of 0. If a segment or a future dataset makes one live, it re-enters automatically — the exclusion is a computed property of the segment, never a hardcoded list.
+3. **Trial-count impact.** The effective vocabulary — **238 on the full series**, recomputed per segment — is the number entering §H.1's trial count. Duplicates manufacture false corroboration in ranking; collapsing them is also what makes the multiple-testing correction honest.
 
 *Fit risk:* none material — this removes an artifact rather than adding a choice. The one judgment is treating exact mask identity as equivalence; near-duplicates are handled separately in §G.2.
 
@@ -621,7 +820,7 @@ The dependence is essentially symmetric in sign, so **PRDS fails and BH is not v
 - effective count after §G.1 duplicate collapsing and §G.2 domain handling;
 - an eigenvalue-based effective-dimension estimate on the condition-mask correlation matrix, so the correlation-induced reduction is measured rather than guessed.
 
-**Measured reference for that estimate** (242 live conditions on the stitched series): **126 components carry 90% of variance, 154 carry 95%, participation ratio 46.2.** The effective dimensionality is materially below the nominal 242 but well above the 5 exact-duplicate pairs — the reduction is broad and mild, not concentrated.
+**Measured reference for that estimate** (242 masks live over all bars; 238 effective on the eligible universe per §G): **126 components carry 90% of variance, 154 carry 95%, participation ratio 46.2.** The effective dimensionality is materially below the nominal count but far above the 4 exact-duplicate pairs — the reduction is broad and mild, not concentrated.
 
 *Fit risk:* the null is generated on the same six months. It shares the period's structure, which is the point — it is a null for *this* market, not a universal one. Stated openly.
 
@@ -630,26 +829,53 @@ The dependence is essentially symmetric in sign, so **PRDS fails and BH is not v
 Specified per Meinshausen–Bühlmann, adapted to time-series structure.
 
 - **Resampling scheme: day-level block bootstrap.** Draw whole **trading days** with replacement. Naive iid bar resampling is forbidden — it destroys intraday autocorrelation, session structure, and cluster formation (clusters span up to 80 bars; sessions span ~1,400). Day-level blocks preserve all three.
-- **Subsample size:** 80% of the 123 available trading days per draw.
+- **Resampling pool: all 127 post-warmup trading days in the series — NOT the 123 days the incumbent book happened to trade.** Drawing only from traded days conditions the bootstrap on the current book's activity, which is the incumbency bias §A.4 and §D.3.3 warn against elsewhere; a candidate book that trades on days the incumbent sat out could never be sampled fairly. The pool is the market, not the incumbent's footprint.
+- **Subsample size:** 80% of the 127 available post-warmup trading days per draw.
 - **Count:** `B = 200` draws. Reported with a convergence check (selection frequencies stable between B=100 and B=200); if not converged, increase B rather than accept.
 - **What is re-run:** the **entire** selection funnel on each draw — not a re-score of a fixed book. This is the point of the exercise.
 - **Retention threshold:** a signal is retained only if selected in `>= 70%` of draws. Sensitivity at 60% and 80% reported so the threshold's influence is visible.
 
 *Falsification:* if fewer than a workable number of signals clear 70%, the selection process is unstable and the book is not ready — that is a valid and reportable outcome, not a reason to lower the threshold.
 
-*Fit risk:* 123 trading days is a small pool for 200 draws; draws overlap heavily. The convergence check and the sensitivity band are the mitigations; the limitation is real and stated.
+*Fit risk:* 127 trading days is a small pool for 200 draws; draws overlap heavily. The convergence check and the sensitivity band are the mitigations; the limitation is real and stated. Inside a §I training segment the pool is smaller still — see §I.1's minimum-segment floor, which exists because §H.2 becomes unexecutable below it.
 
 ### H.3 — Regime-conditional persistence
 
 Aggregate positivity hides regime failure. This is what would have caught the short-side collapse, and it is what disqualifies the §E.3 regime-state filter.
 
-**Primary bucketing: calendar month** — 7 buckets (2026.01 partial, 02, 03, 04, 05, 06, 07 partial). Partial buckets are flagged and reported but **not excluded**.
+**BUCKETING IS A RULE, NOT A FIXED COUNT.** A previous revision fixed 7 calendar-month buckets with a ≥6-of-7 bar. That is unexecutable inside a §I training segment — the first anchored segment contains roughly 1–1.5 months, so there are not 7 buckets in it, and a build faced with that has only two options, both prohibited: break, or apply the full-series rule and consume test-segment months. **That is the precise mechanism by which §I Step 6 would pass while being fake — not by anyone deciding to skip it, but by a Developer hitting an impossible constraint on day one.**
 
-**Secondary bucketing: causal volatility tercile**, derived from the oracle's mechanism-D `ATR_1M` thresholds (never a local full-sample quantile — that is a mechanism-A surface, and the S8B remediation established this precedent).
+**Primary bucketing rule: calendar month, whatever count the active segment contains.**
+
+**Proportional bar:**
+- **positive net in all but at most one bucket**, and
+- **a minimum of 3 buckets must exist** for the criterion to be evaluated at all.
+
+If a segment contains fewer than 3 monthly buckets the criterion **cannot be evaluated**, and that is a property of the split, not of the signal: the segment is too short and §I.1's floor exists to prevent it arising. A build must **fail loudly** in that case, never silently pass the signal and never silently borrow months from the test segment.
+
+On the full series (7 buckets) the rule yields ≥6-of-7 — identical to the previous fixed bar, so nothing is loosened; it is generalised so that it executes.
+
+**Secondary bucketing: causal volatility tercile**, derived from the oracle's mechanism-D `ATR_1M` thresholds (never a local full-sample quantile — that is a mechanism-A surface, and the S8B remediation established this precedent). Terciles are balanced by construction, so the bar here is strict: **positive in all three**.
 
 **Tertiary bucketing (reported, not gating): `AT_Regime_ST` state**, per §E.3.
 
-**Requirement:** a signal must be **positive in each bucket**, not in aggregate. Specified bar: net > 0 in `>= 6 of 7` monthly buckets **and** net > 0 in **all** volatility terciles. The 6-of-7 allowance (rather than 7-of-7) acknowledges the two partial months; the volatility requirement is strict because terciles are balanced by construction.
+#### H.3.1 — DIRECTIONAL ASYMMETRY: the short side is not to be culled as a side effect
+
+**OPERATOR DIRECTIVE, BINDING.** The market has been primarily bullish across this span. The committed book is 37 long / 13 short, and the reveal records the short side degrading from PF 5.38 to 0.74 while longs went 6.97 to 3.20. Applied naively, per-bucket positivity will cull the short side wholesale — not because a decision was taken, but because a statistical rule met an asymmetric sample.
+
+**If the short side is to be treated differently that must be a DECIDED outcome with a stated measurement, never an emergent one.**
+
+**Specified handling:**
+1. **§H.3 is evaluated WITHIN direction, not pooled.** Long candidates are bucketed and barred against the long population; short candidates against the short population. A short signal is not required to clear a bar calibrated on a bullish sample.
+2. **The minimum-bucket rule applies per direction.** If the short population in a segment does not populate 3 buckets, the short-side criterion is **unevaluable** — reported as such, and the signal is **neither passed nor culled** on that basis. It carries forward to the operator as an explicit open decision.
+3. **Directional composition is a reported book property.** Every candidate book reports its long/short split alongside net and worst day, so a book that has become directionally monolithic is visible before commitment rather than after.
+4. **No rule in this document may remove the last short signal from a book without that removal appearing as a named line in the run report.**
+
+*What would falsify this handling:* if short-side signals clearing a short-calibrated bar go on to fail in §I test segments at a materially higher rate than long-side signals clearing a long-calibrated bar, the asymmetric calibration is too permissive and the bar must be raised — by decision, with the measurement recorded.
+
+*Fit risk:* calibrating a bar per direction on a directionally-imbalanced six months risks fitting the short bar to a very small sample (13 signals). The unevaluable-and-report path exists precisely so that a thin sample produces an open question rather than a false pass.
+
+**Requirement:** a signal must be **positive in each bucket**, not in aggregate — net > 0 in **all but at most one** monthly bucket of however many the segment contains (minimum 3), **and** net > 0 in **all three** volatility terciles, evaluated within direction per §H.3.1. The one-bucket allowance acknowledges partial months; the volatility requirement is strict because terciles are balanced by construction.
 
 *Motivating number:* the §E.3 filter is positive in aggregate on every segment and still fails, because `reg==0` beats `reg==1` in 3 of 7 months and the whole effect is July. Aggregate would have passed it.
 
@@ -661,10 +887,16 @@ All prior validation — blind audit, OOS May–Jun, 6/6 folds, decorrelation, n
 
 ### I.1 — Construction
 
-- **Splits: 4**, contiguous and chronological across 2026.01.19 → 2026.07.21.
-- **Scheme: anchored walk-forward.** Split *k* selects on all data up to boundary *k* and tests on the untouched segment between boundary *k* and *k+1*. Anchored rather than rolling because the warm-up floor (6,900 bars) consumes a fixed prefix and a rolling window would repeatedly pay it.
-- **Embargo: 1 full trading day (~1,440 bars) between train and test.** Required, not optional: the §D thrust labels use forward windows up to W=60 bars, trades hold for a bounded but nonzero duration, and cluster spans reach 80 bars. Without an embargo the training window's forward labels peek into the test segment.
-- **Test segments are touched exactly once**, at the end, to produce the reported number.
+**THE SPLIT COUNT IS DERIVED FROM AN EXECUTABILITY FLOOR, NOT FIXED IN ADVANCE.** A previous revision fixed 4 splits. With 127 post-warmup trading days that gives a first training segment of roughly 25–30 days, in which §H.3 cannot form 3 monthly buckets and §H.2 cannot draw 200 bootstrap samples at 80% of ~25 days with any independence. Fixing the count first and discovering the impossibility later is how a Developer is forced into a fake step.
+
+- **MINIMUM TRAINING-SEGMENT LENGTH — the binding floor.** A training segment is valid only if it satisfies **all** of:
+  - **≥ 3 calendar-month buckets** with trades, so §H.3 is evaluable;
+  - **≥ 60 post-warmup trading days**, so §H.2's 80% draws retain enough distinct days for selection frequencies to converge;
+  - **≥ 3 monthly buckets in EACH direction** where a direction is to be evaluated, per §H.3.1 — otherwise that direction is reported unevaluable rather than culled.
+- **Splits: derived.** With 127 post-warmup days and a 60-day floor on the *first* anchored training segment, the series supports **3 splits** (train ≥60d → test, then anchored extension twice). **The build computes the count from the floor and reports it; it does not assume 4.** If the floor admits fewer than 3 splits the walk-forward is under-powered and that must be reported as a limitation of the data, not absorbed by shortening segments.
+- **Scheme: anchored walk-forward.** Split *k* selects on all data up to boundary *k* and tests on the untouched segment between boundary *k* and *k+1*. Anchored rather than rolling because the warm-up floor (6,900 bars) consumes a fixed prefix and a rolling window would repeatedly pay it. Anchoring also means later training segments strictly contain earlier ones, so the floor binds only on the first.
+- **Embargo: one full trading day, `>= 1,440 bars`.** Stated as a bar count, not a session count: the measured median session is 1,365 bars, so 1,440 is conservative in the right direction, and "one trading day" must not be read as "one session" by a build that then embargoes fewer bars. Required, not optional: the §D thrust labels use forward windows up to W=60 bars, trades hold for a bounded but nonzero duration, and cluster spans reach 80 bars. Without an embargo the training window's forward labels peek into the test segment.
+- **Test segments are touched exactly once**, at the end, to produce the reported number. **That single touch includes the §I.3 null re-run** — see §I.3.
 
 ### I.2 — What is re-run on each split
 
@@ -678,9 +910,11 @@ Signal-level persistence into the held-out segment, measured as the record measu
 
 - **Current baseline: 50%** (26/52 entities).
 - **Random-triple null: 27%** (4/15) — and this null must be **re-run on each split**, not carried from the record, because the null is period-dependent.
-- **Target: materially above 50%**, specified as **>= 65% on the mean of the 4 splits, with no single split below 50%.**
+- **Target: materially above 50%**, specified as **>= 65% on the mean of the derived splits (§I.1), with no single split below 50%.**
 
 The single-split floor matters as much as the mean: a process that scores 80/80/80/20 is not a working process, and the mean alone would hide it.
+
+**THE NULL RE-RUN IS PART OF THE SINGLE TEST TOUCH — loophole closed.** Regenerating the random-triple null per split requires scoring random signals on the test segment, which is a second read of held-out data. §I.1 permits touching a test segment exactly once and the previous text never said whether null scoring counted. It does. **The real book and the null are scored in the SAME single pass over the test segment**, from one loading of that segment, and the pass is recorded once in the §I.4 attestation. A build that scores the book, inspects the result, and then scores the null has touched held-out data twice and the split is void — even though no stated rule previously forbade it.
 
 **Additionally:** the held-out books must satisfy the §C.3 survival constraint on their test segments. A book that persists but breaches the daily ceiling fails.
 
@@ -692,10 +926,29 @@ Any of the following invalidates the walk-forward and must be rejected by the Au
 2. **Any parameter chosen with sight of a test segment** — including thresholds, `U`, `F_max`, the thrust grid, bucket boundaries, or the retention threshold.
 3. **Running discovery across the full series and splitting afterwards.** The funnel must run inside each training segment.
 4. **Omitting the embargo**, or setting it shorter than the longest forward-looking label in use.
-5. **Reporting the best split, or the mean without the per-split values.** All four splits are reported.
-6. **Re-running a failed split after adjustment.** If a split fails, the iteration happens and the *whole* walk-forward re-runs from clean code — the failed configuration is reported, not buried.
+5. **Reporting the best split, or the mean without the per-split values.** Every derived split is reported.
+6. **Re-running a failed split after adjustment.** If a split fails, the iteration happens and the *whole* walk-forward re-runs from clean code — the failed configuration is reported, not buried. **ENFORCED BY §I.4.1 ATTESTATION, not by convention.**
 7. **Carrying the 27% null from the record** instead of regenerating it per split.
 8. **Deleting rows anywhere** to construct a segment. Segments are index ranges over the intact series; the oracle's rolling-2500 ring must see the unbroken data.
+9. **Touching a test segment more than once**, including scoring the book and the null in separate passes (§I.3).
+10. **Shortening a training segment below the §I.1 floor** to fit a desired split count.
+
+#### I.4.1 — ENFORCEMENT: the walk-forward attestation
+
+Item 6 was previously a convention with no mechanism. The sacred five have `verify_sacred()` aborting on drift; §I had no equivalent, so "the failed configuration is reported, not buried" rested entirely on trust.
+
+**Specified mechanism — an append-only run attestation.** Before any test segment is touched, `wf_selection.py` appends one record to `discovery/.wf_attest.jsonl`:
+
+```
+{ run_id, utc_timestamp, code_sha256 (wf_selection.py + selection.py),
+  split_definition_sha256 (boundaries, embargo, floor parameters),
+  input_sha (dataset), split_index, segment_bar_range }
+```
+
+- The file is **append-only**; the build never rewrites or truncates it, and a missing prior record is not inferred.
+- **A second record with the same `(code_sha, split_definition_sha, input_sha, split_index)` is a REPEAT and is reported as such in the run report** — it is not blocked, because legitimate re-runs exist, but it can never be silent.
+- The §I.3 headline may only be reported alongside the full attestation trail. **A pass figure presented without its trail is not a result.**
+- The Auditor verifies the trail count against the number of reported splits. A trail longer than the report is the signature this mechanism exists to expose.
 
 *Fit risk, stated plainly:* four splits over six months gives training segments of roughly 1.5–5 months and test segments of ~1.5 months. These are short. A pass is meaningful evidence that the method generalises; it is not proof that it generalises across market regimes not present in 2026 H1. The honest resolution is a second out-of-sample export, which remains the project's highest-value un-run validation.
 
@@ -707,7 +960,7 @@ Any of the following invalidates the walk-forward and must be rejected by the Au
 
 ### J.1 — The problem it attacks
 
-§F.2 records the one measured dead end in this design: **the first entry of a large cluster is indistinguishable from a solo at fire time.** Early entries (position 1–2) in clusters that reached size ≥8 averaged **$43.7**; the same positions in clusters that stayed shallow averaged **$17.3** — a real difference, but not separable *before the second entry arrives*. That is why depth went to sizing rather than filtering, and why waiting for confirmation costs 41–64% of net.
+§F.2 records the one measured dead end in this design: **the first entry of a large cluster is indistinguishable from a solo at fire time.** Early entries (position 1–2, BOOK, N=5) in clusters that reached size ≥8 averaged **$41.4**; the same positions in clusters that stayed shallow averaged **$17.6** — a real difference, but not separable *before the second entry arrives*. That is why depth went to sizing rather than filtering, and why waiting for confirmation costs **48–70% of book net at N=5** (§F.1).
 
 If cluster formation were predictable at the first arrival, §F changes substantially: the front of every large move could be entered at size rather than probed.
 
@@ -767,7 +1020,8 @@ Sacred five stay **byte-locked**: `dots_thresholds.py` `518862bf19fb`, `wf.py` `
 | `engine/cluster_profiler.py` | extend to admit cross-family entries with origin tags (§A.4); emit family-composition vectors per cluster; stratify coverage by episode absolute size (§D.2); emit the §D.0 missed-episode decomposition across the thrust grid. |
 | `scanners/concurrence_profiler.py` (F12) | unchanged pending the §A.2 measurement; classification may change on the result. |
 | **new** `engine/selection.py` | implements §C.3 objective and §C.3.1 greedy/CELF search, §C.2 tail-dependence and mCVaR, §D.2 coverage, §G.1 collapsing, §G.2 domain bridging and community detection, §H.1–H.3. The single place selection logic lives, so the Auditor has one file to verify. **Must not claim the (1 − 1/e) bound unless §C.3.1 submodularity is established.** |
-| **new** `engine/wf_selection.py` | implements §I. Must not import from `selection.py` in a way that lets a test segment influence a fitted parameter; the split boundary is enforced structurally, not by convention. |
+| **new** `engine/wf_selection.py` | implements §I including the §I.4.1 append-only attestation. Must not import from `selection.py` in a way that lets a test segment influence a fitted parameter; the split boundary is enforced structurally, not by convention. Derives the split count from the §I.1 floor; does not assume 4. |
+| `master.py` (additional) | S8 emits `discovery/committed/trades.csv` (per-trade table, reveal open item 8, §B.2). `OOS_MONTHS` made data-relative or its outputs flagged stale (§B.1, reveal open item 7). |
 | **new** `engine/hawkes_research.py` | implements §J. Research only — no live path, no import from the committed scoring chain. |
 | `portfolio_simulation_engine.py` | **SACRED / byte-locked. Unchanged.** §F.5's depth-dependent cap touches `MAX_POSITIONS` and is **specified but NOT authorised**; it requires documented human authorisation before any edit. |
 | `discovery_map.md` | §3 line 90 F10 flag correction (§1.4). |
@@ -785,9 +1039,12 @@ Everything runs under `master.py`. No standalone scripts.
 - §1.2 the 77% / thrust-overlap reconciliation — Q4 at percentile 88.9 absolute vs 72.6 ATR-normalised; traded median 2.56 disp/ATR vs all-eligible 3.40.
 - §1.3 missed episodes are tradeable (median 58–78 pt) but 2.5–3× smaller than traded (168–224 pt); 4.4–5.4% of episodes touched.
 - §E.3 the regime-state filter's effect is one month; `reg==0` wins on PF in 3 of 7 months; OLD-segment differential is 6.33 vs 6.25.
-- §F.1 solo economics, the non-separability of first entries, and the cost of waiting for depth ($77,239 → $45,430 → $28,004).
-- §F.2 the pre-jar depth ladder.
-- §G the 5 duplicate pairs and 7 dead conditions.
+- §F.1 solo economics, the non-separability of first entries, and the cost of waiting for depth across all three depth definitions ($77,239 take-all → $40,429 / $23,102 at N=5 cluster position; $33,105 / $17,869 at bar-level qualifying depth).
+- §F.2 the pre-jar depth ladder (§0.1.2A bar-level qualifying depth).
+- §0.1 the canonical definitions, and the N=5 vs N=10 divergence that made them necessary (clusters 991 vs 790, size≥5 125 vs 152, DepthYield 1.033 vs 1.256/day).
+- §1.1 the segment-boundary arithmetic at all three candidates; the natural boundary reproduces the canonical 2,698 trades at PF 6.40.
+- §B.1 that `wf.FOLDS` excludes July and is unusable inside a split.
+- §G the **4** duplicate pairs and 7 dead conditions on the eligible universe, effective vocabulary **238** — and the finding that the identity-test domain changes the answer (all-bars gives 1 pair / 6 dead / 242).
 - The depth ladders and cluster statistics quoted throughout, on all three bases.
 - **§C.2 the inadequacy of Pearson** — mean +0.0604 vs mean tail co-exceedance 3.548x independence, 24.6% of pairs misread, rank correlation between measures only +0.246.
 - **§D.0 the missed-episode decomposition** — 89.8% no qualifying signal, 10.2% qualified without entry, 1.4% occupancy-blocked.
