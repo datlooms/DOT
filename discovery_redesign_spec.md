@@ -5,7 +5,8 @@
 **Status:** specification for Developer build and Auditor verification
 **Date:** 2026-07-23
 **Revision 2:** amended 2026-07-23 following external-review assessment and its correction round. Nine verified changes applied (§C.2, §C.3, §D.0, §F.4, §F.5, §F.6, §G.2, §H.1, §J); three provisionally-accepted items refuted by measurement and recorded as withdrawn (§10C).
-**Revision 3:** amended 2026-07-23 following Supervisor verification (APPROVE WITH AMENDMENTS). Defects A1–A5 corrected, gaps G1–G8 answered or assigned, three implementability blockers and three fake-step loopholes closed. **§0.1 is new and is the root fix**: depth, population and tolerance are now defined once and every depth-dependent figure is re-derived against them. Two Supervisor findings are disputed with measurement rather than absorbed — see §F.1. Structure and section numbering preserved.
+**Revision 3:** amended 2026-07-23 following Supervisor verification (APPROVE WITH AMENDMENTS). Defects A1–A5 corrected, gaps G1–G8 answered or assigned, three implementability blockers and three fake-step loopholes closed. **§0.1 is new and is the root fix**: depth, population and tolerance are now defined once and every depth-dependent figure is re-derived against them. Two Supervisor findings are disputed with measurement rather than absorbed — see §F.1.
+**Revision 4:** amended 2026-07-23 following Supervisor re-verification (APPROVE WITH AMENDMENTS, BUILD AUTHORISED SCOPED). O1 removes a directional bias in the objective — `DepthYield` is now per-direction and normalised (§C.1) and greedy selection runs per direction and merges (§C.3.1), with **no directional floor, quota or target encoded anywhere** (§C.3.1a). O2 corrects the §C.2 tail operating point to `tau = 0.20 / MIN_SHARED = 10` and recalibrates `T_max` to a per-segment permutation null. O3 keys two stale split-count references to the derived `K`. One O2 sub-finding is disputed with measurement — see §C.2. Structure and section numbering preserved.
 
 ---
 
@@ -303,22 +304,58 @@ computed on the **pre-jar qualifying masks** (S8B basis 2), not the executed tra
 
 ```
 CoFire(B)     = mean over pairs of cofire(i,j)
-DepthYield(B) = count of same-direction BOOK clusters of size >= S, per traded day,
-                clusters built per §0.1.2(B) at the fixed tolerance N = 5
+
+DepthYield_d(B) = ( count of direction-d BOOK clusters of size >= S )
+                  / ( traded days ) / ( count of direction-d signals in B )
+
+DepthYield(B)   = the PAIR ( DepthYield_LONG , DepthYield_SHORT ) -- never summed
 ```
+
+**`DepthYield` IS EVALUATED WITHIN DIRECTION AND NORMALISED BY THAT DIRECTION'S SIGNAL COUNT. It is never pooled into a single scalar.** A pooled count is scale-dependent: it rewards whichever direction happens to hold more signals, for combinatorial reasons that have nothing to do with signal quality.
+
+**The measured defect it corrects.** On the committed book at S=5, N=5, BOOK, 121 traded days:
+
+| | clusters ≥5 | share | per day | signals |
+|---|---|---|---|---|
+| LONG | 113 | 90.4% | 0.934 | 37 |
+| SHORT | 12 | 9.6% | 0.099 | 13 |
+| **raw ratio** | | | **9.42 : 1** | 2.85 : 1 |
+
+**A 9.42:1 objective disparity against a 2.85:1 signal-count ratio — and it is combinatorial, not quality.** Verified: median trades per signal is comparable (LONG 51, SHORT 49) and median active days per signal is *higher* for shorts (LONG 31, SHORT 38). Thirteen signals cannot co-fire into clusters the way thirty-seven can. The co-firing opportunity set scales with available pairs: C(37,2) = 666 versus C(13,2) = 78, a ratio of **8.54:1** — which tracks the observed 9.42:1 far more closely than the signal-count ratio does.
+
+**Effect of the normalisation, measured:**
+
+| N | S | raw ratio | normalised ratio | signal-count ratio |
+|---|---|---|---|---|
+| 5 | 3 | 3.88 : 1 | **1.36 : 1** | 2.85 : 1 |
+| **5** | **5** | **9.42 : 1** | **3.31 : 1** | **2.85 : 1** |
+| 5 | 7 | 10.50 : 1 | 3.69 : 1 | 2.85 : 1 |
+| 10 | 3 | 2.77 : 1 | **0.97 : 1** | 2.85 : 1 |
+| 10 | 5 | 5.91 : 1 | 2.08 : 1 | 2.85 : 1 |
+| 10 | 7 | 9.75 : 1 | 3.43 : 1 | 2.85 : 1 |
+
+**The disparity largely collapses** — at the default operating point 9.42 → 3.31, against a signal-count ratio of 2.85 — and at S=3 the normalised ratio falls *below* the count ratio (1.36 at N=5; 0.97 at N=10, i.e. shorts marginally ahead).
+
+**A residual remains at S≥5 and it is reported as a finding, not smoothed away.** Normalising by signal count `n` removes a linear factor, but the combinatorial driver is super-linear — co-firing opportunity scales with pair availability (~`n²`), which is why 8.54:1 predicts the raw disparity better than 2.85:1 does. Dividing by `n` therefore leaves roughly the remaining factor. **This is a structural property of counting co-occurrences among unequal pools, not evidence that short signals are worse.** The build reports the normalised ratio at every (N, S) cell so the residual stays visible.
+
+*What would falsify the combinatorial explanation:* if per-signal activity were materially lower for shorts, the disparity would be a quality effect rather than a pool-size effect. Measured, it is not — shorts are active on *more* days per signal. If a future run shows the reverse, the explanation must be revisited.
+
+*Fit risk:* the 37/13 composition is a property of the incumbent book, which is the output of the funnel being replaced. The normalisation is defined in terms of whatever composition the active book has, so it does not encode 37/13 anywhere.
 
 **`S` is NOT hardcoded at 5.** A previous revision fixed `S = 5` while §F.4 declined to fix `U` on the grounds that "setting `U` here would be fitting a threshold to six months without seeing the curve." That argument applies to `S` with identical force, and the inconsistent treatment is removed: **both are deferred to the build, both reported over a grid, both set by the operator on the evidence.**
 
 `DepthYield` is reported over `S ∈ {3, 4, 5, 6, 7}` at N=5 and at N=10. **`S = 5` is the stated default** — not because it is arbitrary but because the measured quality break sits there (bar-level qualifying depth 5-6: PF 87.58, WR 98.6%, worst day positive) — and the default is a starting point the operator may move, not a fixed constant.
 
-Measured reference on the committed book, BOOK population, 123 traded days:
+Measured reference on the committed book, BOOK population, 121 traded days, S=5:
 
 | | N=5 | N=10 |
 |---|---|---|
-| clusters of size ≥ 5 | 125 | 152 |
-| `DepthYield` | **1.033 / day** | 1.256 / day |
+| clusters of size ≥ 5, LONG / SHORT | 113 / 12 | 130 / 22 |
+| pooled per day *(superseded — recorded for continuity only)* | 1.033 | 1.256 |
+| **`DepthYield_LONG`** (per day per long signal) | **0.02524** | 0.02904 |
+| **`DepthYield_SHORT`** (per day per short signal) | **0.00763** | 0.01399 |
 
-`DepthYield` is the objective-relevant quantity — co-firing matters only insofar as it produces depth.
+`DepthYield` is the objective-relevant quantity — co-firing matters only insofar as it produces depth. **The pooled figure is superseded by the per-direction pair and must not be used in the objective.**
 
 *Fit risk:* `S` and `N` are both six-month choices. `N` is fixed a priori (§0.1.3); `S` is left open and reported over a grid so the sensitivity is visible rather than buried in a constant.
 
@@ -329,25 +366,44 @@ Measured reference on the committed book, BOOK population, 123 traded days:
 Build the per-signal daily-loss series from S6's regenerated `signal_per_day_pnl.jsonl` (§B). For each pair, restricted to days where **both** signals traded:
 
 ```
-tau            = 0.10
-MIN_SHARED     = 20        -- minimum shared active days for a pair to contribute
+tau            = 0.20      -- CORRECTED from 0.10
+MIN_SHARED     = 10        -- CORRECTED from 20
 q_i, q_j       = the tau-quantile of each signal's daily-loss series over shared active days
 coexceed(i,j)  = P( loss_i <= q_i  AND  loss_j <= q_j )
 lambda_L(i,j)  = coexceed(i,j) / tau          -- 1.0 == independence
 failcorr(i,j)  = Pearson correlation of the two daily-loss series   [RETAINED AS A REPORTED DIAGNOSTIC ONLY]
 ```
 
-**MINIMUM-OVERLAP FLOOR (mandatory).** A 50-signal book yields 1,225 pairs, many sharing only a handful of active days. Pearson `r` on `n = 2` is noise and must not enter an unweighted mean. **A pair contributes to `TailDep(B)` or `FailCorr(B)` only if it has `>= MIN_SHARED = 20` shared active days.** Pairs below the floor are:
+**THE OPERATING POINT WAS WRONG AND IS CORRECTED. `tau = 0.10 / MIN_SHARED = 20` is superseded.** Measured across the full C(50,2) = 1,225 pair space of the committed book:
+
+| operating point | pairs retained | mean λ retained | mean λ excluded | exclusion bias |
+|---|---|---|---|---|
+| **τ=0.10, k=20** *(superseded)* | **100 / 1,225 = 8.2%** | 3.96 | **4.34** | **ANTI-CONSERVATIVE** |
+| τ=0.20, k=20 | 100 / 1,225 = 8.2% | 4.24 | 3.93 | conservative |
+| τ=0.10, k=10 | 790 / 1,225 = 64.5% | 4.62 | 3.70 | conservative |
+| **τ=0.20, k=10 — ADOPTED** | **790 / 1,225 = 64.5%** | **4.13** | **3.61** | **conservative** |
+
+Three defects at the superseded point, all measured:
+1. **It retains only 8.2% of the pair space** — the hard constraint was calibrated on a twelfth of the structure it claims to bound.
+2. **The exclusion was ANTI-CONSERVATIVE.** The excluded pairs were *more* tail-dependent than the retained ones (4.34 vs 3.96), so the constraint systematically discarded the very pairs most likely to breach it.
+3. **The estimator was degenerate at the floor.** With `k = 20` and `τ = 0.10`, co-exceedance counts move in steps of `1/(k·τ) = 0.5`; among near-floor pairs only **8 distinct λ values** occurred across 83 pairs, clustered at 0.0 / 0.5 / 1.0 / 1.25 / 1.30 / 1.36 / 1.43 / 10.0 — a near-degenerate distribution barely distinguishable from independence.
+
+**Decomposition of the fix — the two changes do different work, and both are needed:**
+- `MIN_SHARED` 20 → 10 fixes **retention**: 8.2% → 64.5%. Retention depends only on the floor, not on τ.
+- `tau` 0.10 → 0.20 fixes the **bias direction**: at the same floor, τ=0.10 excludes the more-dependent pairs while τ=0.20 excludes the less-dependent ones.
+
+*Departure from the Supervisor's measurement, reported rather than absorbed.* The structural findings reproduce exactly — 8.2% retention at k=20, and the bias flipping to conservative at τ=0.20/k=10. Two figures differ. My absolute λ levels are higher (3.96/4.34 versus the Supervisor's 1.21/1.82), which changes no decision since the comparison is between arms of the same estimator. More substantively, **the fire-frequency association is not removed by the correction and on my measurement is stronger at the adopted point** — Spearman(retained, fire-frequency) = +0.375 at k=20 versus **+0.584** at k=10 — where the Supervisor reported the adopted point dominating on every axis. Part of this is mechanical (an indicator retained 8.2% of the time has less variance to correlate), but the association is real at both points, it is **not** eliminated by the fix, and it is recorded in the residual limitation below rather than claimed as solved.
+
+**MINIMUM-OVERLAP FLOOR (mandatory).** A 50-signal book yields 1,225 pairs, many sharing only a handful of active days, and Pearson `r` on `n = 2` is noise that must not enter an unweighted mean. **A pair contributes to `TailDep(B)` or `FailCorr(B)` only if it has `>= MIN_SHARED = 10` shared active days.** Pairs below the floor are:
 - **excluded** from both means;
 - **counted and reported** — the run report states how many pairs qualified, how many were excluded, and the excluded share, so a book whose pairwise structure is mostly unmeasurable is visible rather than silently averaged;
-- **flagged as a book-level risk** if more than 50% of pairs fall below the floor, since in that case the pairwise constraint is not meaningfully binding and `FailConc` (which needs no pair overlap) must carry the survival decision alone.
-
-The floor of 20 is the value used in the verification below: on the committed book **122 of 1,225 pairs qualified**. That is a low qualifying share and is itself a finding — the pairwise tail structure of a 50-signal book on six months is thinly measured, and the build must not present `TailDep` as more precise than that supports.
+- **flagged as a book-level risk** if more than 50% of pairs fall below the floor, since in that case the pairwise constraint is not meaningfully binding and `FailConc` (which needs no pair overlap) must carry the survival decision alone. **At the corrected operating point the committed book retains 64.5%, so the flag does not fire; at the superseded point it would have.**
+- The build must also report the **mean λ of the excluded pairs**, so the direction of the exclusion bias is visible every run rather than assumed benign. That single diagnostic is what exposed the superseded operating point.
 
 Book-level:
 
 ```
-TailDep(B)   = mean pairwise lambda_L over pairs with >= 20 shared active days
+TailDep(B)   = mean pairwise lambda_L over pairs with >= MIN_SHARED shared active days
 FailConc(B)  = the book's worst single-day loss expressed as a multiple of its mean daily loss
 CVaR_i       = the mean of signal i's daily P&L over the worst 5% of BOOK days
 mCVaR_i      = CVaR_i / (signal i's share of book lots)     -- marginal tail contribution per unit exposure
@@ -355,7 +411,7 @@ mCVaR_i      = CVaR_i / (signal i's share of book lots)     -- marginal tail con
 
 `FailConc` remains the survival-first book-level quantity. `TailDep` replaces `FailCorr` as the pairwise measure. `mCVaR_i` identifies individual tail-risk concentrators — signals whose contribution to the worst days is disproportionate to their exposure — which is the per-signal diagnostic the FTMO daily ceiling actually needs and which no ranking on PF can surface.
 
-**VERIFICATION (measured on the committed book, 122 pairs with >= 20 shared active days):**
+**VERIFICATION (measured on the committed book at the SUPERSEDED operating point, 122 pairs with >= 20 shared active days). The qualitative finding — Pearson materially understates joint tail failure — is what this establishes, and it is unchanged by the operating-point correction; the specific λ level is re-measured at the adopted point by the build.**
 
 | measure | value |
 |---|---|
@@ -368,12 +424,31 @@ Pearson says the book's failures are essentially uncorrelated. In the tail they 
 
 **ACCEPTANCE RULE (implementable and verifiable):**
 
-1. **Hard bound, RELATIVE:** no candidate book may have `TailDep(B) > T_max`, where `T_max` is the incumbent book's `TailDep` **measured on the ACTIVE TRAINING SEGMENT** — never the full-series value.
+1. **Hard bound, CALIBRATED TO A PER-SEGMENT PERMUTATION NULL — not to a fixed reference.** `T_max` is expressed as a **ratio to the null**, never as an absolute λ level and never as the fixed 3.548 full-series figure.
+
+   **Construction, per training segment:** permute each signal's daily-loss series independently across its own active days (destroying cross-signal alignment while preserving each signal's own loss distribution and activity pattern), recompute `TailDep` over the permuted book, repeat `P >= 500` times. This yields `TailDep_null(segment)` — the tail co-exceedance a book of this shape, activity and loss distribution produces **by chance alone** in **this** segment.
+
+   ```
+   T_max = kappa * TailDep_null(segment)
+   ```
+
+   `kappa` is set from the incumbent book's own ratio `TailDep_incumbent / TailDep_null`, measured **on the active training segment**. A candidate book is rejected if its tail co-exceedance exceeds the incumbent's by more than that multiple of what chance produces in the same segment.
+
+   **Why a null rather than a level.** An absolute λ threshold is not portable: λ depends on `tau`, on `MIN_SHARED`, on book size, on activity density and on segment length, all of which differ across §I splits. A fixed 3.548 would be a different bar in every segment while appearing constant. The ratio-to-null is dimensionless and segment-comparable, and it is the same empirical-null logic §H.1 already uses for the selection statistic — applied here to a constraint.
+
+   *Secondary refinement, NOT the primary fix:* partial pooling / empirical-Bayes shrinkage of per-pair λ toward the book mean, weighted by shared-day count, would further stabilise thinly-observed pairs. It is **recorded as a worthwhile refinement to evaluate after the null calibration is in place** — it is not the remedy for the operating-point defect and must not be substituted for it.
 2. **Hard bound, RELATIVE:** no single signal may carry `mCVaR_i` worse than `C_max` = the 90th percentile of the incumbent's `mCVaR` distribution, **measured on the ACTIVE TRAINING SEGMENT**.
 3. **Hard bound, ABSOLUTE — required, and not satisfied by 1 and 2.** A purely relative bar only guarantees the new book is no worse than the old; it cannot detect a book that is unsafe in absolute terms, and if the incumbent is itself unsafe the bar certifies the fault. The absolute constraint is the survival one and it is stated in units the account uses, not in multiples of the incumbent: **modelled worst day within the FTMO daily ceiling with stated margin, evaluated on the FULL population** (§0.1.1), since gap-filler P&L lands on the same calendar day as book P&L and the ceiling does not distinguish them.
 4. **Reported, not gating:** `FailCorr(B)` (Pearson) is retained in the output purely so the divergence between the two measures stays visible to the Auditor.
 
-**The full-series values are REPORTING REFERENCES ONLY** and must never enter a walk-forward constraint: `TailDep` 3.548, and the `mCVaR` distribution from which p90 is drawn. Quoting them as a bound inside a §I split is a §I.4.2 violation.
+**The full-series values are REPORTING REFERENCES ONLY** and must never enter a walk-forward constraint: the 3.548 figure (measured at the superseded operating point), and the `mCVaR` distribution from which p90 is drawn. Quoting either as a bound inside a §I split is a §I.4.2 violation.
+
+**RESIDUAL LIMITATION — stated plainly, and not to be presented away.** Even at the corrected operating point:
+- the pairwise tail structure is measured on **64.5% of the pair space**, a majority but far from all of it;
+- retention remains **associated with fire frequency** (Spearman +0.584 at the adopted point on my measurement), so the measured pairs are not a random sample of the pair space — frequently-firing signals are over-represented in the constraint;
+- `MIN_SHARED = 10` at `tau = 0.20` still gives co-exceedance steps of `1/(k·tau) = 0.5`, so per-pair λ remains coarse even where it is estimated.
+
+**`TailDep` is therefore a real but imprecise constraint and must not be reported as more precise than the data supports.** Where `TailDep` and `FailConc` disagree, `FailConc` and the absolute survival bound — neither of which needs pair overlap — carry the decision.
 
 *What would falsify this:* if `TailDep` and `FailConc` rank candidate books identically (rank correlation > 0.9), the pairwise tail measure adds nothing over the book-level one and the simpler quantity should govern. The build reports both for every candidate book.
 
@@ -381,29 +456,61 @@ Pearson says the book's failures are essentially uncorrelated. In the tail they 
 
 ### C.3 — The objective
 
-**Maximise `DepthYield(B)` subject to `FailConc(B)`, `TailDep(B)` and survival constraints.**
+**Maximise `DepthYield_d(B)` WITHIN EACH DIRECTION `d`, subject to `FailConc(B)`, `TailDep(B)` and survival constraints.**
 
-Formally, the build implements a lexicographic objective consistent with survival-first doctrine:
+The objective is applied **per direction**, and the constraints below are evaluated on the merged book. Formally, the build implements a lexicographic objective consistent with survival-first doctrine:
 
 1. **Hard constraint:** worst modelled day within the FTMO ceiling with stated margin. Any book violating this is rejected regardless of other properties.
 2. **Hard constraint:** `FailConc(B) <= F_max`, with `F_max` set from the incumbent book's value **measured on the ACTIVE TRAINING SEGMENT** — never the full-series figure (§I.4.2).
 3. **Hard constraint:** `TailDep(B) <= T_max` and per-signal `mCVaR_i <= C_max` per §C.2.
-4. **Maximise:** `DepthYield(B)`.
-5. **Tie-break (§D.1):** higher `Coverage(B)` among books within tolerance of the best `DepthYield`.
+4. **Maximise:** `DepthYield_d(B)` — the normalised, within-direction measure of §C.1, run independently for each direction per §C.3.1.
+5. **Tie-break (§D.1):** higher `Coverage(B)` among books within tolerance of the best `DepthYield_d`.
 6. **Tie-break:** lower `FailCorr(B)` (Pearson, reported diagnostic).
 
 **This inverts the old objective on axis (i) while preserving it on axis (ii).** Co-firing is now rewarded; correlated failure is still penalised.
 
 #### C.3.1 — The search procedure
 
-The objective above specifies **what** to optimise. The search over candidate books is **greedy forward selection with CELF (Cost-Effective Lazy Forward) evaluation**: start from the empty book, iteratively add the signal producing the largest marginal gain in the objective, maintain a priority queue of upper-bound marginal gains and re-evaluate lazily, stop when the marginal gain falls below a stated threshold or a hard constraint binds.
+The objective above specifies **what** to optimise. The search over candidate books is **greedy forward selection with CELF (Cost-Effective Lazy Forward) evaluation**, **RUN SEPARATELY PER DIRECTION AND MERGED**: for each direction independently, start from the empty book, iteratively add the signal producing the largest marginal gain in that direction's objective, maintain a priority queue of upper-bound marginal gains and re-evaluate lazily, stop when the marginal gain falls below a stated threshold or a hard constraint binds. Then merge the per-direction books and evaluate the merged book against every constraint in §C.3.
 
-**MANDATORY CAVEAT — the approximation guarantee does NOT transfer to the full objective.** `Coverage` is submodular and a greedy selection over coverage alone inherits the standard (1 − 1/e) bound. The failure-correlation and tail-dependence penalties are **not submodular in general** — adding a signal can change pairwise tail structure non-monotonically. Therefore:
+**WHY PER DIRECTION — this is the structural fix, and it is load-bearing.** Under a pooled greedy search, a short signal's marginal `DepthYield` contribution is roughly an order of magnitude below a long signal's **regardless of its quality**, for the combinatorial reasons measured in §C.1 (raw 9.42:1 against a 2.85:1 signal-count ratio, tracking the 8.54:1 pair-availability ratio). Pooled greedy would therefore add longs almost exclusively — and the effect is **self-reinforcing**: each long added raises long co-firing opportunity and depresses the relative marginal value of every remaining short.
+
+**The failure would have been silent.** §H.3.1's directional protections are triggered by *removal*, and a book that never acquires shorts never reaches the "last short signal" trigger. The operator's directive would have been protected at three stages and unguarded at the decisive one. Running the search per direction removes the bias **structurally** — shorts compete only against shorts, so no cross-direction marginal comparison is ever made during selection.
+
+Note the division of labour between the two O1 fixes: **§C.1's normalisation makes the two directions' numbers comparable for REPORTING**; **this per-direction search is what actually prevents the bias in SELECTION.** The normalisation alone would not have been sufficient, because a residual disparity remains at S≥5 (§C.1) and pooled greedy would still have exploited it.
+
+**NO DIRECTIONAL TARGET IS ENCODED ANYWHERE. This is a prohibition, not a preference.**
+- There is **no directional floor, quota, target, minimum short-signal count, or reserved allocation** in the objective, the search, the constraints, or the stopping rule.
+- Each direction's search stops on **its own** marginal-gain threshold and **its own** constraint binding — never on a count.
+- A direction may legitimately terminate with **zero** signals if nothing in it clears the §H bars. That is a permitted and reportable outcome.
+- **An Auditor confirming compliance should verify that no integer signal-count target for either direction appears in `selection.py`, and that neither direction's stopping rule reads the other direction's book.**
+
+A directional floor was proposed and **overruled**, on two grounds recorded here so it is not re-proposed: (i) a floor is a pre-set target imposed before the search runs — it tells the picker what to find, which is the prescriptive failure the additive doctrine forbids; (ii) any floor calibrated on the incumbent's 13 shorts would be calibrated on an **artifact**, since that book is the output of the funnel being replaced, built under a decorrelation objective now believed to have selected against depth. The new search spans fourteen families and ~238 conditions and may surface a materially different composition; calibrating a constraint against the thing being discarded is circular.
+
+**MANDATORY CAVEAT — the approximation guarantee does NOT transfer to the full objective.** `Coverage` is submodular and a greedy selection over coverage alone inherits the standard (1 − 1/e) bound. The failure-correlation and tail-dependence penalties are **not submodular in general** — adding a signal can change pairwise tail structure non-monotonically. The per-direction split does not change this. Therefore:
 
 - The build must **either** verify submodularity for the specific penalty as implemented (and document the proof or the counterexample search),
 - **or** use greedy purely as a heuristic and **make no claim of the (1 − 1/e) bound anywhere** in code comments, run reports, or documentation.
 
 Claiming the bound without establishing it is an invalidity condition. The Auditor should check for the claim, not just the algorithm.
+
+**Merge-stage requirement.** The per-direction books are merged before the §C.3 constraints are evaluated, because `FailConc`, `TailDep` and the absolute survival bound are properties of the **combined** book — cross-direction tail co-dependence is real and must not escape measurement by being searched separately. If the merged book violates a constraint, the build reports which direction's marginal additions caused it and backs off **from the direction that caused it**, never by default from the smaller one.
+
+#### C.3.1a — Directional composition is an OUTPUT, not an input
+
+**The resulting long/short split is a measured result about this instrument and this vocabulary. It is reported, never targeted.**
+
+Headline reporting requirements, in the run report and not buried in a CSV:
+1. Final **long/short signal split** of the selected book.
+2. **`DepthYield_LONG` and `DepthYield_SHORT`** separately, at every (N, S) cell, with the raw and normalised ratios and the signal-count ratio alongside.
+3. **Per-direction constraint outcomes** — which direction, if either, was stopped by a constraint rather than by marginal gain, and which constraint.
+4. **Per-direction §H outcomes** — empirical-null pass rate, stability retention, and §H.3 bucket results, each within direction.
+
+**Interpretive context, recorded so the result is read correctly.** US30 is an equity index with structural upward drift. **A long-dominant book is a plausible and legitimate outcome for this instrument, not prima facie evidence of bias** — that is a hypothesis this run tests, not an assumption it encodes. Equally, directional composition is **regime-dependent** and this span is predominantly bullish, so a composition measured here must not be treated as a permanent property of the system. Whatever emerges — heavily long, balanced, or short-dominant — is a finding.
+
+*What would falsify the combinatorial diagnosis:* if, with the per-direction search in place, shorts still enter at a rate far below longs *after* clearing identical within-direction §H bars, the disparity is not purely structural and the residual cause must be measured rather than assumed.
+
+*Fit risk:* the per-direction split is itself a design choice made after observing a directional imbalance on six months. It adds no fitted parameter and encodes no target, which is why it is preferred to a floor — but it must be carried into every §I split unchanged, not re-decided per segment.
 
 *What would falsify greedy as the right search:* on a reduced instance small enough for exhaustive enumeration, if greedy's book is materially worse than the exhaustive optimum, the heuristic is inadequate and the build must escalate to a solver formulation. The build runs this comparison on at least one reduced instance and reports the gap.
 
@@ -950,7 +1057,7 @@ Item 6 was previously a convention with no mechanism. The sacred five have `veri
 - The §I.3 headline may only be reported alongside the full attestation trail. **A pass figure presented without its trail is not a result.**
 - The Auditor verifies the trail count against the number of reported splits. A trail longer than the report is the signature this mechanism exists to expose.
 
-*Fit risk, stated plainly:* four splits over six months gives training segments of roughly 1.5–5 months and test segments of ~1.5 months. These are short. A pass is meaningful evidence that the method generalises; it is not proof that it generalises across market regimes not present in 2026 H1. The honest resolution is a second out-of-sample export, which remains the project's highest-value un-run validation.
+*Fit risk, stated plainly:* the split count is **derived from the §I.1 floor, not fixed** — on 127 post-warmup trading days with a 60-day floor on the first anchored training segment, the series supports **3 splits**, with a first training segment of ~60 days and test segments of roughly 20–30 trading days. These are short, and the floor exists because anything shorter makes §H.2 and §H.3 unexecutable rather than merely weak. A pass is meaningful evidence that the method generalises; it is not proof that it generalises across market regimes not present in 2026 H1. The honest resolution is a second out-of-sample export, which remains the project's highest-value un-run validation.
 
 ---
 
@@ -982,7 +1089,7 @@ Primary statistic: **AUC of `lambda(t_1)` as a classifier of "cluster reaches si
 
 | outcome | interpretation | consequence |
 |---|---|---|
-| **AUC ≥ 0.65** out-of-sample on ≥3 of 4 §I splits | first-arrival intensity carries real predictive information | escalate: §F is revisited, depth may become partly a pre-trade input |
+| **AUC ≥ 0.65** out-of-sample on **at least `ceil(0.75 * K)` of the `K` derived §I splits** (K per §I.1; K=3 → 3, K=4 → 3, K=5 → 4) | first-arrival intensity carries real predictive information | escalate: §F is revisited, depth may become partly a pre-trade input |
 | **AUC 0.55–0.65** | weak signal, not actionable alone | report; may enter as one input to a §F.3 sizing curve, never as a filter |
 | **AUC < 0.55** | the §F.2 finding stands and is now confirmed by a second method | close the line; record as a documented negative |
 
@@ -992,7 +1099,7 @@ Primary statistic: **AUC of `lambda(t_1)` as a classifier of "cluster reaches si
 - The fit must respect §I boundaries: parameters estimated inside a training segment, evaluated on the untouched test segment, embargo applied.
 - **No row deletion.** Arrival times are indices into the intact series.
 
-*Fit risk:* three free parameters (`mu_0`, `alpha`, `beta`) fitted on short segments. A positive result on a single split is not a result; the ≥3-of-4 requirement is the guard. Reporting AUC without the per-split values is a §I.4-class fake step.
+*Fit risk:* three free parameters (`mu_0`, `alpha`, `beta`) fitted on short segments. A positive result on a single split is not a result; the `ceil(0.75 * K)`-of-`K` requirement is the guard. **The bar is keyed to the derived split count, not to a literal**, so it cannot silently become unanimity if `K` changes — at the currently derived `K = 3` it is 3-of-3, which IS unanimity, and that is a known consequence of a short series rather than an intended strictness. If `K = 3` obtains, the build reports the AUC margin on every split so a narrow 3-of-3 pass is distinguishable from a decisive one. Reporting AUC without the per-split values is a §I.4-class fake step.
 
 ---
 
@@ -1046,7 +1153,9 @@ Everything runs under `master.py`. No standalone scripts.
 - §B.1 that `wf.FOLDS` excludes July and is unusable inside a split.
 - §G the **4** duplicate pairs and 7 dead conditions on the eligible universe, effective vocabulary **238** — and the finding that the identity-test domain changes the answer (all-bars gives 1 pair / 6 dead / 242).
 - The depth ladders and cluster statistics quoted throughout, on all three bases.
-- **§C.2 the inadequacy of Pearson** — mean +0.0604 vs mean tail co-exceedance 3.548x independence, 24.6% of pairs misread, rank correlation between measures only +0.246.
+- **§C.2 the inadequacy of Pearson** — mean +0.0604 vs mean tail co-exceedance 3.548x independence, 24.6% of pairs misread, rank correlation between measures only +0.246 (measured at the superseded operating point; the qualitative finding is unaffected by the correction).
+- **§C.2 the operating-point defect** — τ=0.10/k=20 retains 8.2% of the pair space and its exclusion is anti-conservative (excluded λ 4.34 vs retained 3.96); τ=0.20/k=10 retains 64.5% and flips the bias conservative.
+- **§C.1 the directional disparity is combinatorial** — raw 9.42:1 at S=5/N=5 against a 2.85:1 signal-count ratio and an 8.54:1 pair-availability ratio, with short signals active on *more* days per signal (38 vs 31) and comparable trades (49 vs 51). Normalisation collapses it to 3.31:1.
 - **§D.0 the missed-episode decomposition** — 89.8% no qualifying signal, 10.2% qualified without entry, 1.4% occupancy-blocked.
 - **§F.4 that the decision-6 population is empty** — 0 of 623 depth≥2 events at ≤3 unique variables; unique variables rise 3 → 12 with depth; the original observation was a lookup artifact covering 48 of 50 signals.
 - **§F.6 the depth × volatility interaction** ($23.3 / $28.0 / $115.5) and the survival of the depth ladder under volatility and session control (partial rho +0.2793, p = 4.6e-47).
