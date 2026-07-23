@@ -210,7 +210,7 @@ against the short-term direction. The system's D2D gate operates on `D2D_Signal`
 not on `D2D_Trend_Dir` agreement. **D2D's contribution must be re-measured correctly before any
 conclusion is drawn.** Standalone raw D2D remains a ~77% WR behaviour over the full history.
 
-### 5.1 THE AT_Regime_ST GATE — the headline actionable finding
+### 5.1 THE AT_Regime_ST GATE — RETRACTED (see retraction below)
 
 `AT_Slope_ST` is continuous (848 distinct values, −0.00093 → +0.000813). The 171-variable set also
 carries **`AT_Regime_ST`, a native binary state (0/1)** — no derivation required, already exported,
@@ -235,35 +235,47 @@ not one variable measured two ways.**
 output, requires no derivation, carries no export=live risk, and its latch resists whipsaw in flat
 regimes. Do not substitute `sign(AT_Slope_ST)`.
 
-**Gate result — BOOK-50 trades split by whether AT_Regime_ST direction matches trade direction:**
+### RETRACTION — THIS SECTION'S ORIGINAL GATE CLAIM WAS WRONG
 
-| Segment | Aligned | Misaligned |
-|---|---|---|
-| **OLD (Apr08–Jun25)** | 630 tr, WR 92%, PF 6.63, **+$21,377** | 345 tr, WR 92%, PF 5.21, +$9,983 |
-| **NEW (Jun25–Jul21)** | **267 tr, WR 87%, PF 3.83, +$9,228, wd −$116** | 108 tr, WR 68%, PF 0.78, **−$821, wd −$535** |
+**An earlier version of this section reported a "directional alignment" gate on `AT_Regime_ST` as the
+headline actionable finding, with 267 tr / PF 3.83 / +$9,228 / worst-day −$116 on the NEW segment.
+THOSE FIGURES ARE ARITHMETICALLY CORRECT BUT MISLABELLED.** They were produced by a filter that kept
+trades where `AT_Regime_ST == 1` **irrespective of trade direction** — a regime-STATE filter, not a
+directional-alignment gate. The cause was a case bug (`direction == 'long'` tested against an
+uppercase `'LONG'` column), which silently typed every trade as short and collapsed the comparison to
+the regime state alone.
 
-*(Cross-checked two ways: the native `AT_Regime_ST` state gives 267 tr / PF 3.83 / $9,228 / wd −$116;
-independently deriving `sign(AT_Slope_ST)` gives 268 tr / PF 3.90 / $9,729 / wd −$114. Same answer,
-two methods.)*
+**All three readings, measured on the same 375 NEW-segment book trades (independently reproduced
+twice):**
 
-**THE THREE CONSEQUENCES:**
+| Reading | n | WR | PF | Net | Worst day |
+|---|---|---|---|---|---|
+| **Directional alignment, correct encoding** | 171 | 74.9% | **0.97** | **−$111** | **−$683** |
+| Directional alignment, inverted encoding | 204 | 86.3% | 3.98 | +$8,518 | −$476 |
+| **Regime-state `== 1`, no direction test** | 267 | 86.5% | 3.83 | +$9,228 | −$116 |
 
-1. **The aligned subset EXCEEDS the whole book's new-segment net.** Aligned = +$9,228 vs the full
-   book's +$8,407. The misaligned trades subtract from the result; removing them adds ~$821.
-2. **The worst-day problem lives entirely in the misaligned trades.** Book worst day = −$565.
-   Aligned-only worst day = **−$116**. Misaligned worst day = −$535. Gating cuts tail risk ~5x.
-3. **It holds in BOTH segments** — PF 6.63 old / 3.83 new, positive throughout.
+The third row reproduces the previously published figures to every digit. The first row is the gate as
+it was actually decided.
 
-**REGIME INTERPRETATION (why the misaligned group collapsed):** in the OLD segment the misaligned
-(counter-slope) trades were perfectly healthy — WR 92%, PF 5.21, +$9,983. These are pullback entries:
-buying a dip against short-term slope, which works when there is an established trend to pull back
-*into*. In the NEW flat/directionless segment there was no trend to resume, so the "pullback" simply
-continued and they bled (PF 0.78). **AT_Regime_ST alignment therefore functions as a trend-presence
-filter, not as a signal-quality filter.** The signals need not be deleted — they need gating on trend
-context.
+**CONSEQUENCE: the directional AT gate REMOVES the book's profit** — PF 0.97, net −$111, and a worst
+day of −$683 (deeper than the ungated book's −$565). It is not an improvement in any respect.
 
-**This is a single-variable gate addition using a variable already present in the export and already
-computed live by the EA.** It is not a rebuild.
+This is consistent with three later independent measurements: concurrent-population PF falls 9.76 →
+6.85 under `AT_Regime_ST` directional gating and 9.76 → 6.97 under the panel-true `sign(AT_Slope_ST)`.
+**No directional AT gate is supported on any variable tested.**
+
+**AND THE REGIME-STATE OPERATION DOES NOT SURVIVE SCRUTINY EITHER.** `AT_Regime_ST == 0` beats `== 1`
+on PF in three of the seven calendar buckets; the OLD-segment differential is neutral (6.33 vs 6.25);
+the entire effect is concentrated in July. That is precisely the pattern a regime-conditional
+persistence test exists to catch. It is retained as a REPORTED CONDITIONER for further measurement,
+not adopted as a gate.
+
+**STATUS: no AT gate — directional or regime-state — is adopted. Recorded decision 2 is REVERSED.**
+The variable remains fully in the vocabulary and in the export; nothing is deleted. What would be
+required to establish the regime-state variant is specified in `discovery_redesign_spec.md`.
+
+**The encoding and latch findings above stand** — they were verified against DOT.cs source and are
+unaffected by this retraction.
 
 ### Over-gating boundary
 Stacking six conditions (conc>=2 + ADX>=30 + Vol>=300 + AT_ST + D2D + Hurst) collapses to **2 trades
@@ -367,9 +379,11 @@ This should be treated as ONE dataset for rolling-window persistence testing, no
 7. **Fix the hardcoded OOS window** in the scorer — currently fixed to May–Jun. Must become
    data-relative (last third of loaded data, or an `--oos-from` parameter).
 8. **Add a per-trade CSV export** to master.py so performance can be sliced without re-running.
-9. **Validate the `AT_Regime_ST` gate** (section 5.1) across rolling windows on the full stitched
-   Jan–Jul series — does it hold continuously, and what is the optimal treatment of the misaligned
-   pullback signals (gate on trend-presence vs remove)?
+9. ~~Validate the `AT_Regime_ST` gate across rolling windows~~ **CLOSED — GATE RETRACTED.** The
+   directional gate is PF 0.97 / net −$111 on the new segment; the regime-state variant fails
+   regime-conditional persistence (effect confined to July, OLD-segment differential neutral).
+   Neither is adopted. Requirements to establish the regime-state variant are specified in
+   `discovery_redesign_spec.md`.
 10. ~~Confirm the `AT_Regime_ST` encoding against DOT.cs~~ **CLOSED** — confirmed at DOT.cs L3102/
    L3113 and across 177,251 bars. Additionally established: AT_Regime_ST is a LATCHED anchor, not an
    instantaneous slope sign. The native binary state is the ratified gate variable.
@@ -388,17 +402,18 @@ This should be treated as ONE dataset for rolling-window persistence testing, no
   rigor upgrades are available.
 - A **gate-first selection paradigm** is proposed as the structural fix.
 
-### THE SINGLE MOST ACTIONABLE OUTCOME
-**`AT_Regime_ST` alignment is a one-variable gate, already native to the 171-column export and already
-computed live by the EA, that on the new segment:**
-- **raises net above the ungated book** (+$9,228 vs +$8,407),
-- **lifts PF 2.19 → 3.83 and WR 81% → 87%**,
-- **cuts the worst day from −$565 to −$116 (~5x tail-risk reduction)**,
-- **and holds in the old segment too** (PF 6.63, +$21,377).
+### THE SINGLE MOST ACTIONABLE OUTCOME — WITHDRAWN
+**An earlier version of this document named an `AT_Regime_ST` directional gate as the headline
+actionable outcome. THAT CLAIM IS WITHDRAWN — see the retraction in §5.1.** The published figures were
+a regime-STATE filter mislabelled as directional alignment (case bug). The directional gate as
+described is PF 0.97 / net −$111 / worst-day −$683 on the new segment: it removes the book's profit
+and deepens the tail. No AT gate, directional or regime-state, is adopted.
 
-The trades it removes are counter-slope pullback entries whose viability depends on an established
-trend — healthy in the trending segment (PF 5.21), loss-making in the flat one (PF 0.78). The gate is
-therefore a **trend-presence filter**, and the affected signals likely need gating rather than deletion.
+**What stands in its place as the strongest measured result: CONCURRENCE DEPTH.** It is corroborated
+three independent ways (single-bar depth, temporal cluster size, pre-jar qualifying depth), is
+monotonic in both segments, requires no gate, and the depth-3+ population took zero losses in either
+segment. Removing solo (depth-1) entries alone takes the book from PF 5.07 / worst-day −$565 to
+**PF 7.06 / worst-day −$292** across the full series.
 
 Nothing here requires rebuilding the system from zero. The core is intact and measurable; the work is
 to make selection target what demonstrably persists.

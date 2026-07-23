@@ -1048,24 +1048,37 @@ out-earned 243 base trades on the new segment. Hurst p90 standalone: 94% WR, PF 
 forward moves. By hour: 12:00 EST $4,674; 10:00 EST $1,621 at **100% WR** and the highest mean
 concurrency. This also explains why March (the crash) was the best month — maximum directional thrust.
 
-### 5. THE FIX — `AT_Regime_ST`, a gate already in the export
-`AT_Regime_ST` is the EA's **native binary trend-strength state**, already exported, already computed
-live. Gating BOOK-50 trades on directional alignment with it:
+### 5. `AT_Regime_ST` — THE GATE CLAIM IS RETRACTED
 
-| Segment | Aligned | Misaligned |
-|---|---|---|
-| OLD | 630 tr, WR 92%, PF 6.63, **+$21,377** | 345 tr, WR 92%, PF 5.21, +$9,983 |
-| **NEW** | **267 tr, WR 87%, PF 3.83, +$9,228, wd −$116** | 108 tr, WR 68%, PF 0.78, **−$821, wd −$535** |
+**An earlier version of this section recorded an `AT_Regime_ST` directional-alignment gate as the
+phase's headline fix, citing 267 tr / PF 3.83 / +$9,228 / wd −$116 on the NEW segment. THE FIGURES ARE
+ARITHMETICALLY CORRECT BUT MISLABELLED.** They came from a filter that kept trades where
+`AT_Regime_ST == 1` **regardless of trade direction** — a regime-STATE filter, not directional
+alignment. Cause: a case bug (`direction == 'long'` tested against an uppercase `'LONG'` column) which
+silently typed every trade as short.
 
-**The aligned subset EXCEEDS the whole book's new-segment net** (+$9,228 vs +$8,407) — the misaligned
-trades subtract. **The entire worst-day problem lives in the misaligned cohort**: book −$565,
-aligned-only −$116, misaligned −$535. Gating cuts tail risk ~5x. Holds in both segments.
+**All three readings on the same 375 NEW-segment book trades, independently reproduced twice:**
 
-**Interpretation:** in the OLD segment the misaligned (counter-slope) trades were healthy — WR 92%,
-PF 5.21. These are **pullback entries**: buying a dip against short-term slope, which works when there
-is an established trend to pull back into. In the flat NEW segment there was no trend to resume.
-**`AT_Regime_ST` alignment is a TREND-PRESENCE filter, not a signal-quality filter.** The affected
-signals need gating, not deletion.
+| Reading | n | WR | PF | Net | Worst day |
+|---|---|---|---|---|---|
+| **Directional alignment, correct encoding** | 171 | 74.9% | **0.97** | **−$111** | **−$683** |
+| Directional alignment, inverted encoding | 204 | 86.3% | 3.98 | +$8,518 | −$476 |
+| **Regime-state `== 1`, no direction test** | 267 | 86.5% | 3.83 | +$9,228 | −$116 |
+
+Row 3 reproduces the previously recorded figures exactly. Row 1 is the gate as it was actually decided.
+
+**The directional AT gate REMOVES the book's profit** — PF 0.97, net −$111, worst day −$683 (deeper
+than the ungated −$565). Consistent with three later independent measurements: concurrent PF falls
+9.76 → 6.85 under `AT_Regime_ST` and 9.76 → 6.97 under the panel-true `sign(AT_Slope_ST)`.
+**No directional AT gate is supported on any variable tested.**
+
+**The regime-state operation also fails scrutiny:** `== 0` beats `== 1` on PF in three of seven
+calendar buckets, the OLD-segment differential is neutral (6.33 vs 6.25), and the entire effect is
+July — exactly what regime-conditional persistence testing exists to catch. Retained as a REPORTED
+CONDITIONER for further measurement, not adopted.
+
+**The encoding and latch findings below stand** — verified against DOT.cs source, unaffected by this
+retraction. The variable stays fully in the vocabulary and the export; nothing is deleted.
 
 **ENCODING — CONFIRMED AGAINST SOURCE:** `AT_Regime_ST == 0` is **BULLISH**, `== 1` is **BEARISH**
 (DOT.cs L3102 `curr_AnchorType_ST = (st_Slope > 0.0) ? 0 : 1`, corroborated L3113; 96%+ agreement
@@ -1103,9 +1116,13 @@ palette.**
 ### 8. DECISIONS TAKEN
 1. **Solo (depth-1) convergence is excluded** from the forward book. PF 1.25 on new data with a 2–3x
    loss/win ratio is structurally fragile, not merely unlucky.
-2. **`AT_Regime_ST` (native binary) joins the gate stack:** ADX >= 15, ticks >= 50, D2D directional
-   agreement, AT_Regime_ST directional agreement. ADX>=15 and ticks>=50 remain as-is — they are
-   minimal-participation filters removing dead zero-participation bars, nothing more.
+2. **REVERSED (2026-07-23). `AT_Regime_ST` does NOT join the gate stack.** The decision rested on a
+   mislabelled measurement (see §5 retraction above): the directional gate is PF 0.97 / net −$111 /
+   worst-day −$683 on the NEW segment and removes the book's profit. The regime-state variant fails
+   regime-conditional persistence. The gate stack therefore remains as it was: **ADX >= 15 and
+   ticks > 50** (minimal-participation filters removing dead zero-participation bars, nothing more)
+   plus **D2D directional agreement**. `AT_Regime_ST` is retained as a reported conditioner and stays
+   in the vocabulary; requirements to establish it are specified in `discovery_redesign_spec.md`.
 3. **GATES ARE STATE COLUMNS, NEVER ROW FILTERS.** No bar is ever deleted. Every candidate is scored
    both ungated and per-gate-subset. Rationale: a row filter destroys the counterfactual, makes an
    inverted-encoding error silent and irreversible, and — critically — deleting rows upstream of the
