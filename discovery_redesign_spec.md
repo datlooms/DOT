@@ -4,6 +4,7 @@
 **Author seat:** Quant Analyst
 **Status:** specification for Developer build and Auditor verification
 **Date:** 2026-07-23
+**Revision:** amended 2026-07-23 following external-review assessment and its correction round. Nine verified changes applied (§C.2, §C.3, §D.0, §F.4, §F.5, §F.6, §G.2, §H.1, §J); three provisionally-accepted items refuted by measurement and recorded as withdrawn (§10C). Structure and section numbering preserved.
 
 ---
 
@@ -221,33 +222,86 @@ DepthYield(B) = count of same-direction clusters of size >= 5 the book produces 
 
 ### C.2 — Measuring failure correlation, separately
 
-Build the per-signal daily-loss series from S6's regenerated `signal_per_day_pnl.jsonl` (§B). For each pair, on days where **both** signals traded:
+**Pearson correlation is NOT the measure. It materially understates joint failure on this book, and the understatement was measured, not assumed.**
+
+Build the per-signal daily-loss series from S6's regenerated `signal_per_day_pnl.jsonl` (§B). For each pair, restricted to days where **both** signals traded:
 
 ```
-failcorr(i,j) = Pearson correlation of the two daily-loss series, restricted to days where both traded and at least one lost
+tau            = 0.10
+q_i, q_j       = the tau-quantile of each signal's daily-loss series over shared active days
+coexceed(i,j)  = P( loss_i <= q_i  AND  loss_j <= q_j )
+lambda_L(i,j)  = coexceed(i,j) / tau          -- 1.0 == independence
+failcorr(i,j)  = Pearson correlation of the two daily-loss series   [RETAINED AS A REPORTED DIAGNOSTIC ONLY]
 ```
 
 Book-level:
 
 ```
-FailCorr(B) = mean pairwise failcorr
-FailConc(B) = the book's worst single-day loss expressed as a multiple of its mean daily loss
+TailDep(B)   = mean pairwise lambda_L over pairs with >= 20 shared active days
+FailConc(B)  = the book's worst single-day loss expressed as a multiple of its mean daily loss
+CVaR_i       = the mean of signal i's daily P&L over the worst 5% of BOOK days
+mCVaR_i      = CVaR_i / (signal i's share of book lots)     -- marginal tail contribution per unit exposure
 ```
 
-`FailConc` is the survival-first quantity and is the one the FTMO ceiling cares about. It is reported alongside `FailCorr` because a low mean correlation can still admit one catastrophic co-failure day.
+`FailConc` remains the survival-first book-level quantity. `TailDep` replaces `FailCorr` as the pairwise measure. `mCVaR_i` identifies individual tail-risk concentrators — signals whose contribution to the worst days is disproportionate to their exposure — which is the per-signal diagnostic the FTMO daily ceiling actually needs and which no ranking on PF can surface.
+
+**VERIFICATION (measured on the committed book, 122 pairs with >= 20 shared active days):**
+
+| measure | value |
+|---|---|
+| mean Pearson correlation of daily losses | **+0.0604** — reads as near-independent |
+| mean tail co-exceedance ratio `lambda_L` at tau = 0.10 | **3.548x independence** |
+| pairs with Pearson < 0.2 **but** `lambda_L` > 2.0 | **30 of 122 (24.6%)** |
+| rank correlation between the two measures | **+0.246** |
+
+Pearson says the book's failures are essentially uncorrelated. In the tail they co-exceed at 3.5x independence, and roughly a quarter of pairs look benign under Pearson while concentrating risk exactly where the daily ceiling binds. The two measures rank pairs almost differently (rho +0.246), so one cannot be substituted for the other.
+
+**ACCEPTANCE RULE (implementable and verifiable):**
+
+1. **Hard bound:** no candidate book may have `TailDep(B) > T_max`, where `T_max` is set to the committed book's measured `TailDep` (3.548) as the reference point — **not tuned**. A book that concentrates tail failure more than the incumbent is rejected regardless of net.
+2. **Hard bound:** no single signal may carry `mCVaR_i` worse than `C_max`, set to the 90th percentile of the committed book's measured `mCVaR` distribution — again a reference, not a fitted parameter.
+3. **Reported, not gating:** `FailCorr(B)` (Pearson) is retained in the output purely so the divergence between the two measures stays visible to the Auditor.
+
+*What would falsify this:* if `TailDep` and `FailConc` rank candidate books identically (rank correlation > 0.9), the pairwise tail measure adds nothing over the book-level one and the simpler quantity should govern. The build reports both for every candidate book.
+
+*Fit risk:* `T_max` and `C_max` are anchored to the committed book's six-month measured values. This imports that book's history as the reference point. Stated openly; the alternative — free parameters — is worse. Both must be recomputed inside each §I training split, never carried across a boundary.
 
 ### C.3 — The objective
 
-**Maximise `DepthYield(B)` subject to `FailConc(B)` and survival constraints, with `FailCorr(B)` as a reported penalty rather than a hard bound.**
+**Maximise `DepthYield(B)` subject to `FailConc(B)`, `TailDep(B)` and survival constraints.**
 
 Formally, the build implements a lexicographic objective consistent with survival-first doctrine:
 
 1. **Hard constraint:** worst modelled day within the FTMO ceiling with stated margin. Any book violating this is rejected regardless of other properties.
 2. **Hard constraint:** `FailConc(B) <= F_max`, with `F_max` set from the committed book's measured value as the reference point, not tuned.
-3. **Maximise:** `DepthYield(B)`.
-4. **Tie-break:** lower `FailCorr(B)`.
+3. **Hard constraint:** `TailDep(B) <= T_max` and per-signal `mCVaR_i <= C_max` per §C.2.
+4. **Maximise:** `DepthYield(B)`.
+5. **Tie-break (§D.1):** higher `Coverage(B)` among books within tolerance of the best `DepthYield`.
+6. **Tie-break:** lower `FailCorr(B)` (Pearson, reported diagnostic).
 
 **This inverts the old objective on axis (i) while preserving it on axis (ii).** Co-firing is now rewarded; correlated failure is still penalised.
+
+#### C.3.1 — The search procedure
+
+The objective above specifies **what** to optimise. The search over candidate books is **greedy forward selection with CELF (Cost-Effective Lazy Forward) evaluation**: start from the empty book, iteratively add the signal producing the largest marginal gain in the objective, maintain a priority queue of upper-bound marginal gains and re-evaluate lazily, stop when the marginal gain falls below a stated threshold or a hard constraint binds.
+
+**MANDATORY CAVEAT — the approximation guarantee does NOT transfer to the full objective.** `Coverage` is submodular and a greedy selection over coverage alone inherits the standard (1 − 1/e) bound. The failure-correlation and tail-dependence penalties are **not submodular in general** — adding a signal can change pairwise tail structure non-monotonically. Therefore:
+
+- The build must **either** verify submodularity for the specific penalty as implemented (and document the proof or the counterexample search),
+- **or** use greedy purely as a heuristic and **make no claim of the (1 − 1/e) bound anywhere** in code comments, run reports, or documentation.
+
+Claiming the bound without establishing it is an invalidity condition. The Auditor should check for the claim, not just the algorithm.
+
+*What would falsify greedy as the right search:* on a reduced instance small enough for exhaustive enumeration, if greedy's book is materially worse than the exhaustive optimum, the heuristic is inadequate and the build must escalate to a solver formulation. The build runs this comparison on at least one reduced instance and reports the gap.
+
+#### C.3.2 — Reporting additions (NOT corrections to a measured deficiency)
+
+The following are added because they improve what the operator can see when deciding, **not** because any measurement showed the lexicographic objective to be deficient. They are labelled as such so downstream readers do not infer a defect that was never demonstrated.
+
+- **Model Confidence Set (Hansen).** Report the set of candidate books that cannot be statistically distinguished from the best at 90% confidence, rather than a single point selection. Given measured selection instability, an equivalence class is likely and choosing the most robust member of it is more defensible than chasing the apparent optimum. **Reported diagnostic.**
+- **Pareto frontier** over (persistence, worst-day, `DepthYield`, `Coverage`). The lexicographic ordering collapses genuine trade-offs into a fixed precedence; the frontier makes them visible so the human principal can choose. The lexicographic result remains the default selection; the frontier is presented alongside it. **Reported diagnostic.**
+
+*Fit risk for both:* neither adds a fitted parameter, so neither adds overfit surface. The MCS confidence level (90%) is a stated convention, not a tuned value.
 
 *Motivating numbers:* the depth ladder is monotonic on cluster size — bands 1-2 WR ~87%, PF 2.33–2.83; band 5-7 WR 95.5%, PF 11.39; band 13+ WR 96.0%, PF 11.78, worst day **−$12.3** (N=10, trade-level). Pre-jar qualifying depth 5-6 reaches PF 87.58 at WR 98.6%. Solo (depth-1) is PF 3.16 with a −$574 worst day.
 
@@ -263,15 +317,33 @@ Formally, the build implements a lexicographic objective consistent with surviva
 
 Reach is therefore a **real and large opportunity in count**, addressing a **smaller-move population** than the book currently trades. Both halves must govern the design.
 
+#### D.0 — WHY episodes are missed: a coverage gap, not a throughput gap
+
+The reach programme rests on knowing the *mechanism* of the shortfall, not merely its size. Measured on all 3,090 missed thrust episodes (W=15, K=p85, E=p75, N=5):
+
+| reason the episode was missed | count | share | median move |
+|---|---|---|---|
+| **A — no book signal ever qualified anywhere in the span** | **2,776** | **89.8%** | 55.9 pt |
+| B — a signal qualified but no entry resulted | 314 | 10.2% | 87.0 pt |
+| of B, span >50% occupied (jar / already-in-trade blocked) | 43 | **1.4% of all missed** | — |
+
+**Nine in ten missed thrusts are places where the book has nothing that fires at all.** Occupancy and the 6-lot jar account for 1.4%. The shortfall is therefore a **COVERAGE gap in the signal book — not a throughput gap in the execution layer.** Raising `MAX_POSITIONS`, loosening the jar, or any other throughput change would address 1.4% of the problem and is not the remedy.
+
+**EXPLICIT LIMIT OF THIS CONCLUSION.** This measurement *locates* the gap. It does **not** establish that the available vocabulary can fill it. Directly against that hope: S8B basis 3 found **no single condition that separates thrust episodes — maximum ATR-controlled lift 1.35.** So the conditions that would populate the missed 89.8% have not been shown to exist in the current 249-condition vocabulary, and it remains entirely possible that they do not. The correct reading is: the gap is real, its mechanism is identified, and whether it is *fillable* is an open question the redesign tests rather than assumes.
+
+*What would falsify the reach programme:* if, after the full funnel, no signal qualifying under §H shows materially higher `cov_missed_share` than the incumbent book, the vocabulary cannot reach the missed set and the programme should be closed in favour of deepening existing coverage. That is a legitimate and reportable outcome.
+
+*Fit risk:* the decomposition is computed at one thrust parameterisation. The build repeats it across the §D.2 grid before the conclusion is treated as stable.
+
 ### D.1 — Reach must not relax quality
 
 The acceptance bar for a signal recruited for coverage is **identical** to the bar for any other signal: §H.1 empirical-null, §H.2 stability, §H.3 regime-conditional positivity, and the §C.3 survival constraints. Coverage is a **tie-breaker among qualifying signals**, never a substitute for qualification.
 
-Concretely, coverage enters as step 4 of the §C.3 lexicographic objective:
+Concretely, coverage enters as **step 5** of the §C.3 lexicographic objective, after the three hard constraints and the `DepthYield` maximisation:
 
-3. maximise `DepthYield(B)`
-3b. **among books within a stated tolerance of the best `DepthYield`, prefer the book with higher `Coverage(B)`**
-4. tie-break on `FailCorr(B)`
+4. maximise `DepthYield(B)`
+5. **among books within a stated tolerance of the best `DepthYield`, prefer the book with higher `Coverage(B)`**
+6. tie-break on `FailCorr(B)` (Pearson, reported diagnostic only)
 
 ### D.2 — Defining Coverage
 
@@ -404,13 +476,62 @@ Selecting a signal *because* it fires at shallow depth in episodes that deepen, 
 
 *Falsification:* if the depth-sized book's advantage over flat sizing disappears when the curve is fixed a priori rather than fitted, the ladder's economic value was an artifact of the fitting.
 
-### F.4 — Minimum unique-variable count at depth
+### F.4 — Minimum unique-variable count at depth — A FORWARD GUARD, NOT A REPAIR
 
-Measured depth-2 events exist carrying only **3 unique variables** — the same read counted twice, which is not corroboration.
+**The motivating population does not exist. This rule guards against a future failure mode; it does not fix a present one, and must not be described as fixing one.**
 
-**Specified:** define `unique_vars(cluster)` = count of distinct underlying variables across all conditions of all entries in the cluster, computed after §G.1 duplicate-collapsing. A cluster counts toward `DepthYield` (§C.3) only if `unique_vars >= U`.
+Recorded decision 6 was motivated by observing depth-2 events carrying only 3 unique variables. Re-measured on the stitched series with the committed book: **0 of 623 depth≥2 events carry ≤3 unique variables.** Distinct underlying variables rise monotonically with depth:
+
+| depth | events | median unique vars | median condition slots | unique/slot |
+|---|---|---|---|---|
+| 1 | 1,199 | 3 | 3 | 1.00 |
+| 2 | 487 | 5 | 6 | 0.83 |
+| 3 | 83 | 7 | 9 | 0.78 |
+| 4 | 24 | 9 | 12 | 0.75 |
+| 5 | 14 | 11 | 15 | 0.73 |
+| 6 | 15 | 12 | 18 | 0.67 |
+
+**The original observation was a measurement artifact** (independently confirmed): the variable lookup was populated for F0 rows only — 48 of the 50 book signals — so F1 and gap-filler entries contributed empty variable lists and appeared to carry no variables. 4 of 59 depth-2 bars were affected. Corrected, the population is empty.
+
+This also **refutes** the related concern that concurrence measures duplicated information rather than independent evidence: depth adds genuine variable diversity (3 → 12), though with mild repetition at the top (unique/slot falls 1.00 → 0.67).
+
+**The rule is retained unchanged as a forward guard.** A future book assembled from a different vocabulary could produce degenerate depth, and the constraint costs nothing when the population is empty.
+
+**Specified:** define `unique_vars(cluster)` = count of distinct underlying variables across all conditions of all entries in the cluster, computed after §G.1 duplicate-collapsing and across **all** entry families (F0, F1 and any admitted under §A.4) — the lookup must be complete or the metric silently under-counts, which is precisely how the original artifact arose. A cluster counts toward `DepthYield` (§C.3) only if `unique_vars >= U`.
 
 `U` is **not chosen in this spec.** The build reports the depth ladder recomputed at `U ∈ {3, 4, 5, 6}` and the operator sets it on the evidence. Setting `U` here would be fitting a threshold to six months without seeing the curve.
+
+*Verification requirement:* the build must assert lookup completeness (every admitted signal index resolves to a non-empty variable set) and abort otherwise. The artifact above is the reason.
+
+### F.5 — Depth-dependent position cap — SPECIFIED OPTION, SACRED-TOUCHING
+
+**AUTHORISATION REQUIRED BEFORE BUILD.** `MAX_POSITIONS` lives in `portfolio_simulation_engine.py`, which is **byte-locked** (`bb498eb13ce3`). Any behaviour-changing edit without documented human authorisation is INVALID regardless of merit. This section specifies the option; it does not authorise it.
+
+§F.2 framed the choice as filter-or-size and measured that filtering costs 41–64% of book net ($77,239 → $45,430 at depth≥3 → $28,004 at depth≥5). A depth-conditional **cap** is a third mechanism: take every first entry, but limit how much shallow risk can accumulate concurrently.
+
+**Specified form:** `cap = 2` while running same-direction depth is 1; `cap = 6` once depth ≥ 3. Intermediate value at depth 2 to be reported, not assumed.
+
+*What would falsify it:* if the depth-conditional cap produces worse worst-day than flat cap-6 at equal or lower net, the mechanism is not buying survival and should be dropped. The build scores it as an S7 contender row (§B) against C0–C5 and flat-cap, never as a silent default.
+
+*Fit risk:* the cap schedule is a free parameter set on six months. It must be fixed a priori and validated inside §I, exactly as the depth→size curve is under §F.3 — and the §F.3 coupling constraint applies to it identically, since a depth-conditional cap is another depth-keyed runtime mechanism.
+
+### F.6 — Depth × volatility interaction
+
+Depth and volatility **interact**; the sizing curve should not be assumed one-dimensional. Measured, F0 trades, ATR terciles computed within the traded population:
+
+| ATR tercile | depth-5+ average trade |
+|---|---|
+| LO | **$23.3** |
+| MID | **$28.0** |
+| HI | **$115.5** |
+
+The same depth band is worth ~5x more in the top volatility tercile than the bottom. The depth ladder itself survives the volatility control — monotonic in WR and PF in all three terciles, partial Spearman rho(depth, pnl) controlling ATR and hour = **+0.2793, p = 4.6e-47** — so this is an interaction on top of a real main effect, not a confound explaining it away.
+
+**Specified:** the build reports the depth→size curve in two-way form (depth × ATR tercile) alongside the one-way form, and the S7 contender comparison includes both.
+
+*What would falsify a two-way curve:* if the two-way curve's advantage over one-way is inside the noise band established by §H.2 stability draws, the extra dimension is not earning its parameters and one-way governs.
+
+*Fit risk:* a two-way curve has materially more free parameters than one-way and a correspondingly larger overfit surface. This is the strongest argument for fixing it a priori and for §F.3's requirement that sizing be validated on different splits from selection.
 
 ---
 
@@ -430,7 +551,33 @@ Effective live vocabulary ≈ **237**, not 249. **0 of the 50 committed triples 
 2. **Dead conditions.** The 7 zero-firing conditions are **excluded from RANKING and from triple formation**, and are **NOT deleted from the vocabulary.** They are reported in the run report with their fire count of 0. If a future dataset makes one live, it re-enters automatically — the exclusion is a computed property of the run, never a hardcoded list.
 3. **Trial-count impact.** The effective vocabulary of 237 (not 249) is the number entering §H.1's trial count. Duplicates manufacture false corroboration in ranking; collapsing them is also what makes the multiple-testing correction honest.
 
-*Fit risk:* none material — this removes an artifact rather than adding a choice. The one judgment is treating exact mask identity as equivalence; near-duplicates (correlation 0.99) are **not** collapsed, and the build reports the pairwise mask-correlation distribution so the operator can see how much near-duplication remains uncollapsed.
+*Fit risk:* none material — this removes an artifact rather than adding a choice. The one judgment is treating exact mask identity as equivalence; near-duplicates are handled separately in §G.2.
+
+### G.2 — Near-duplication: domain bridging and community detection
+
+**RIGHT-SIZED ON MEASUREMENT. This is modest hygiene, NOT a structural reach mechanism, and must not be presented downstream as one.**
+
+The near-duplicate structure of the live vocabulary was measured across all 29,161 pairs of the 242 live conditions:
+
+| pairwise \|r\| | pairs | share |
+|---|---|---|
+| ≥ 0.95 | 33 | 0.11% |
+| ≥ 0.90 | 39 | 0.13% |
+| ≥ 0.80 | 62 | 0.21% |
+| **≥ 0.70** | **100** | **0.34%** |
+
+Median \|r\| = **0.033**; p90 = 0.209; p99 = 0.496. Effective dimensionality: **126 components carry 90% of variance**, 154 carry 95%, participation ratio 46.2.
+
+**So near-duplication is real but sparse** — about 100 pairs out of 29,161, on top of the 5 exact pairs §G.1 already collapses. The broader redundancy shown by the effective-dimension figures is mild and diffuse rather than concentrated in clusters of near-clones. Two mechanisms, both cheap:
+
+1. **Domain bridging.** Group the live conditions into functional domains (microstructure/order-flow, adaptive volatility, temporal/session, structural trend, volume profile, D2D/OBV family) by measured mask correlation and by variable provenance. **A candidate triple must draw from at least 2 distinct domains.** This mechanically prevents a "triple" that is three views of the same underlying read.
+2. **Community detection** (Louvain or Leiden on the |r| graph, resolution reported) as the data-driven counterpart, so domain membership is measured rather than assigned by name. Where the semantic grouping and the detected communities disagree, the run report shows both and the measured communities govern.
+
+**What this does and does not buy.** It removes false corroboration in ranking and prevents degenerate triples. It does **not** address the §D reach gap — 89.8% of missed thrusts have no qualifying signal at all, which is a vocabulary-content problem that no amount of hygiene on the existing 249 conditions can solve.
+
+*What would falsify it:* if fewer than ~20 candidate triples are rejected by the 2-domain rule across a full run, the constraint is not binding and can be dropped as noise. The build reports the rejection count.
+
+*Fit risk:* the domain boundaries are a choice. Requiring the measured communities to govern where they disagree with the semantic grouping is the mitigation; the resolution parameter is reported and its sensitivity shown at three values.
 
 ---
 
@@ -447,12 +594,34 @@ Specified:
 2. Score every one through the **identical funnel**, including the §H.2 and §H.3 stages.
 3. The acceptance bar is the **q-quantile of the null distribution** of the selection statistic, with `q` set so the expected false-acceptance count across the whole expanded funnel is `<= 1`. The build reports `q`, `M`, the realised null distribution, and the implied bar.
 
-**Secondary cross-check: Benjamini–Hochberg FDR at q = 0.10**, applied with the family as strata (14 strata), reported alongside. Where the two disagree, the empirical null governs and the discrepancy is reported.
+**Secondary cross-check: Benjamini–Yekutieli FDR at q = 0.10** — **NOT Benjamini–Hochberg** — applied with the family as strata (14 strata), reported alongside. Where the two disagree, the empirical null governs and the discrepancy is reported.
+
+**Why BY and not BH — measured, not assumed.** BH controls FDR only under positive regression dependency (PRDS). The signed dependence structure of the live vocabulary was measured across all 29,161 pairs of the 242 live conditions:
+
+| | |
+|---|---|
+| positive pairwise correlations | **14,469 (49.6%)** |
+| negative pairwise correlations | **14,692 (50.4%)** |
+
+The dependence is essentially symmetric in sign, so **PRDS fails and BH is not valid on this vocabulary.** Benjamini–Yekutieli (2001) controls FDR under arbitrary dependence and is the correct choice. It is less powerful, which is the price of validity; the empirical null remains primary precisely so that power is not lost overall.
+
+**Additional machinery — REPORTING ADDITIONS AND GATES, distinguished explicitly.** None of the following corrects a measured deficiency in the empirical null; they capture failure modes the null does not, and are labelled so downstream readers do not infer a defect that was never demonstrated.
+
+| technique | role | what it captures that the matched null does not |
+|---|---|---|
+| **White's Reality Check (2000)** | **GATE** | Bootstraps the *search*, not the signals. Estimates how good the best-of-N rule should look under pure chance given the adaptive search itself. The matched null asks "what does a random signal look like"; White asks "what does the winner of N searches look like". Different failure modes; both required. |
+| **Hansen's SPA** | **GATE** | Improves the power of White's by removing obviously poor candidates before computing significance. Given a candidate universe dominated by weak rules, SPA is the more usable of the two. Run alongside; report both. |
+| **Romano–Wolf stepdown** | reported diagnostic | FWER control accounting for dependence between tests. Reported as a stricter cross-check on the accepted set. |
+| **PBO via CSCV** (Bailey et al.) | reported diagnostic | Probability of Backtest Overfitting — the estimated fraction of apparent winners expected to fail forward. Reported per §I split. **PBO < 0.10 is the stated reference bar; it is reported, not enforced, on the first run** so that the realised value informs whether it becomes a gate. |
+
+*What would falsify the additions:* if White's/SPA accept exactly the set the empirical null accepts across all §I splits, they are redundant here and can be demoted to diagnostics. The build reports the set differences.
 
 **Effective number of independent tests.** The naive trial count is not the effective one. The build computes and reports:
 - naive trial count per family and in total;
-- effective count after §G.1 duplicate collapsing (237 not 249 conditions);
+- effective count after §G.1 duplicate collapsing and §G.2 domain handling;
 - an eigenvalue-based effective-dimension estimate on the condition-mask correlation matrix, so the correlation-induced reduction is measured rather than guessed.
+
+**Measured reference for that estimate** (242 live conditions on the stitched series): **126 components carry 90% of variance, 154 carry 95%, participation ratio 46.2.** The effective dimensionality is materially below the nominal 242 but well above the 5 exact-duplicate pairs — the reduction is broad and mild, not concentrated.
 
 *Fit risk:* the null is generated on the same six months. It shares the period's structure, which is the point — it is a null for *this* market, not a universal one. Stated openly.
 
@@ -532,17 +701,75 @@ Any of the following invalidates the walk-forward and must be rejected by the Au
 
 ---
 
+## 10B. SECTION J — RESEARCH ITEM: HAWKES / HAZARD TEST ON CLUSTER FORMATION
+
+**This is specified as RESEARCH with a defined pass/fail, not as an adopted component. Nothing depends on it. If it fails, the spec is unchanged.**
+
+### J.1 — The problem it attacks
+
+§F.2 records the one measured dead end in this design: **the first entry of a large cluster is indistinguishable from a solo at fire time.** Early entries (position 1–2) in clusters that reached size ≥8 averaged **$43.7**; the same positions in clusters that stayed shallow averaged **$17.3** — a real difference, but not separable *before the second entry arrives*. That is why depth went to sizing rather than filtering, and why waiting for confirmation costs 41–64% of net.
+
+If cluster formation were predictable at the first arrival, §F changes substantially: the front of every large move could be entered at size rather than probed.
+
+### J.2 — The test
+
+Model same-direction signal arrivals as a self-exciting point process with conditional intensity
+
+```
+lambda(t) = mu_0 + sum over arrivals t_k < t of  alpha * exp(-beta * (t - t_k))
+```
+
+fitted **causally** — `mu_0`, `alpha`, `beta` estimated on a training segment only, never on the segment being scored, and evaluated with information available at bar t only.
+
+**The discriminating question:** does `lambda(t)` evaluated immediately after the **first** arrival of an episode separate episodes that go on to reach size ≥5 from those that do not?
+
+Primary statistic: **AUC of `lambda(t_1)` as a classifier of "cluster reaches size ≥5"**, computed out-of-sample on the §I splits, against the base rate of size-≥5 formation.
+
+### J.3 — Pass / fail
+
+| outcome | interpretation | consequence |
+|---|---|---|
+| **AUC ≥ 0.65** out-of-sample on ≥3 of 4 §I splits | first-arrival intensity carries real predictive information | escalate: §F is revisited, depth may become partly a pre-trade input |
+| **AUC 0.55–0.65** | weak signal, not actionable alone | report; may enter as one input to a §F.3 sizing curve, never as a filter |
+| **AUC < 0.55** | the §F.2 finding stands and is now confirmed by a second method | close the line; record as a documented negative |
+
+### J.4 — Constraints
+
+- **Selection-side / research only.** A live `lambda(t)` gate would require causal computation in MQL4 and would have to clear export=live parity. Nothing in this section authorises a live component.
+- The fit must respect §I boundaries: parameters estimated inside a training segment, evaluated on the untouched test segment, embargo applied.
+- **No row deletion.** Arrival times are indices into the intact series.
+
+*Fit risk:* three free parameters (`mu_0`, `alpha`, `beta`) fitted on short segments. A positive result on a single split is not a result; the ≥3-of-4 requirement is the guard. Reporting AUC without the per-split values is a §I.4-class fake step.
+
+---
+
+## 10C. WITHDRAWN — DO NOT RE-RAISE
+
+Three items were proposed during external review, provisionally accepted, and then **refuted by measurement**. They are recorded here with their disproof so they are not re-introduced later as fresh insights.
+
+| withdrawn item | why it is wrong |
+|---|---|
+| **"Execution costs are not modelled"** | `SPREAD = 3.0` is defined at `portfolio_simulation_engine.py` **L16** and applied at **L208** and **L331** to every trade in both the concurrent and gap-filler paths. **$10,717.50 of execution cost is already deducted** from every figure in this project (3,572.5 lots × $3.00); gross before cost is $108,922.3. FTMO indices CFDs are **commission-free**. 3.0 points is **above** the account's typical US30 spread, so the assumption is conservative — at a realistic 1.0–1.5 pt the reported net would be **higher** by $7,145 / $5,359. Residual checks: raising spread by +7 pt across the entire 09:00–13:00 concentration window costs 14% of net (break-even needs +50 pt); +10 pt of adverse slippage on every SL fill costs 3.0% of net (break-even needs +331 pt); under joint stress (+7 spread, +5 SL slip) worst day moves −$565.3 → −$678.3. And **deep clusters are the LEAST cost-sensitive population** — cost at 3.0 is 5.0% of the average depth-5+ trade versus 10.8% for solo. |
+| **"Missed episodes may be inaccessible because of execution cost"** | Cost is **1.8% of a traded episode's median move and 5.1% of a missed one's** — and is already deducted at the conservative rate above. Cost is not the barrier to reach. The real mechanism is §D.0: 89.8% of missed episodes had no qualifying signal at all. |
+| **"Concurrence may measure duplicated information rather than independent evidence"** | Refuted in §F.4: distinct underlying variables rise **monotonically 3 → 5 → 7 → 9 → 11 → 12** across depth 1 → 6, and **0 of 623 depth≥2 events** carry ≤3 unique variables. Depth adds genuine diversity. |
+
+**Standing note on how these arose.** All three were asserted by external reviewers without access to the codebase, accepted without verification against source, and only then checked. The lesson is recorded in the non-negotiables (Section A) and applies to this document as much as to any other: **an assertion about the code is not evidence about the code.** Verify, then classify.
+
+---
+
 ## 11. SCRIPTS THAT CHANGE
 
 Sacred five stay **byte-locked**: `dots_thresholds.py` `518862bf19fb`, `wf.py` `793e6e5f8d9a`, `core.py` `6530e2508b17`, `portfolio_simulation_engine.py` `bb498eb13ce3`, `conviction.py` `27af7acee824`. `verify_sacred()` must still abort on drift. `build_condition_pool` (S.10) is not modified (§G.1).
 
 | script | change |
 |---|---|
-| `master.py` | new stages: **S3B** family evidence review (§A.1–A.5), **S5B** selection layer (§C, §D, §G, §H). S7 gains the depth-sized contender row (§F.3). S9 report surfaces the §A.1 table and §H decisions. New sha; fresh Auditor pass required. |
-| `engine/cluster_profiler.py` | extend to admit cross-family entries with origin tags (§A.4); emit family-composition vectors per cluster; stratify coverage by episode absolute size (§D.2). |
+| `master.py` | new stages: **S3B** family evidence review (§A.1–A.5), **S5B** selection layer (§C, §D, §G, §H). S7 gains the depth-sized contender rows (§F.3, §F.5 if authorised, §F.6 two-way). S9 report surfaces the §A.1 table and §H decisions. New sha; fresh Auditor pass required. |
+| `engine/cluster_profiler.py` | extend to admit cross-family entries with origin tags (§A.4); emit family-composition vectors per cluster; stratify coverage by episode absolute size (§D.2); emit the §D.0 missed-episode decomposition across the thrust grid. |
 | `scanners/concurrence_profiler.py` (F12) | unchanged pending the §A.2 measurement; classification may change on the result. |
-| **new** `engine/selection.py` | implements §C.3 objective, §D.2 coverage, §G.1 collapsing, §H.1–H.3. The single place selection logic lives, so the Auditor has one file to verify. |
+| **new** `engine/selection.py` | implements §C.3 objective and §C.3.1 greedy/CELF search, §C.2 tail-dependence and mCVaR, §D.2 coverage, §G.1 collapsing, §G.2 domain bridging and community detection, §H.1–H.3. The single place selection logic lives, so the Auditor has one file to verify. **Must not claim the (1 − 1/e) bound unless §C.3.1 submodularity is established.** |
 | **new** `engine/wf_selection.py` | implements §I. Must not import from `selection.py` in a way that lets a test segment influence a fitted parameter; the split boundary is enforced structurally, not by convention. |
+| **new** `engine/hawkes_research.py` | implements §J. Research only — no live path, no import from the committed scoring chain. |
+| `portfolio_simulation_engine.py` | **SACRED / byte-locked. Unchanged.** §F.5's depth-dependent cap touches `MAX_POSITIONS` and is **specified but NOT authorised**; it requires documented human authorisation before any edit. |
 | `discovery_map.md` | §3 line 90 F10 flag correction (§1.4). |
 | `DOT_new_data_reveal_2026-07-21.md`, `DOT_progress_and_rd_plan.md` | §1.1, §1.2 corrections. Decision 2 to be restated. |
 
@@ -562,6 +789,13 @@ Everything runs under `master.py`. No standalone scripts.
 - §F.2 the pre-jar depth ladder.
 - §G the 5 duplicate pairs and 7 dead conditions.
 - The depth ladders and cluster statistics quoted throughout, on all three bases.
+- **§C.2 the inadequacy of Pearson** — mean +0.0604 vs mean tail co-exceedance 3.548x independence, 24.6% of pairs misread, rank correlation between measures only +0.246.
+- **§D.0 the missed-episode decomposition** — 89.8% no qualifying signal, 10.2% qualified without entry, 1.4% occupancy-blocked.
+- **§F.4 that the decision-6 population is empty** — 0 of 623 depth≥2 events at ≤3 unique variables; unique variables rise 3 → 12 with depth; the original observation was a lookup artifact covering 48 of 50 signals.
+- **§F.6 the depth × volatility interaction** ($23.3 / $28.0 / $115.5) and the survival of the depth ladder under volatility and session control (partial rho +0.2793, p = 4.6e-47).
+- **§G.2 the near-duplicate structure** — 100 pairs at |r| ≥ 0.70 of 29,161, median |r| 0.033, 126 components for 90% variance.
+- **§H.1 that PRDS fails** — 49.6% positive / 50.4% negative signed dependence, so BH is invalid and BY is required.
+- **§10C all three withdrawn items**, each disproved against source or data.
 
 **Reasoned proposals awaiting a first run — no result is claimed for any of these:**
 
@@ -574,5 +808,12 @@ Everything runs under `master.py`. No standalone scripts.
 - §F.4 the value of `U`. Deliberately not chosen.
 - §H.1–H.3 that a book survives the corrected funnel at all. It is entirely possible that few or no signals clear the empirical-null bar plus 70% stability plus 6-of-7 regime positivity. **That outcome must be reported as a result, not treated as a failure requiring the bar to be lowered.**
 - §I that the method passes at ≥65%. Unknown. The current 50% against a 27% null is the honest starting point.
+- **§C.3.1 whether the full objective is submodular.** Unresolved. Coverage alone is; the tail penalty in general is not. The build must establish it or drop the bound claim.
+- **§D.0's limit — whether the vocabulary can fill the located gap.** The gap's mechanism is measured; its fillability is not. S8B basis 3 found no single condition separating (max controlled lift 1.35), which is evidence against.
+- **§F.5 whether the depth-dependent cap improves survival.** Untested, and unauthorised — it touches a byte-locked file.
+- **§F.6 whether a two-way size curve beats one-way** by more than the §H.2 noise band.
+- **§G.2 whether the 2-domain rule binds** on enough triples to matter.
+- **§J whether first-arrival Hawkes intensity predicts cluster formation.** The named attack on the one measured dead end. Defined pass/fail; outcome unknown.
+- **§H.1 whether White's/SPA accept a different set** than the empirical null, or are redundant here.
 
 **One standing limitation applies to everything above:** six months, one instrument, two partial months, one dominant crash month. The direction of the depth findings survives three independent measurement methods and both cluster tolerances; the magnitudes do not have out-of-sample support. A second export remains the highest-value un-run validation in the project.
