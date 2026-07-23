@@ -117,6 +117,8 @@ before the data settled it.
 Measured three independent ways — single-bar depth, temporal cluster size, and pre-jar qualifying
 depth — the gradient is monotonic and it holds in both segments:
 
+**Parameters: N=10, BOOK population.**
+
 | Cluster size | WR | PF |
 |---|---|---|
 | 1 (solo) | 86% | 2.33 |
@@ -125,6 +127,10 @@ depth — the gradient is monotonic and it holds in both segments:
 | **5-7** | **95.5%** | **11.39** |
 | 8-12 | 92.5% | 6.30 |
 | **13+** | **96.0%** | **11.78** (worst day -$12) |
+
+*(At N=5 the same upper bands read 96.0 / 13.36, 93.7 / 7.98 and 96.4 / 12.56 — the gradient holds at
+both tolerances. N=5 is the spec's fixed tolerance; N=10 is shown here because it is the tolerance the
+temporal-cluster work was first measured on.)*
 
 And measured by qualifying depth before the jar admits anything: **5-6 qualifying = PF 87.6;
 7+ qualifying = 100% WR.**
@@ -172,13 +178,22 @@ a documented negative is a permitted answer.
 
 ### 4.2 Inside a big enough bite, the fork does not matter
 
-Spread of win rate **across different signals**, by depth:
+Spread of win rate **across different signals**, by depth. **Parameters: N=10, BOOK population,
+restricted to signals with >= 15 trades in that band.**
 
 | Depth | Signals | WR spread (sd) | Worst signal | Mean |
 |---|---|---|---|---|
 | Shallow (1-2) | 20 | 9.01 | **70%** | 86.5% |
 | Mid (3-7) | 36 | 4.67 | 80% | 91.3% |
 | Deep (8+) | 33 | 5.52 | **81%** | **94.5%** |
+
+**THE >=15-TRADE FILTER IS LOAD-BEARING, NOT COSMETIC — and this document would be breaking its own
+rule 1 not to say so.** Without it the same table reads sd 13.21 / 5.68 / 14.85 with a floor of 0.0%
+at depth, and the finding INVERTS: dispersion appears to rise at depth rather than nearly halve. The
+inversion is entirely an artifact of signals holding two or three trades in a band, whose win rate can
+only be 0%, 50% or 100% and which inflate dispersion mechanically. This is the same argument that sets
+MIN_SHARED in the spec's §C.2, and it is the reason the filter exists. Any reproduction of this table
+without the filter will reach the opposite conclusion and be wrong.
 
 At shallow depth, which signal fired matters enormously. **At depth 8+, the worst signal in the book
 still wins 81% of the time.** The regime dominates the signal.
@@ -192,6 +207,8 @@ participates in depth is worth more than a brilliant one that fires alone on an 
 ## 5. WHY THE SHORT SIDE HAS BEEN EATING CRUMBS
 
 Reach is symmetric. Depth is not.
+
+**Parameters: N=5, BOOK population.**
 
 | | Signals | Clusters | Mean depth | Max | Reach depth 5+ | Solo share |
 |---|---|---|---|---|---|---|
