@@ -27,7 +27,7 @@ SACRED = {
 }
 FOLDS = ['2026.01', '2026.02', '2026.03', '2026.04', '2026.05', '2026.06']
 OOS_MONTHS = ['2026.05', '2026.06']
-STAGES = ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S9']
+STAGES = ['S0', 'S1', 'S2', 'S3', 'S4', 'S5', 'S6', 'S7', 'S8', 'S8B', 'S9']
 FAMILIES = [
     ('F0', 'triple_convergence_and_d2ddir', 'committed'),
     ('F1', 'sequential_temporal', 'committed'),
@@ -256,7 +256,7 @@ def s6_regen(out, input_sha):
 
 
 # ── S7 CONTENDERS ──
-def _score(df, sigs, ad, st, w, conv):
+def _score(df, sigs, ad, st, w, conv, want_trades=False):
     import portfolio_simulation_engine as engine
     import wf
     td = engine.run_portfolio(df, sigs, adaptive=ad, structural=st, warmup=w, verbose=False, conviction=conv)
@@ -268,10 +268,13 @@ def _score(df, sigs, ad, st, w, conv):
     fmin = min((_pf(p[mo == m]) for m in FOLDS if (mo == m).any()), default=0.0)
     fplus = sum(1 for m in FOLDS if p[mo == m].sum() > 0)
     oos = np.isin(mo, OOS_MONTHS)
-    return {'trades': len(p), 'net': round(float(p.sum())), 'WR': round(float((p > 0).mean() * 100), 1),
-            'PF': _pf(p), 'daily_wd': round(float(d['pnl'].min()), 1), 'daily_mDD': round(mdd, 1),
-            'folds_plus': fplus, 'min_fold_pf': round(fmin, 2),
-            'oos_pf': _pf(p[oos]), 'oos_net': round(float(p[oos].sum()))}
+    summary = {'trades': len(p), 'net': round(float(p.sum())), 'WR': round(float((p > 0).mean() * 100), 1),
+               'PF': _pf(p), 'daily_wd': round(float(d['pnl'].min()), 1), 'daily_mDD': round(mdd, 1),
+               'folds_plus': fplus, 'min_fold_pf': round(fmin, 2),
+               'oos_pf': _pf(p[oos]), 'oos_net': round(float(p[oos].sum()))}
+    if want_trades:
+        return summary, td
+    return summary
 
 
 def s7_contenders(df, ad, st, w, sigs, out, input_sha):
@@ -343,7 +346,7 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
         book_tag = f'NEW DISCOVERED book (survival-first; {fresh_path}) — designed, not yet data-validated'
     sigs = score_g.build_book(df, pool, anchor, book)
     conv = C.build_conviction(df, True, True, True, d2d_conviction=True, d2d_gap=True)
-    r = _score(df, sigs, ad, st, w, conv)
+    r, executed = _score(df, sigs, ad, st, w, conv, want_trades=True)
     lines = []
     lines.append(f'COMMITTED SYSTEM SCORE — {book_tag}')
     lines.append(f'  book rows           : {len(book)}')
@@ -365,12 +368,112 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
     print('\n'.join('  ' + ln for ln in lines))
     r['book_tag'] = book_tag
     r['canary'] = canary
+    r['executed'] = executed
+    r['sigs'] = sigs
     mark_done(out, 'S8', {'input_sha': input_sha, 'net': r['net'], 'trades': r['trades'], 'canary': canary})
     return r
 
 
+# ── S8B CLUSTER-PARTICIPATION PROFILER ──
+def s8b_cluster_profile(df, ad, st, w, pool, anchor, book_file, committed, out, input_sha, attest):
+    import cluster_profiler as cp
+    import score_g
+    import conviction as C
+    oracle_sha = sha12(os.path.join(_ENGINE, 'dots_thresholds.py'))
+    print(f'  oracle dots_thresholds.py sha256 : {oracle_sha}')
+    print(f'  dataset: {attest["rows"]:,} rows | {attest["range"]}')
+    if is_done(out, 'S8B', input_sha) and os.path.exists(os.path.join(out, 'cluster_participation_profile.csv')):
+        print('  S8B already complete for this input (checkpoint) — resuming past it.')
+        return None
+    if committed is not None and 'executed' in committed:
+        executed = committed['executed']
+        sigs = committed['sigs']
+    else:
+        print('  S8B standalone: S8 output unavailable, rebuilding the committed trade list.')
+        bk_path = book_file if book_file else os.path.join(_ENGINE, 'book50_signals.csv')
+        sigs = score_g.build_book(df, pool, anchor, pd.read_csv(bk_path))
+        conv = C.build_conviction(df, True, True, True, d2d_conviction=True, d2d_gap=True)
+        _r, executed = _score(df, sigs, ad, st, w, conv, want_trades=True)
+    n = len(df)
+    U = cp.eligible_universe(df, w)
+    hours = df['EST_Hour'].values
+    ab = cp.atr_buckets(df, U)
+    ev_book, bk = cp.book_events(executed)
+    ev_qual, qual_depth = cp.qualifying_events(df, sigs, ad, st, w)
+    print(f'  vocabulary: {len(pool)} conditions | eligible universe {int(U.sum()):,} bars '
+          f'| book events {len(bk)} | qualifying events {len(ev_qual[1]) + len(ev_qual[-1])}')
+    jobs = []
+    for N in cp.N_VALUES:
+        jobs.append((1, N, ('', '', ''), ev_book))
+        jobs.append((2, N, ('', '', ''), ev_qual))
+    thrust_sets = {}
+    for W in cp.THRUST_W:
+        fwd, mag, eff, valid, thr, mcol, ecol = cp.thrust_thresholds(df, W, cp.THRUST_K_PCTS, cp.THRUST_E_PCTS)
+        for kp in cp.THRUST_K_PCTS:
+            for ep in cp.THRUST_E_PCTS:
+                karr = thr[(mcol, f'k{int(round(kp * 100))}')]
+                earr = thr[(ecol, f'e{int(round(ep * 100))}')]
+                ev = cp.thrust_events(fwd, mag, eff, valid, karr, earr, w)
+                thrust_sets[(W, kp, ep)] = ev
+                for N in cp.N_VALUES:
+                    jobs.append((3, N, (W, kp, ep), ev))
+    rows = []
+    summary = []
+    t0 = time.time()
+    for i, (basis, N, grid, ev) in enumerate(jobs):
+        cs = cp.build_cluster_set(n, ev, N)
+        tcid = cp.map_trades_to_clusters(cs, bk)
+        rows.extend(cp.profile_conditions(pool, cs, U, df, bk, tcid, basis, N, grid, hours, ab))
+        cl = cs['clusters']
+        summary.append({'basis': basis, 'N': N, 'W': grid[0], 'K_pct': grid[1], 'E_pct': grid[2],
+                        'clusters': len(cl), 'max_size': int(cl['size'].max()) if len(cl) else 0,
+                        'max_span': int(cl['span'].max()) if len(cl) else 0,
+                        'ge3': int((cl['size'] >= 3).sum()) if len(cl) else 0,
+                        'ge5': int((cl['size'] >= 5).sum()) if len(cl) else 0,
+                        'ge8': int((cl['size'] >= 8).sum()) if len(cl) else 0,
+                        'zero_span_pct': round(100.0 * float((cl['span'] == 0).mean()), 1) if len(cl) else 0.0})
+        sys.stdout.write(f'\r  cluster sets {i + 1}/{len(jobs)} | elapsed {_hms(time.time() - t0)}   ')
+        sys.stdout.flush()
+    sys.stdout.write('\n')
+    res = pd.DataFrame(rows)
+    cs_b1 = cp.build_cluster_set(n, ev_book, 5)
+    cs_b2 = cp.build_cluster_set(n, ev_qual, 5)
+    overlaps = {}
+    for (W, kp, ep), ev in thrust_sets.items():
+        for N in cp.N_VALUES:
+            tcs = cp.build_cluster_set(n, ev, N)
+            overlaps[(W, kp, ep, N)] = cp.overlap_validation(tcs, cs_b1, cs_b2, n, U)
+    path = os.path.join(out, 'cluster_participation_profile.csv')
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        f.write(f'# DOT S8B cluster-participation profile\n')
+        f.write(f'# dataset_rows={attest["rows"]} dataset_range={attest["range"]}\n')
+        f.write(f'# oracle_sha256_12={oracle_sha} engine_sha256_12={sha12(os.path.join(_ENGINE, "portfolio_simulation_engine.py"))}\n')
+        f.write(f'# eligibility={cp.ELIGIBILITY_PREDICATE}\n')
+        f.write(f'# eligible_bars={int(U.sum())} vocabulary_conditions={len(pool)}\n')
+        f.write(f'# min_fire_floor={cp.MIN_FIRE_FLOOR} (ranking eligibility only; not tuned)\n')
+        f.write('# BASIS-3 BOUNDARY: the thrust label is FORWARD-LOOKING by construction (uses Close[t+W]).\n')
+        f.write('# Legitimate as a selection-side diagnostic; BASIS 3 CAN NEVER BECOME A LIVE GATE OR ENTRY CONDITION.\n')
+        f.write('# COUPLING MITIGATION: quant_response_6 mitigation 2 — metric (e) is emitted for BASIS 3 as well as\n')
+        f.write('# bases 1 and 2, so shallow-edge participation is measurable against price structure defined without\n')
+        f.write('# reference to the book or the jar.\n')
+        f.write('# SCOPE LIMIT: the vocabulary is SINGLE CONDITIONS; the book\'s signals are TRIPLES. A single\n')
+        f.write('# condition\'s profile is NOT a signal\'s value. Do not select a book directly from this file.\n')
+        f.write('# It is an input to selection, not a selection rule.\n')
+        res.to_csv(f, index=False, lineterminator='\n')
+    os.replace(tmp, path)
+    sm = pd.DataFrame(summary)
+    sm.to_csv(os.path.join(out, 'cluster_basis_summary.csv'), index=False, lineterminator='\n')
+    print(f'  wrote {len(res)} rows → {path}')
+    mark_done(out, 'S8B', {'input_sha': input_sha, 'rows': int(len(res)), 'conditions': len(pool)})
+    return {'rows': int(len(res)), 'conditions': len(pool), 'summary': sm, 'overlaps': overlaps,
+            'eligibility': cp.ELIGIBILITY_PREDICATE,
+            'eligible_bars': int(U.sum()), 'path': path, 'res': res,
+            'max_qual_depth': int(max(qual_depth[1].max(), qual_depth[-1].max()))}
+
+
 # ── S9 REPORT + SPLIT ──
-def s9_report(out, attest, contenders, committed, sacred, market_label, chunk_mb, input_sha):
+def s9_report(out, attest, contenders, committed, sacred, market_label, chunk_mb, input_sha, profile=None):
     scored_fresh = 'regenerated fresh this run (S6) — stale 746102aae415 / 0910f360a628 NOT inherited'
     L = []
     L.append(f'# DOT Master Report — {market_label}')
@@ -404,7 +507,24 @@ def s9_report(out, attest, contenders, committed, sacred, market_label, chunk_mb
     L.append('## 5. Per-family coverage')
     L.append('- families: F0 (committed) + F1 (2 pairs committed) + F2–F9/F11 (exploratory) + F12 (concurrence diagnostic) + F13 (documented negative). **F10 folded into F0** (concurrence null) — complete, not gapped.')
     L.append('')
-    L.append('## 6. Stale-artifact note')
+    if profile:
+        L.append('## 6. S8B cluster-participation profile')
+        L.append(f"- output: `{os.path.basename(profile['path'])}` — {profile['rows']} rows "
+                 f"({profile['conditions']} conditions x basis x N x grid cell)")
+        L.append(f"- eligible universe: {profile['eligible_bars']:,} bars | eligibility: {profile.get('eligibility', '')}")
+        L.append('- **SCOPE LIMIT: the vocabulary is SINGLE CONDITIONS; the book\'s signals are TRIPLES. '
+                 'A single condition\'s profile is not a signal\'s value; do not select a book directly from this CSV. '
+                 'It is an input to selection, not a selection rule.**')
+        L.append('- **BASIS-3 BOUNDARY: the thrust label is forward-looking by construction and can never become '
+                 'a live gate or entry condition.**')
+        L.append('- basis-3 overlap with size>=5 book cluster spans:')
+        for (W, kp, ep, N), o in profile['overlaps'].items():
+            L.append(f"  - W={W} K=p{int(kp * 100)} E=p{int(ep * 100)} N={N}: "
+                     f"{o['episodes_hit']}/{o['episodes']} episodes intersect = {o['episode_pct']}% "
+                     f"| thrust bars inside deep clusters {o['thrust_bars_in_cluster_pct']}% "
+                     f"| deep-cluster bars that are thrust {o['cluster_bars_in_thrust_pct']}%")
+        L.append('')
+    L.append('## 7. Stale-artifact note')
     L.append(f'- signal_full_records / signal_per_day_pnl: {scored_fresh}')
     L.append('')
     rep = os.path.join(out, 'master_report.md')
@@ -464,7 +584,7 @@ def main():
     print('\n[S2] POOL & ANCHORS')
     pool, anchor, w = s2_pool(df, ad, st)
 
-    contenders = committed = None
+    contenders = committed = profile = None
     run_all = only is None
     discover = (book_file is None)
     if not discover and run_all:
@@ -492,9 +612,12 @@ def main():
     if run_all or only == 'S8':
         print('\n[S8] COMMITTED-SYSTEM SCORE')
         committed = s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha)
+    if run_all or only == 'S8B':
+        print('\n[S8B] CLUSTER-PARTICIPATION PROFILE')
+        profile = s8b_cluster_profile(df, ad, st, w, pool, anchor, book_file, committed, out, input_sha, attest)
     if run_all or only == 'S9':
         print('\n[S9] REPORT & SPLIT')
-        s9_report(out, attest, contenders, committed, sacred, args.market_label, args.chunk_mb, input_sha)
+        s9_report(out, attest, contenders, committed, sacred, args.market_label, args.chunk_mb, input_sha, profile)
 
     print('\n' + '═' * 68)
     print(f'MASTER COMPLETE in {_hms(time.time() - t0)} | out: {out}')
