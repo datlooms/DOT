@@ -76,9 +76,17 @@ reporting the reading as a property of the market.**
 Documented instances, all real, all from this project:
 
 - **"US30 drifts upward, so a long-dominant book is natural."** Measured from price alone, thrust
-  episodes are **50.0% up / 50.0% down**, and the down-moves are *larger* (83.5 vs 76.5 pts median).
-  Every month sits near 50/50 — even the strongest up-month was 44.3% down-thrusts. The book takes
-  **13.8%** of its net from shorts. The asymmetry is in the instrument, not the market.
+  episodes are **~50% up / ~50% down**, and the down-moves are *larger* at every cell tested. The
+  split has been measured across six independent parameter cells — masks that move the absolute count
+  by ~2x and K/E thresholds that move it by ~4x — and **it never leaves a +/-0.6pp band around
+  50/50** (range 49.7-50.6% up). Every month sits near 50/50; even the strongest up-month
+  (+3,437 pts) ran 44-45% down-thrusts. The book takes **13.8%** of its net from shorts
+  (708 trades, WR 91.0%, PF 3.65, $13,562 — property of the BOOK). The asymmetry is in the
+  instrument, not the market.
+  *Per rule 1: the individual cells differ by calibration set — this document quotes the robustness
+  range rather than any single cell. `discovery_redesign_spec.md` §D.0.1 carries the verified
+  point-estimates with full parameters attached. Nothing in the argument turns on which cell is used,
+  which is the point.*
 
 - **"March was the best month and it was a crash, so shorts must be working."** In March, longs made
   **$22,394** and shorts **$3,067**. The crash was monetised by dip-buying longs. The reading said
