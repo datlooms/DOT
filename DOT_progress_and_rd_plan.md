@@ -1157,3 +1157,180 @@ README). Both corrected.
 on unseen data. But it is superseded as the *forward* book pending the gate-first rediscovery. The
 data pipeline, the adaptive layer and export=live parity are all confirmed working on fresh data.
 The next phase rebuilds signal selection around what demonstrably persists.
+
+---
+
+## 2026-07-23/24 — THE GATE-FIRST REDESIGN: SPEC, THREE BUILDS, CONSOLIDATION
+
+**Step 17n is CLOSED.** The discovery pipeline has been rebuilt, audited across nine passes, and
+consolidated. The scan has not yet been run.
+
+### 1. TWO NEW GOVERNING DOCUMENTS
+
+**`DOT_signal_discovery_mantra.md` (305 lines) — STANDING DOCTRINE.** Not a finding, not superseded
+by measurement. It governs how signal discovery is approached by every seat on every run. Its five
+rules bind every deliverable:
+  1. **MEASURE THE CAKE, NOT THE BITE** — every finding labelled MARKET (price-only or
+     full-population) or BOOK. The recurring project failure is measuring the market THROUGH the
+     book and reporting the reading as a property of the market.
+  2. **INCLUDE, THEN LET THE EVIDENCE SORT** — nothing removed on a single measurement; gates are
+     state columns, never row filters.
+  3. **NO PRE-SET TARGETS** — composition is an OUTPUT, never an INPUT.
+  4. **DEPTH IS THE UNIT OF QUALITY, NOT THE SIGNAL.**
+  5. **NEGATIVE CONCLUSIONS CARRY THE SAME BURDEN OF PROOF AS POSITIVE ONES.**
+Plus the standing construction: **when a finding depends on a filter, threshold or restriction, the
+filter is part of the finding.** Its own §4.2 is the worked example — omit the >=15-trade filter from
+that table and the stated conclusion inverts.
+
+**`discovery_redesign_spec.md` (1,468 lines, sha `f325a9dfc4b6`) — the build document.** Authored by
+the Quant, verified across four Supervisor rounds, final verdict SHIP. Amended nine times.
+
+### 2. THE THREE BUILDS — ALL RATIFIED
+
+| Build | Contents | Verdict |
+|---|---|---|
+| **1** | S3B family evidence review, `trades.csv`, D2D measurement, §D reach, data-relative OOS, F10 map correction | RATIFY `eea3e3fe931a` |
+| **2** | `selection.py`, stage S5B, the objective, per-direction greedy/CELF | REJECT, then RATIFY `296d612b7e9f` |
+| **3** | `wf_selection.py`, stage S5C, walk-forward on the selection process, attestation, single-touch guard | RATIFY, then remediation RATIFY `ca4903e0ba0b` |
+| **Consolidation** | one authoritative directory, 105 files | RATIFY `2c11b70871c4` |
+| **S3 operability** | six defects — see §5 | REJECT, then RATIFY `17acb49571fa` |
+
+**Final pipeline sha: `master.py 17acb49571fa`.** Sacred five byte-locked throughout every pass.
+
+### 3. WHAT THE PIPELINE NOW CONTAINS
+
+**Three new stages**, none of which existed before this phase:
+- **S3B** — per-family evidence review across all fourteen families, with INSUFFICIENT-EVIDENCE a
+  permitted verdict.
+- **S5B** — the selection layer: the lexicographic objective, per-direction greedy/CELF search,
+  tail-dependence and mCVaR constraints, vocabulary hygiene, multiple-testing.
+- **S5C** — the walk-forward on the selection process: derived splits, embargo, per-segment
+  re-derivation, the random-triple null arm, the attestation trail and single-touch guard.
+
+**THE HEADLINE FINDING FROM BUILD 1, and it reframes the whole project:** `discovery_results/`
+contained exactly ONE output file (F13, a legacy artifact predating master.py). **The discovery scan
+has never been run.** No `S3.done` marker exists and `discovery/results/` is empty. Every run to date
+used `--book`, which scores the committed book and skips discovery entirely.
+So F2-F9, F11 and F12's "exploratory" classification in `discovery_map.md` **rests on nothing
+measured** — nobody looked and judged them weak; nobody looked at all. Verdict emitted:
+INSUFFICIENT-EVIDENCE, per rule 5. This is the redesign's central premise established rather than
+assumed.
+
+### 4. FINDINGS AND RETRACTIONS FROM THIS PHASE
+
+**D2D IS NOT INERT — measured properly for the first time.** BOOK population, N=5:
+
+| variant | trades | net | PF | worst day |
+|---|---|---|---|---|
+| gate on (baseline) | 2,678 | $77,239 | **5.14** | **−$639** |
+| inverted (polarity probe) | 11,827 | $56,008 | 1.27 | −$3,626 |
+| long ungated | 13,088 | **$111,439** | 1.53 | −$2,315 |
+| short ungated | 1,223 | $14,351 | 1.92 | −$390 |
+
+Removing the gate multiplies trades ~5x and collapses PF 5.14 → 1.53. Inverting collapses it to 1.27,
+which rules out the encoding failure that produced the AT retraction. **Note the survival-first trap
+in row 3:** ungated longs make MORE net with a worst day 3.6x deeper — under survival-first that is
+worse, not better. This closes reveal open item #3 and definitively corrects the earlier "D2D adds
+nothing" claim, which was measured on the wrong column.
+
+**THE OOS WINDOW WAS FLATTERING.** `OOS_MONTHS` was hardcoded to May-June, set when the data ended in
+June. The stitched series runs to 21 July, so those are now INTERIOR months and the window is not
+out-of-sample. **Legacy OOS PF 5.54 vs data-relative 3.01.** Legacy values retained byte-identical
+with a staleness flag (doctrine rule 2 forbids deleting a measurement); `oos_rel_*` added alongside.
+
+**THE RANDOM-TRIPLE NULL, MEASURED PER SPLIT.** At n=16 the rates read 31.3-43.8% and were briefly
+reported as "a higher bar" than the recorded 27%. That reading was WITHDRAWN: the three values were
+consecutive integers (6/16, 7/16, 5/16), the spread was ±1 triple, and the exact binomial intervals
+all contained 0.27. With an adequate denominator (~85 qualifiers per split): **22.5% / 23.2% / 26.5%**
+— tight around the recorded 27%. **The 27% baseline needs no restating.**
+
+**FIVE SPEC CORRECTIONS**, all raised downstream and confirmed:
+1. §C.2's exclusion-bias claim does not reproduce — it is ANTI-CONSERVATIVE, not conservative. Root
+   cause ran deeper than reported: the "daily-loss series" implemented as `min(pnl, 0)` is
+   degenerate (73.4% of pairs returned coexceed exactly 1.0). Corrected to raw daily P&L. **The build
+   was already correct** — `selection.py` uses `groupby(...)['pnl'].sum()`. The degenerate estimator
+   was in the verification, not the code.
+2. §C.2's "1.0 == independence" annotation is wrong, not the formula.
+3. CoFire must be treated within direction, as DepthYield already is. Cross-direction co-firing is
+   structurally zero — **this is D2D's alternating bias behaving as designed**, not a market finding.
+4. §I.1 must specify the post-floor partition rule; only equal partition reproduces its stated 3 splits.
+5. §I.3's pass criterion restated as a **ratio to each split's own measured null** (mean >= 2.40,
+   min >= 1.85, 95% LB > 1.0), with a minimum denominator of 80 qualifiers and a hard floor of 40.
+
+**THE TAIL-DEPENDENCE FINDING WAS OVERSTATED BY ~2x.** Re-derived on the corrected estimator: tail
+lift 3.548x → **1.69x**, Pearson +0.0604 → +0.0992, pairs misread by Pearson 24.6% → 20.5%. The
+finding survives; its strength did not. Cross-checked from two directions — the build's independently
+emitted `lambda_over_independence` is 1.6831.
+
+**A SEARCH DEFECT THAT WOULD HAVE ELIMINATED THE SHORT SIDE.** Greedy selection returned ZERO short
+signals. Not a judgement about shorts: **0 of 13 short signals score above zero alone** (one signal
+cannot stack with itself at S=5), so every first-step gain was exactly 0.0 and the search halted at
+step 0 without ever evaluating a pair. The best short pair scores 0.012295 — **above the incumbent's
+own short reference of 0.00757.** Greedy returned 0% of the achievable optimum.
+Fixed with a lookahead-2 stopping rule ("no addition of size <= 2 improves"), applied at every
+termination point rather than only step 0. Result: SHORT 0% → **100%** of the enumerated optimum.
+**And LONG used 2 pair escapes** — the old rule was silently costing the long side ~8% as well. The
+defect was never short-specific; shorts merely failed loudly first.
+
+### 5. SIX S3 OPERABILITY DEFECTS
+
+Four were operator requirements predating the redesign and absent from the spec, which is why nine
+audit passes did not raise them. All six are fixed and ratified.
+
+1. **S3 did not resume per family.** Only F1 skipped; every other family re-ran, and `all_rows`
+   accumulated in memory so completed families' CSVs were never read back. **Fixed:** per-family
+   `.done` marker carrying the CSV's sha256, atomic write (tmp → fsync → `os.replace`). Proven
+   against a real crash — 7 families read back from disk, 3 re-scanned, result byte-identical to a
+   clean run. **Worst case is now one family, never the stage.**
+2. **No ETA or progress output.** Two-day stage with nothing printed until a family finished.
+   **Fixed:** `[family i of N]`, running ETA, per-family completion times, 60-second heartbeat, all
+   flushed for Windows. No wall-clock reaches any artifact.
+3. **`--workers` accepted and ignored.** Declared, capped, echoed at startup, never used. **Fixed:**
+   plumbed to cross-family process concurrency.
+4. **Parallelism was 3 of 14 scanners.** **Fixed:** cross-family process parallelism, touching no
+   scanner file. Within-family declined — nine ratified scanners with nine signatures and
+   deterministic nested-loop row order. Determinism proven byte-identical across workers 1/2/3 and in
+   mixed parallel-then-sequential mode.
+5. **Two false documentation claims** asserting resume worked. **Fixed**, with the true granularity
+   stated.
+6. **THE MOST SERIOUS, AND SELF-FOUND: `orchestrate()` LOADED THE SEALED BASELINE ITSELF.** It called
+   `engine.load_sealed_baseline()`, hardcoded to `equiDOT_recon171_step7_part1..8.csv`, and never
+   received master.py's ingested frame. **S3 could not run on the operator's data at all** — it fails
+   outright on the stitched series, or silently scans the wrong dataset if the old recon parts happen
+   to be present. The pipeline's entire purpose is market-agnostic discovery. **Fixed** by injecting
+   the frame plus its adaptive/structural/warmup, with fallback preserved for standalone CLI use.
+
+**A SEVENTH, FOUND IN AUDIT AND REJECTED ON:** the parallel-worker frame cache was written only if
+absent, never cleaned up, and not keyed on `input_sha` — so scanning asset A then asset B into the
+same output directory left every worker silently reading A. **The identical failure mode as defect 6,
+reintroduced one layer down and reachable by default.** Fixed three ways at once: sha-named filename,
+purge of any non-matching sibling, and deletion on S3 completion. `--workers` default also dropped
+12 → 2 after measurement showed **733 MB peak RSS per worker** (10 workers ≈ 7.2 GB, which explains
+the silent OOM deaths observed on a 4 GB box).
+
+### 6. WHAT IS PROVEN AND WHAT IS NOT
+
+**Proven and exercised:** the anti-leak architecture at full coverage (176 of 176 rolling thresholds
+bitwise identical whether computed on the full series or the training prefix); per-segment
+re-derivation of every bound from training bars only; split derivation with floors and a real bar
+embargo (3 splits, train 60/83/105, test 21/20/20); the attestation trail and repeat detection; the
+single-touch guard; §H.3 UNEVALUABLE raising rather than falling back; the random-triple null arm end
+to end; crash resume; determinism across worker counts; the committed path unchanged at
+**3,057 trades / $98,205**.
+
+**Never exercised, because it needs a candidate pool:** the funnel re-run per split, per-split
+candidate generation, entity persistence, lexicographic ranking across books, §H.1's multiple-testing
+components (empirical null, White's Reality Check, Hansen SPA, Romano-Wolf, PBO/CSCV), §H.2 stability
+selection, **and the pass criterion itself — the single number this redesign exists to produce.** It
+reports UNEVALUABLE until the scan runs. A FAIL is a legitimate outcome and the code is built to
+report one rather than lower a bar.
+
+**Splits 0 and 1 test a weaker constraint set than split 2** — TailDep is not meaningfully binding at
+17.7% and 33.0% retention, so an early-split pass is evidence about FailConc and absolute survival,
+not about tail dependence. Stated in the artifact header.
+
+### 7. STATUS
+
+The pipeline is consolidated into a single authoritative `dot_master_discovery/` (105 files) in the
+DOT repo, byte-reproducible from a pristine clone via `DISCOVERY_REDESIGN_consolidated.patch`. Sacred
+five intact. **The next action is the 1-2 day discovery scan**, which has never been run.

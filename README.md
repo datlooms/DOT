@@ -4,6 +4,32 @@
 
 ---
 
+## CURRENT STATE — read this first (2026-07-24)
+
+**DOT is mid-rebuild of its signal-selection process, and the rebuild is finished but has not yet been run.**
+
+In July 2026 a fresh export extended the data past the sealed baseline for the first time. The committed 50-signal book met genuinely unseen bars and degraded from PF 6.40 to PF 2.19 — still profitable, survival intact, but materially weaker. The post-mortem found the cause was not the book. **Every validation step had happened inside the window the book was built on. The book was validated; the selection process never was.**
+
+That produced two new governing documents and a rebuilt pipeline:
+
+- **`DOT_signal_discovery_mantra.md`** — STANDING DOCTRINE for how signal discovery is approached. Not a finding, not superseded by measurement. Five rules bind every seat: measure the market not the instrument; include and let the evidence sort; no pre-set targets; depth is the unit of quality; **negative conclusions carry the same burden of proof as positive ones.** Read this before any analysis.
+- **`discovery_redesign_spec.md`** — the build specification, verified across four Supervisor rounds.
+
+**The pipeline gained three stages**, all ratified across nine audit passes:
+- **S3B** — per-family evidence review across all fourteen scanner families
+- **S5B** — the selection layer: lexicographic objective, per-direction search, tail-dependence constraints, multiple-testing
+- **S5C** — the walk-forward on the SELECTION PROCESS, not the book: three derived splits, embargo, per-segment re-derivation, an append-only attestation trail and a single-touch guard on test data
+
+**The discovery scan has never been run.** That is not a figure of speech — `discovery_results/` held one legacy file, no `S3.done` marker exists, and every run to date used `--book`, which skips discovery entirely. So ten of the fourteen scanner families have produced nothing on this data and their "exploratory" classification rests on nothing measured.
+
+**Next action:** `python master.py --workers 10` on the stitched Jan-Jul series. 1-2 days. It produces the candidate pool that the walk-forward needs, and only then does the pass criterion — the single number this rebuild exists to produce — become evaluable. A FAIL is a legitimate result; the code is built to report one rather than lower a bar.
+
+**BOOK-50 remains the committed artifact.** It is profitable and survives on unseen data. It is superseded as the FORWARD book pending a replacement that passes the walk-forward.
+
+For the run itself, read `dot_master_discovery/QUICK_START.md`. For the full history, `DOT_progress_and_rd_plan.md`. For where things stand step by step, `DOT_execution_sequence.md`.
+
+---
+
 ## What DOT is, in one breath
 
 DOT is a piece of software that watches the Dow Jones one minute at a time, and — entirely on its own — decides when to buy, how much to buy, and when to get out. No human sits at the screen. It was built over seventeen months to trade a funded prop-firm account, where the first rule isn't "make money," it's "don't blow up." Everything about how DOT behaves flows from that order of priorities: survive first, profit second.

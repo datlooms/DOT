@@ -124,17 +124,27 @@ So the honest answer: **you lose at most one family's worth of work, not the sta
 --------------------------------------------------------
 ## HOW MANY WORKERS? (`--workers`, default 2)
 
+```
+python master.py --workers 10
+```
+
 `--workers` controls how many of the 10 discovery families run at once in S3. **Each worker loads its own copy of the data**, so memory is the limit, not cores.
 
-| workers | roughly resident | verdict on an 8 GB machine |
-|---|---|---|
-| 1 | ~0.7 GB | always safe, slowest |
-| **2 (default)** | **~1.5 GB** | **safe, recommended** |
-| 3 | ~2.2 GB | usually fine |
-| 6 | ~4.4 GB | risky with Process Lasso and a browser open |
-| 10 | ~7.2 GB | **will probably be killed by Windows** |
+**THE CEILING IS 10, NOT YOUR CORE COUNT.** Two caps apply: `master.py` clamps to 12, and the orchestrator clamps to `min(workers, number_of_pending_families)`. There are 10 parallelisable families, so **10 saturates it** and anything above is silently ignored.
 
-Measured on the 177,251-row dataset: ~733 MB per worker once thresholds are built. The default is deliberately 2, not your core count — raise it only if you can watch memory.
+Measured on the 177,251-row dataset: **~733 MB per worker** once thresholds are built.
+
+| workers | roughly resident | 8 GB machine | **32 GB machine (the G14)** |
+|---|---|---|---|
+| 1 | ~0.7 GB | always safe, slowest | pointlessly slow |
+| 2 (default) | ~1.5 GB | safe, recommended | leaves the machine idle |
+| 3 | ~2.2 GB | usually fine | still idle |
+| 6 | ~4.4 GB | risky with a browser open | comfortable |
+| **10 (max useful)** | **~7.3 GB** | will probably be killed | **USE THIS** |
+
+**WHY THE DEFAULT IS 2 AND YOU SHOULD OVERRIDE IT.** It was set from a 4 GB test box where the parallel path died silently at 2-3 workers, so it is deliberately conservative for unknown hardware. On 32 GB with 16 threads, 7.3 GB of workers is roughly a quarter of RAM. There is no reason to run at 2.
+
+Above 10 does nothing: `--workers 16` behaves identically to `--workers 10`.
 
 **If a worker is killed for memory**, the run does NOT silently hang: the parent prints `*** A WORKER PROCESS DIED WITHOUT RAISING ***`, keeps every family already finished, and completes the rest one at a time. You lose no completed work.
 
