@@ -39,14 +39,31 @@ If it says PASS -> good, the parts are in `data\`. If it says FAIL or ABORT -> t
 --------------------------------------------------------
 ## STEP 5 — run the system
 Pick ONE:
+
+### A) THE FULL DISCOVERY SCAN (1-2 DAYS)
 ```
-python master.py
+python master.py --workers 10
 ```
--> **Discover fresh** on the new data (1-2 DAYS, leave it running). If the PC crashes/reboots, run the SAME command again -- it resumes. See "WHAT ACTUALLY RESUMES" below for exactly what is kept and what is lost.
+**Always use `--workers 10`.** The built-in default is 2, which is sized for an 8 GB machine and would leave a 32 GB / 16-thread laptop idle. See "HOW MANY WORKERS?" below.
+
+Leave it running. If the PC crashes or reboots, run the SAME command again -- it resumes. See "WHAT ACTUALLY RESUMES".
+
+### B) SCORE THE RATIFIED BOOK (about 6 minutes)
 ```
 python master.py --book engine\book50_signals.csv
 ```
--> **Score the ratified book** on this data instead (fast).
+Replays the frozen 50-signal book on whatever is in `data\`. Use this to confirm the data loaded correctly before committing two days.
+
+**`--workers` DOES NOTHING HERE — do not bother adding it.** `--book` skips the discovery stage entirely, and discovery is the only thing that parallelises. The ~6 minutes is the diagnostic stages (S3B, S5B, S5C, S8B) running single-threaded. That is expected, not a hang.
+
+### C) JUST THE BOOK SCORE, FAST (seconds)
+```
+python master.py --book engine\book50_signals.csv --stage S8
+```
+Runs S0-S2 then jumps straight to scoring. Skips every diagnostic. Use this when you only want the headline numbers.
+
+Expect: **3,057 trades / net $98,205 / PF 5.07 / worst day -$565.3** on the stitched Jan-Jul series. If those match, `data\` is correct.
+
 
 --------------------------------------------------------
 ## STEP 6 — read the answers
@@ -122,29 +139,30 @@ Running `python master.py` with NO `--book` is the real scan. In order it will:
 So the honest answer: **you lose at most one family's worth of work, not the stage.** On the measured proof scope the slowest family was ~35s; on the full scope expect hours, so it is still worth not killing a run casually.
 
 --------------------------------------------------------
-## HOW MANY WORKERS? (`--workers`, default 2)
+## HOW MANY WORKERS? (`--workers` — USE 10)
 
 ```
 python master.py --workers 10
 ```
 
-`--workers` controls how many of the 10 discovery families run at once in S3. **Each worker loads its own copy of the data**, so memory is the limit, not cores.
+**Use 10. Every time. The built-in default of 2 is wrong for this machine.**
 
-**THE CEILING IS 10, NOT YOUR CORE COUNT.** Two caps apply: `master.py` clamps to 12, and the orchestrator clamps to `min(workers, number_of_pending_families)`. There are 10 parallelisable families, so **10 saturates it** and anything above is silently ignored.
+`--workers` controls how many of the 10 discovery families run at once in S3. **It only affects the full scan** -- `--book` skips S3, so the flag does nothing there.
 
-Measured on the 177,251-row dataset: **~733 MB per worker** once thresholds are built.
+**THE CEILING IS 10, NOT YOUR CORE COUNT.** Two caps apply: `master.py` clamps to 12, and the orchestrator clamps to `min(workers, pending_families)`. There are 10 parallelisable families, so 10 saturates it. `--workers 16` behaves identically to `--workers 10`.
+
+**Each worker loads its own copy of the data**, so memory is the limit, not cores. Measured on the 177,251-row dataset: **~733 MB per worker** once thresholds are built.
 
 | workers | roughly resident | 8 GB machine | **32 GB machine (the G14)** |
 |---|---|---|---|
 | 1 | ~0.7 GB | always safe, slowest | pointlessly slow |
-| 2 (default) | ~1.5 GB | safe, recommended | leaves the machine idle |
+| 2 (the default) | ~1.5 GB | safe | **leaves the machine idle -- override it** |
 | 3 | ~2.2 GB | usually fine | still idle |
 | 6 | ~4.4 GB | risky with a browser open | comfortable |
 | **10 (max useful)** | **~7.3 GB** | will probably be killed | **USE THIS** |
 
-**WHY THE DEFAULT IS 2 AND YOU SHOULD OVERRIDE IT.** It was set from a 4 GB test box where the parallel path died silently at 2-3 workers, so it is deliberately conservative for unknown hardware. On 32 GB with 16 threads, 7.3 GB of workers is roughly a quarter of RAM. There is no reason to run at 2.
+**WHY THE DEFAULT IS 2.** It was set from a 4 GB test box where the parallel path died silently at 2-3 workers, so it is deliberately conservative for unknown hardware. On 32 GB, 7.3 GB of workers is roughly a quarter of RAM. There is no reason to run at 2 on this laptop.
 
-Above 10 does nothing: `--workers 16` behaves identically to `--workers 10`.
 
 **If a worker is killed for memory**, the run does NOT silently hang: the parent prints `*** A WORKER PROCESS DIED WITHOUT RAISING ***`, keeps every family already finished, and completes the rest one at a time. You lose no completed work.
 
