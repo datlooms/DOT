@@ -6,6 +6,7 @@
 **Date:** 2026-07-23
 **Revision 2:** amended 2026-07-23 following external-review assessment and its correction round. Nine verified changes applied (§C.2, §C.3, §D.0, §F.4, §F.5, §F.6, §G.2, §H.1, §J); three provisionally-accepted items refuted by measurement and recorded as withdrawn (§10C).
 **Revision 3:** amended 2026-07-23 following Supervisor verification (APPROVE WITH AMENDMENTS). Defects A1–A5 corrected, gaps G1–G8 answered or assigned, three implementability blockers and three fake-step loopholes closed. **§0.1 is new and is the root fix**: depth, population and tolerance are now defined once and every depth-dependent figure is re-derived against them. Two Supervisor findings are disputed with measurement rather than absorbed — see §F.1.
+**Revision 9:** amended 2026-07-24 with five corrections, landing before pipeline consolidation. Items 1, 2 and 4 documentation; **items 3 and 5 design**. §C.1 records that `CoFire` is **not consumed by the objective at all** (neither pooled nor per-direction) — no numerical code change, one naming/signature fix specified to close a latent hazard. §I.1 specifies **equal partition** of the post-floor remainder. §I.3's pass criterion is **restated as a ratio to each split's own measured null**, with a derived minimum denominator of **80 qualifying triples (hard floor 40)** — a code change the Developer applies at consolidation. Items 1 and 2 confirmed already applied at Revision 8; the build was correct throughout and the spec now matches it.
 **Revision 8:** amended 2026-07-23 with three corrections raised by the Developer and confirmed by the Auditor (documentation only; Build 2 is ratified at `master.py 296d612b7e9f` and Build 3 is authorised — these do not gate it). **§C.2's exclusion-bias direction is corrected to ANTI-CONSERVATIVE** and its root cause traced one level deeper than the notice reached — to the series definition, not only the k<3 degeneracy. **§C.2's independence annotation is corrected** (`lambda_L = 1.0` is perfect tail dependence; independence reads `tau`) and every λ figure re-derived on the corrected series, moving the headline lift from 3.548x to **1.69x**. **§C.1's `CoFire` gains the within-direction treatment `DepthYield` already had**, with cross-direction zero recorded as a property of the D2D alternating-bias design rather than as a market finding. Two provenance items recorded in §10C.
 **Revision 7:** amended 2026-07-23, Supervisor amendment C (documentation only, non-blocking; the Developer is building from `2b7f36d407f6` and this does not gate that). §D.0.1's reconciliation block restated against the current doctrine `fae943d40231` (305 lines): the recorded divergence **no longer exists** — the doctrine now states the six-cell robustness range this spec's figures sit inside — and the returned observation on unlabelled parameters is **closed, actioned in the doctrine as M3**. The doctrine's ≥15-trade filter claim is independently verified here and the standing "the filter is part of the finding" construction is adopted document-wide.
 **Revision 6:** amended 2026-07-23 following Supervisor CONFIRM. `DOT_signal_discovery_mantra.md` is now **binding doctrine** over this document; §D.0.1 records the reconciliation. §F.3.1 gains the N=5 tolerance table and withdraws the ungeneralised monotonic-decline claim. The MARKET/BOOK labelling construction is extended to five further sections. No figure changed except by addition.
@@ -335,6 +336,12 @@ Measured (pre-jar qualifying masks with engine `entry_ok`, BOOK): **0 of 481 uno
 | **SHORT within-direction** | **0.0162** | **YES** |
 
 **§C consumes the per-direction bases (0.0480 / 0.0162).** The all-pairs figure is emitted for continuity and explicitly marked deflated; the pooled same-direction figure is reported but does not enter the objective, since pooling still lets a large-pool direction dominate the mean.
+
+**BUILD STATUS — NO CODE CHANGE IS REQUIRED, AND THE REASON IS NOT THAT THE BUILD READS THE RIGHT BASIS.** Verified against `selection.py` at the ratified state: `cofire_matrix` and `cofire_book` are **defined but never called from the objective, the greedy search, or any constraint.** Their only call sites are `master.py`'s S5B diagnostic emission, which writes `selection_cofire.csv`. The objective's depth term is `depth_yield_pair`, which is already per-direction by construction (§C.1).
+
+So the answer is neither of the two obvious ones: **the objective does not read `CoFire` at all — pooled or otherwise.** The within-direction requirement above is therefore a **forward constraint on any future wiring**, not a repair of current behaviour.
+
+**One latent hazard, and the low-cost consolidation-time fix.** `cofire_book(M)` takes the unconditional off-diagonal mean — the deflated all-pairs basis — and its name does not say so. If a future revision wires it into the objective, the defect appears silently and would partially undo the O1 directional fix. **Specified for consolidation:** either rename it to `cofire_book_all_pairs_DIAGNOSTIC` or give it a required direction-mask argument, so the pooled basis cannot be consumed by accident. **This is a naming/signature change with no numerical effect and no impact on any emitted figure.**
 
 **`DepthYield` IS EVALUATED WITHIN DIRECTION AND NORMALISED BY THAT DIRECTION'S SIGNAL COUNT. It is never pooled into a single scalar.** A pooled count is scale-dependent: it rewards whichever direction happens to hold more signals, for combinatorial reasons that have nothing to do with signal quality.
 
@@ -1195,7 +1202,15 @@ All prior validation — blind audit, OOS May–Jun, 6/6 folds, decorrelation, n
   - **≥ 3 calendar-month buckets** with trades, so §H.3 is evaluable;
   - **≥ 60 post-warmup trading days**, so §H.2's 80% draws retain enough distinct days for selection frequencies to converge;
   - **≥ 3 monthly buckets in EACH direction** where a direction is to be evaluated, per §H.3.1 — otherwise that direction is reported unevaluable rather than culled.
-- **Splits: derived.** With 127 post-warmup days and a 60-day floor on the *first* anchored training segment, the series supports **3 splits** (train ≥60d → test, then anchored extension twice). **The build computes the count from the floor and reports it; it does not assume 4.** If the floor admits fewer than 3 splits the walk-forward is under-powered and that must be reported as a limitation of the data, not absorbed by shortening segments.
+- **Splits: derived.** With 127 post-warmup days and a 60-day floor on the *first* anchored training segment, the series supports **3 splits**. **The build computes the count from the floor and reports it; it does not assume 4.** If the floor admits fewer than 3 splits the walk-forward is under-powered and that must be reported as a limitation of the data, not absorbed by shortening segments.
+
+- **PARTITION RULE — EQUAL PARTITION OF THE POST-FLOOR REMAINDER. This was previously unstated and the two readings return different split counts from identical inputs.**
+
+  Once the first training prefix meeting the floor is fixed at 60 days, **67 post-warmup trading days remain. They are partitioned into contiguous, as-equal-as-possible test segments**, remainder distributed to the earliest segments. On this series that yields **3 splits with test segments of 21 / 20 / 20 days**, which reproduces the spec's own stated "roughly 20–30 trading days".
+
+  **The rejected alternative, recorded so it is not re-derived:** a downward scan for the largest test segment admitting ≥3 splits leaves a 1-day final stub that the 1,440-bar embargo annihilates, returning **2 splits**. That is what a first implementation produced. **The spec's stated arithmetic reproduces only under equal partition**, so equal partition is the rule.
+
+  *Falsification:* if equal partition on a future dataset produces a final segment below the minimum test length needed for §H.3 to evaluate, the partition must reduce the split count rather than ship an unevaluable final split — the floor governs, not the partition.
 - **Scheme: anchored walk-forward.** Split *k* selects on all data up to boundary *k* and tests on the untouched segment between boundary *k* and *k+1*. Anchored rather than rolling because the warm-up floor (6,900 bars) consumes a fixed prefix and a rolling window would repeatedly pay it. Anchoring also means later training segments strictly contain earlier ones, so the floor binds only on the first.
 - **Embargo: one full trading day, `>= 1,440 bars`.** Stated as a bar count, not a session count: the measured median session is 1,365 bars, so 1,440 is conservative in the right direction, and "one trading day" must not be read as "one session" by a build that then embargoes fewer bars. Required, not optional: the §D thrust labels use forward windows up to W=60 bars, trades hold for a bounded but nonzero duration, and cluster spans reach 80 bars. Without an embargo the training window's forward labels peek into the test segment.
 - **Test segments are touched exactly once**, at the end, to produce the reported number. **That single touch includes the §I.3 null re-run** — see §I.3.
@@ -1210,11 +1225,59 @@ All prior validation — blind audit, OOS May–Jun, 6/6 folds, decorrelation, n
 
 Signal-level persistence into the held-out segment, measured as the record measures it (net > 0, PF >= 2, WR >= 75 in both train and test):
 
-- **Current baseline: 50%** (26/52 entities).
-- **Random-triple null: 27%** (4/15) — and this null must be **re-run on each split**, not carried from the record, because the null is period-dependent.
-- **Target: materially above 50%**, specified as **>= 65% on the mean of the derived splits (§I.1), with no single split below 50%.**
+**THE CRITERION IS A RATIO TO THE SPLIT'S OWN MEASURED NULL, NOT AN ABSOLUTE THRESHOLD. The previous absolute form is withdrawn as incoherent.**
 
-The single-split floor matters as much as the mean: a process that scores 80/80/80/20 is not a working process, and the mean alone would hide it.
+The previous criterion was `mean >= 0.65, no split < 0.50`, inherited from a recorded **full-window** random-triple baseline of 27%. That is incoherent on two counts:
+
+1. **The quantities are not comparable.** The 27% is a full-window figure. The per-split nulls are 20–21-day test segments under a train-and-test qualification. Different objects, and no absolute threshold can be inherited from one to the other.
+2. **It contradicts the mechanism that replaced it.** §I.4 item 7 now *enforces* a null regenerated per split. Expressing the bar as an absolute inherited from the fixed baseline reintroduces exactly the dependency that rejection item was written to remove.
+
+**Measured per-split nulls (BOOK-independent; null triples, `triples_per_split=120`, seeded):** 6/16, 7/16, 5/16 = **37.5% / 43.75% / 31.25%**.
+
+**These are NOT evidence of a higher bar.** The three counts are consecutive integers — the entire spread is ±1 triple — and the exact binomial 95% intervals **[0.152, 0.646], [0.198, 0.701], [0.110, 0.587] all contain 0.27**. Pooled, 18/48 = 37.5% with CI [0.240, 0.526], which also contains 0.27. **At n=16 one cannot distinguish 27% from 44%.** An earlier reading of these as "a higher bar than assumed" is withdrawn.
+
+**SPECIFIED CRITERION:**
+
+```
+ratio_s      = book_persistence(s) / null_persistence(s)      for each derived split s
+PASS         = mean_s(ratio_s) >= 2.40  AND  min_s(ratio_s) >= 1.85
+               AND the 95% lower bound on mean_s(ratio_s) exceeds 1.0
+```
+
+The two ratio thresholds **preserve the previous intent exactly** at the recorded baseline: 0.65 / 0.27 = **2.41** and 0.50 / 0.27 = **1.85**. The additional lower-bound requirement is what stops a point estimate clearing on noise.
+
+**MINIMUM NULL DENOMINATOR — `n_null` is the count of TRAIN-QUALIFYING null triples, not the count generated.**
+
+| | value |
+|---|---|
+| **Target `n_null`** | **80 qualifiers per split** |
+| **Hard floor `n_null`** | **40 qualifiers per split — below this the criterion is UNEVALUABLE, not evaluated** |
+
+Two independent derivations converge on this range:
+
+- **The null arm must not dominate the comparison.** The book arm carries `n_book ≈ 50` at `p ≈ 0.50`, contributing variance 0.00500. For the null's variance contribution (`p(1−p)/n` at `p=0.27`) to be **no larger** than the book's requires `n_null ≥ 40`; for it to be **at most half** the book's requires `n_null ≥ 79`.
+- **Power to detect the criterion's own floor ratio.** Detecting ratio 1.85 (0.27 → 0.50) at α=0.05 one-sided needs **n ≥ 55 per arm at 80% power** and **n ≥ 76 at 90%**. Detecting ratio 2.00 needs n ≥ 40 at 80%.
+
+At `n_null = 80` the null's 95% CI half-width is ±0.098 versus **±0.218 at n=16** — the current estimate is more than twice as wide as the effect the criterion must resolve.
+
+**WHAT THE DEVELOPER MUST APPLY — target the QUALIFIER count, not the generated count.**
+
+The measured train-qualification rate is **16/120 = 13.3%**, but that rate is itself uncertain: exact 95% CI **[0.078, 0.208]**, so the generated count needed for 80 qualifiers spans **386 to 1,024**. **A fixed `NULL_TRIPLES_PER_SPLIT` is therefore fragile and must not be the control.**
+
+```
+generate null triples in seeded batches until train_qualifiers >= 80
+hard cap NULL_TRIPLES_CAP = 1500 per split
+if the cap is reached with train_qualifiers < 40 -> that split's criterion is UNEVALUABLE
+if 40 <= train_qualifiers < 80 -> EVALUABLE, with the reduced denominator reported
+```
+
+At the measured 13.3% rate the expected generation is **~600 triples per split** (5.0× the current 120), and 1,800 across three splits against the current 360. That is the honest compute cost.
+
+**DO NOT LOOSEN THE TRAIN BAR TO RAISE THE QUALIFICATION RATE.** It would raise `n_null` cheaply and **invalidate the comparison**: the null exists to answer "what fraction of things that cleared *the same bar as the book's signals* persist by chance?" Null triples admitted under a looser bar are not a null for qualified signals, and the ratio would compare two different populations. **The cost of loosening is the meaning of the measurement; the cost of raising the count is compute. Raise the count.**
+
+*What a FAIL looks like:* `mean ratio < 2.40`, or any split below 1.85, or a mean-ratio lower bound not exceeding 1.0. **A fail is a legitimate result and is reported as one. No bar is lowered to obtain a pass, and an UNEVALUABLE split is reported as unevaluable rather than imputed.**
+
+*Fit risk:* the 2.40 / 1.85 thresholds inherit the incumbent's 50%-vs-27% relationship, which is itself a six-month figure. They are fixed a priori and never tuned against a walk-forward result; the ratio form at least makes the denominator segment-local, which the absolute form did not.
 
 **THE NULL RE-RUN IS PART OF THE SINGLE TEST TOUCH — loophole closed.** Regenerating the random-triple null per split requires scoring random signals on the test segment, which is a second read of held-out data. §I.1 permits touching a test segment exactly once and the previous text never said whether null scoring counted. It does. **The real book and the null are scored in the SAME single pass over the test segment**, from one loading of that segment, and the pass is recorded once in the §I.4 attestation. A build that scores the book, inspects the result, and then scores the null has touched held-out data twice and the split is void — even though no stated rule previously forbade it.
 
@@ -1366,6 +1429,8 @@ Everything runs under `master.py`. No standalone scripts.
 - §G the **4** duplicate pairs and 7 dead conditions on the eligible universe, effective vocabulary **238** — and the finding that the identity-test domain changes the answer (all-bars gives 1 pair / 6 dead / 242).
 - The depth ladders and cluster statistics quoted throughout, on all three bases.
 - **§C.2 the inadequacy of Pearson (BOOK)** — τ=0.20, k=10, raw daily P&L, 790 pairs: mean Pearson +0.0992 against a tail lift of **1.69x** independence, 20.5% of pairs misread, rank correlation +0.382.
+- **§I.3 the per-split nulls cannot distinguish 27% from 44% at n=16** — 6/16, 7/16, 5/16 with exact 95% intervals [0.152,0.646], [0.198,0.701], [0.110,0.587], all containing 0.27; pooled 18/48 CI [0.240,0.526].
+- **§I.3 the required null denominator** — two independent derivations converge on 55–79; target 80, hard floor 40; train-qualification 16/120 = 13.3% with CI [0.078,0.208].
 - **§C.2 the exclusion bias is ANTI-CONSERVATIVE (BOOK)** — retained 0.3387 vs excluded 0.4433 raw / 0.3571 degeneracy-guarded; 21 degenerate pairs at k<3 (5 at k=1, 16 at k=2).
 - **§C.1 cross-direction co-firing is structurally zero (DESIGN, not market)** — 0 of 481 unordered cross pairs share a qualifying bar; 962 of 2,450 ordered pairs (39.3%) are zero by construction.
 - **§C.2 the operating-point defect** — τ=0.10/k=20 retains 8.2% of the pair space and its exclusion is anti-conservative (excluded λ 4.34 vs retained 3.96); τ=0.20/k=10 retains 64.5% and flips the bias conservative.
