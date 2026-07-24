@@ -440,3 +440,136 @@ def overlap_validation(thrust_cs, cs_book, cs_qual, n_bars, U):
             'cluster_bars': cb, 'cluster_bars_in_thrust_pct': round(100.0 * cb_hit / cb, 1) if cb else 0.0,
             'b1_only_pct': round(100.0 * int((thrust_bars & cov_b1 & U).sum()) / tb, 1) if tb else 0.0,
             'b2_only_pct': round(100.0 * int((thrust_bars & cov_b2 & U).sum()) / tb, 1) if tb else 0.0}
+
+
+def directional_baseline(df, W, k_pct, e_pct, warmup, mask_name):
+    fwd, mag, eff, valid, thr, mcol, ecol = thrust_thresholds(df, W, (k_pct,), (e_pct,))
+    karr = thr[(mcol, f'k{int(round(k_pct * 100))}')]
+    earr = thr[(ecol, f'e{int(round(e_pct * 100))}')]
+    n = len(df)
+    if mask_name == 'post-warmup':
+        U = np.arange(n) >= warmup
+    else:
+        U = eligible_universe(df, warmup)
+    qual = valid & U & (fwd != 0.0) & (mag >= karr) & (eff >= earr)
+    up = qual & (fwd > 0)
+    dn = qual & (fwd < 0)
+    tot = int(up.sum() + dn.sum())
+    rows = [{'scope': 'ALL', 'direction': 'UP', 'thrust_bars': int(up.sum()),
+             'share_pct': round(100.0 * up.sum() / tot, 1) if tot else 0.0,
+             'median_move_pts': round(float(np.median(np.abs(fwd[up]))), 1) if up.any() else 0.0},
+            {'scope': 'ALL', 'direction': 'DOWN', 'thrust_bars': int(dn.sum()),
+             'share_pct': round(100.0 * dn.sum() / tot, 1) if tot else 0.0,
+             'median_move_pts': round(float(np.median(np.abs(fwd[dn]))), 1) if dn.any() else 0.0}]
+    months = pd.Series(df['Time'].astype(str).values).str[:7].values
+    closes = df['Close'].values.astype(float)
+    for m in sorted(set(months)):
+        mm = months == m
+        u = int((up & mm).sum())
+        d = int((dn & mm).sum())
+        if u + d == 0:
+            continue
+        idx = np.flatnonzero(mm)
+        rows.append({'scope': m, 'direction': 'DOWN_SHARE', 'thrust_bars': u + d,
+                     'share_pct': round(100.0 * d / (u + d), 1),
+                     'median_move_pts': round(float(closes[idx[-1]] - closes[idx[0]]), 0)})
+    out = pd.DataFrame(rows)
+    out['W'] = W
+    out['K_pct'] = k_pct
+    out['E_pct'] = e_pct
+    out['mask'] = mask_name
+    return out
+
+
+def episode_traded_split(df, W, k_pct, e_pct, n_tol, warmup, bk):
+    fwd, mag, eff, valid, thr, mcol, ecol = thrust_thresholds(df, W, (k_pct,), (e_pct,))
+    karr = thr[(mcol, f'k{int(round(k_pct * 100))}')]
+    earr = thr[(ecol, f'e{int(round(e_pct * 100))}')]
+    ev = thrust_events(fwd, mag, eff, valid, karr, earr, warmup)
+    n = len(df)
+    cs = build_cluster_set(n, ev, n_tol)
+    tcid = map_trades_to_clusters(cs, bk)
+    traded = set(np.unique(tcid[tcid >= 0]).tolist())
+    cl = cs['clusters']
+    closes = df['Close'].values.astype(float)
+    rows = []
+    strata = [('<50', 0.0, 50.0), ('50-100', 50.0, 100.0), ('100-200', 100.0, 200.0), ('>200', 200.0, 1e12)]
+    for d, lab in ((1, 'UP'), (-1, 'DOWN')):
+        sub = cl[cl['dir'] == d]
+        tot = len(sub)
+        tr = len(set(sub['cluster_id'].tolist()) & traded)
+        rows.append({'stratum': 'ALL', 'direction': lab, 'episodes': tot, 'traded': tr,
+                     'traded_pct': round(100.0 * tr / tot, 1) if tot else 0.0,
+                     'missed_pct': round(100.0 * (tot - tr) / tot, 1) if tot else 0.0})
+        for slab, lo, hi in strata:
+            mv = np.abs(closes[np.minimum(sub['b1'].values + W, n - 1)] - closes[sub['b0'].values])
+            sel = (mv >= lo) & (mv < hi)
+            ssub = sub[sel]
+            st = len(ssub)
+            str_tr = len(set(ssub['cluster_id'].tolist()) & traded)
+            rows.append({'stratum': slab, 'direction': lab, 'episodes': st, 'traded': str_tr,
+                         'traded_pct': round(100.0 * str_tr / st, 1) if st else 0.0,
+                         'missed_pct': round(100.0 * (st - str_tr) / st, 1) if st else 0.0})
+    out = pd.DataFrame(rows)
+    out['W'] = W
+    out['K_pct'] = k_pct
+    out['E_pct'] = e_pct
+    out['N'] = n_tol
+    return out
+
+
+def missed_reason_decomposition(df, W, k_pct, e_pct, n_tol, warmup, bk, qual_depth):
+    fwd, mag, eff, valid, thr, mcol, ecol = thrust_thresholds(df, W, (k_pct,), (e_pct,))
+    karr = thr[(mcol, f'k{int(round(k_pct * 100))}')]
+    earr = thr[(ecol, f'e{int(round(e_pct * 100))}')]
+    ev = thrust_events(fwd, mag, eff, valid, karr, earr, warmup)
+    n = len(df)
+    cs = build_cluster_set(n, ev, n_tol)
+    tcid = map_trades_to_clusters(cs, bk)
+    traded = set(np.unique(tcid[tcid >= 0]).tolist())
+    cl = cs['clusters']
+    closes = df['Close'].values.astype(float)
+    a = 0
+    b = 0
+    a_mv = []
+    b_mv = []
+    for _i, r in cl.iterrows():
+        cid = int(r['cluster_id'])
+        if cid in traded:
+            continue
+        d = int(r['dir'])
+        b0 = int(r['b0'])
+        b1 = int(r['b1'])
+        mv = abs(float(closes[min(b1 + W, n - 1)] - closes[b0]))
+        if qual_depth[d][b0:b1 + 1].sum() == 0:
+            a += 1
+            a_mv.append(mv)
+        else:
+            b += 1
+            b_mv.append(mv)
+    tot = a + b
+    return pd.DataFrame([
+        {'reason': 'A - no book signal ever qualified in span', 'count': a,
+         'share_pct': round(100.0 * a / tot, 1) if tot else 0.0,
+         'median_move_pts': round(float(np.median(a_mv)), 1) if a_mv else 0.0},
+        {'reason': 'B - a signal qualified but no entry resulted', 'count': b,
+         'share_pct': round(100.0 * b / tot, 1) if tot else 0.0,
+         'median_move_pts': round(float(np.median(b_mv)), 1) if b_mv else 0.0},
+    ]).assign(W=W, K_pct=k_pct, E_pct=e_pct, N=n_tol, total_missed=tot)
+
+
+def book_depth_structure(bk, n_tol, n_bars):
+    rows = []
+    for d, lab in ((1, 'LONG'), (-1, 'SHORT')):
+        sub = bk[bk['direction'] == ('LONG' if d == 1 else 'SHORT')]
+        ev = {d: np.sort(sub['entry_bar'].values.astype(np.int64)), -d: np.array([], dtype=np.int64)}
+        cs = build_cluster_set(n_bars, ev, n_tol)
+        cl = cs['clusters']
+        cl = cl[cl['dir'] == d]
+        sizes = cl['size'].values if len(cl) else np.array([0])
+        rows.append({'direction': lab, 'signals': int(sub['signal_name'].nunique()),
+                     'clusters': int(len(cl)), 'mean_depth': round(float(sizes.mean()), 2),
+                     'max_depth': int(sizes.max()),
+                     'reach_ge5_pct': round(100.0 * float((sizes >= 5).mean()), 1),
+                     'solo_pct': round(100.0 * float((sizes == 1).mean()), 1)})
+    return pd.DataFrame(rows).assign(N=n_tol)

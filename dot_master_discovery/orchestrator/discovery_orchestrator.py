@@ -1,6 +1,9 @@
 import sys
 import os
 import time
+import hashlib
+import json
+import threading
 import numpy as np
 import pandas as pd
 import dots_thresholds as dt
@@ -214,6 +217,65 @@ FAMILIES = [
 ]
 
 
+HEARTBEAT_SECONDS = 60
+
+
+def _sha_file(path):
+    h = hashlib.sha256()
+    with open(path, 'rb') as f:
+        for chunk in iter(lambda: f.read(1 << 20), b''):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _family_paths(fam, script):
+    csv = os.path.join(RESULTS_DIR, f"results_{fam}_{script}.csv")
+    done = os.path.join(RESULTS_DIR, f"results_{fam}_{script}.done")
+    return csv, done
+
+
+def _write_atomic_csv(frame, path):
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8', newline='') as f:
+        frame.to_csv(f, index=False, lineterminator='\n')
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+
+
+def _mark_family_done(csv_path, done_path, n_rows):
+    payload = {'rows': int(n_rows), 'csv_sha256': _sha_file(csv_path),
+               'schema_cols': len(SCHEMA)}
+    tmp = done_path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, sort_keys=True)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, done_path)
+
+
+def family_is_complete(fam, script):
+    csv, done = _family_paths(fam, script)
+    if not (os.path.exists(csv) and os.path.exists(done)):
+        return False, None
+    try:
+        meta = json.load(open(done, 'r', encoding='utf-8'))
+    except Exception:
+        return False, None
+    if meta.get('csv_sha256') != _sha_file(csv):
+        return False, None
+    return True, meta
+
+
+def resume_family(fam, script):
+    csv, _done = _family_paths(fam, script)
+    frame = pd.read_csv(csv)
+    missing = [c for c in SCHEMA if c not in frame.columns]
+    if missing:
+        return None
+    return frame[SCHEMA].to_dict('records')
+
+
 def run_family(fam, script, mod, fmt, kw_builder, df, adaptive, structural, warmup):
     orig = df['D2D_Trend_Dir'].values.copy()
     kw = kw_builder(df, adaptive, structural, warmup)
@@ -221,12 +283,57 @@ def run_family(fam, script, mod, fmt, kw_builder, df, adaptive, structural, warm
     try:
         rows = mod.run_search(df, adaptive=adaptive, structural=structural, warmup=warmup, **kw)
     finally:
-        df['D2D_Trend_Dir'] = orig  # F4/F7 mutate the gate column; always restore
+        df['D2D_Trend_Dir'] = orig
     common = fmt(rows, script)
-    out = os.path.join(RESULTS_DIR, f"results_{fam}_{script}.csv")
-    pd.DataFrame(common, columns=SCHEMA).to_csv(out, index=False, lineterminator='\n')
-    print(f"[{fam}] {len(common)} rows -> {out}  ({time.time()-t0:.1f}s)")
+    csv, done = _family_paths(fam, script)
+    _write_atomic_csv(pd.DataFrame(common, columns=SCHEMA), csv)
+    _mark_family_done(csv, done, len(common))
+    print(f"[{fam}] {len(common)} rows -> {csv}  ({time.time() - t0:.1f}s)", flush=True)
     return common
+
+
+def _worker_entry(payload):
+    fam, script, scope, results_dir, frame_path = payload
+    import discovery_orchestrator as orch
+    orch.RESULTS_DIR = results_dir
+    df = pd.read_csv(frame_path)
+    adaptive = dt.compute_adaptive_thresholds(df)
+    structural = dt.compute_structural_gates(df)
+    warmup = engine.warmup_floor(df, verbose=False)
+    builders = orch._scope(scope)
+    spec = {f[0]: f for f in orch.FAMILIES}[fam]
+    orch.run_family(spec[0], spec[1], spec[2], spec[3], builders[fam],
+                    df, adaptive, structural, warmup)
+    return fam
+
+
+class _Heartbeat:
+    def __init__(self, label, interval=HEARTBEAT_SECONDS):
+        self._label = label
+        self._interval = interval
+        self._stop = threading.Event()
+        self._t0 = time.time()
+        self._thread = None
+
+    def __enter__(self):
+        def beat():
+            while not self._stop.wait(self._interval):
+                mins = (time.time() - self._t0) / 60.0
+                print(f"    ... {self._label} still running ({mins:.1f} min elapsed)", flush=True)
+        self._thread = threading.Thread(target=beat, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=1.0)
+        return False
+
+
+def _hms(seconds):
+    seconds = int(max(0, seconds))
+    return f"{seconds // 3600}:{(seconds % 3600) // 60:02d}:{seconds % 60:02d}"
 
 
 def ingest_f0():
@@ -262,31 +369,133 @@ def sort_master(master_df):
         ascending=[False, False, True, False, False]).reset_index(drop=True)
 
 
-def orchestrate(scope='proof'):
+def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=None,
+                warmup=None, frame_path=None):
     os.makedirs(RESULTS_DIR, exist_ok=True)
-    print(f"equiDOT — Stage 8 discovery orchestrator | scope={scope} | target lot 1.0")
-    df = engine.load_sealed_baseline()
-    warmup = engine.warmup_floor(df)
-    adaptive = dt.compute_adaptive_thresholds(df)
-    structural = dt.compute_structural_gates(df)
+    print(f"equiDOT — discovery orchestrator | scope={scope} | workers={workers} | target lot 1.0", flush=True)
+    if df is None:
+        print("  no frame injected — loading the sealed baseline from the working directory", flush=True)
+        df = engine.load_sealed_baseline()
+        adaptive = None
+        structural = None
+        warmup = None
+    else:
+        print(f"  using the INGESTED frame from S0: {len(df):,} rows x {df.shape[1]} cols "
+              f"({df['Time'].astype(str).values[0]} -> {df['Time'].astype(str).values[-1]})", flush=True)
+    if warmup is None:
+        warmup = engine.warmup_floor(df)
+    if adaptive is None:
+        adaptive = dt.compute_adaptive_thresholds(df)
+    if structural is None:
+        structural = dt.compute_structural_gates(df)
     builders = _scope(scope)
-    all_rows = []
     f1_csv_present = os.path.exists(os.path.join(RESULTS_DIR, F1_CSV))
-    for fam, script, mod, fmt in FAMILIES:
-        if fam == 'F1' and f1_csv_present:
+    schedule = [(fam, script, mod, fmt) for fam, script, mod, fmt in FAMILIES
+                if not (fam == 'F1' and f1_csv_present)]
+    total = len(schedule)
+    pending = []
+    resumed = []
+    for fam, script, mod, fmt in schedule:
+        complete, meta = family_is_complete(fam, script)
+        if complete:
+            resumed.append((fam, script, meta))
+        else:
+            pending.append((fam, script, mod, fmt))
+    if resumed:
+        print(f"  RESUME: {len(resumed)} of {total} families already complete on disk — reading back, not re-scanning:",
+              flush=True)
+        for fam, script, meta in resumed:
+            print(f"    [{fam}] skipped, resumed from disk ({meta['rows']} rows, sha {meta['csv_sha256'][:12]})",
+                  flush=True)
+    print(f"  {len(pending)} of {total} families to run this pass", flush=True)
+    durations = []
+    import multiprocessing as _mp
+    if _mp.parent_process() is not None and workers and workers > 1:
+        print("  already inside a worker process — running sequentially to prevent recursive spawn", flush=True)
+        workers = 1
+    ran_parallel = False
+    if workers and workers > 1 and pending and frame_path is not None:
+        from concurrent.futures import ProcessPoolExecutor, as_completed
+        from concurrent.futures.process import BrokenProcessPool
+        import multiprocessing as _mp2
+        payloads = [(fam, script, scope, RESULTS_DIR, frame_path) for fam, script, _m, _f in pending]
+        nw = min(workers, len(payloads))
+        print(f"  running {len(payloads)} families across {nw} worker processes "
+              f"(each loads its own frame; the gate column cannot be shared or corrupted)", flush=True)
+        print(f"  MEMORY: each worker holds its own copy of the frame. If a worker is killed by the OS for memory "
+              f"the parent reports it and finishes the remaining families sequentially.", flush=True)
+        t0 = time.time()
+        died = False
+        try:
+            with _Heartbeat(f"S3 parallel pass over {len(payloads)} families"):
+                with ProcessPoolExecutor(max_workers=nw,
+                                         mp_context=_mp2.get_context('spawn')) as ex:
+                    futures = {ex.submit(_worker_entry, pl): pl[0] for pl in payloads}
+                    done_n = 0
+                    for fut in as_completed(futures):
+                        fam = futures[fut]
+                        try:
+                            fut.result()
+                        except BrokenProcessPool:
+                            died = True
+                            break
+                        except Exception as exc:
+                            print(f"  [{fam}] worker raised {type(exc).__name__}: {exc}", flush=True)
+                            continue
+                        done_n += 1
+                        el = time.time() - t0
+                        rate = el / done_n
+                        eta = rate * (len(payloads) - done_n)
+                        print(f"  [{done_n}/{len(payloads)}] {fam} complete | elapsed {_hms(el)} "
+                              f"| ETA {_hms(eta)}", flush=True)
+        except BrokenProcessPool:
+            died = True
+        if died:
+            print("", flush=True)
+            print("  *** A WORKER PROCESS DIED WITHOUT RAISING — almost always the OS killing it for memory. ***",
+                  flush=True)
+            print("  Families that finished are on disk and will NOT be re-scanned. Completing the rest",
+                  flush=True)
+            print("  sequentially in this process. If this recurs, lower --workers.", flush=True)
+            print("", flush=True)
+        ran_parallel = not died
+        if died:
+            pending = [(fam, script, mod, fmt) for fam, script, mod, fmt in pending
+                       if not family_is_complete(fam, script)[0]]
+        else:
+            pending = []
+    if pending and not ran_parallel:
+        for i, (fam, script, mod, fmt) in enumerate(pending, 1):
+            mean = (sum(durations) / len(durations)) if durations else None
+            eta = f" | ETA {_hms(mean * (len(pending) - i + 1))}" if mean else ""
+            print(f"  [family {i} of {len(pending)}] {fam} ({script}) starting{eta}", flush=True)
+            t0 = time.time()
+            with _Heartbeat(f"{fam} ({script})"):
+                run_family(fam, script, mod, fmt, builders[fam], df, adaptive, structural, warmup)
+            durations.append(time.time() - t0)
+            print(f"  [family {i} of {len(pending)}] {fam} done in {_hms(durations[-1])}", flush=True)
+    all_rows = []
+    for fam, script, _mod, _fmt in schedule:
+        complete, meta = family_is_complete(fam, script)
+        if not complete:
+            print(f"  [{fam}] WARNING: no complete output on disk after this pass; excluded from collation",
+                  flush=True)
             continue
-        all_rows.extend(run_family(fam, script, mod, fmt, builders[fam],
-                                   df, adaptive, structural, warmup))
+        rows = resume_family(fam, script)
+        if rows is None:
+            print(f"  [{fam}] WARNING: output missing schema columns; excluded from collation", flush=True)
+            continue
+        all_rows.extend(rows)
     if f1_csv_present:
         all_rows.extend(ingest_f1())
     all_rows.extend(ingest_f0())
     master = pd.DataFrame(all_rows, columns=SCHEMA)
     master_path = os.path.join(RESULTS_DIR, "discovery_master.csv")
-    sort_master(master).to_csv(master_path, index=False, lineterminator='\n')
+    _write_atomic_csv(sort_master(master), master_path)
     print(f"\nCollated {len(master)} candidates -> {master_path} "
-          f"(sorted: folds_plus, min_fold_pf, worst_day_usd, agg_pf, WR; no rows dropped)")
+          f"(sorted: folds_plus, min_fold_pf, worst_day_usd, agg_pf, WR; no rows dropped)", flush=True)
     by_fam = master.groupby('family').size().to_dict()
-    print(f"Per-family counts: {by_fam}")
+    print(f"Per-family counts: {by_fam}", flush=True)
 
 
 # ── F0 NOTE ──────────────────────────────────────────────────────────────

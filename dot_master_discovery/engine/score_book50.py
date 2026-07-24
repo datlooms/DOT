@@ -70,13 +70,18 @@ def main():
     n = len(td)
     daily = wf.daily_pnl_points(td)
     mon = pd.Series(td['exit_time'].values).str[:7].values
-    oos = td[np.isin(mon, ['2026.05', '2026.06'])]['pnl'].values
+    _oos_legacy = ['2026.05', '2026.06']
+    _present = sorted(set(mon.tolist()))
+    _oos_rel = _present[-2:] if len(_present) >= 2 else _present
+    oos = td[np.isin(mon, _oos_legacy)]['pnl'].values
+    oos_rel = td[np.isin(mon, _oos_rel)]['pnl'].values
     e = td['exit_type'].value_counts().to_dict()
     print(f"BOOK-50 in-book (merged ratified TM):")
     print(f"  trades={n}  net=${pnl.sum():.0f}  PF={pnl[pnl>0].sum()/-pnl[pnl<0].sum():.2f}  "
           f"WR={(pnl>0).sum()/n*100:.1f}%  worst-day=${daily['pnl'].min():.1f}")
     print(f"  exits SL={e.get('SL',0)} BE={e.get('BE',0)} LF={e.get('LF',0)} FC={e.get('FC',0)}  "
-          f"OOS PF={oos[oos>0].sum()/-oos[oos<0].sum():.2f}  "
+          f"OOS PF={oos[oos>0].sum()/-oos[oos<0].sum():.2f} [LEGACY {'+'.join(_oos_legacy)}, STALE: fixed months, not selection input]  "
+          f"OOS_rel PF={oos_rel[oos_rel>0].sum()/-oos_rel[oos_rel<0].sum():.2f} [{'+'.join(_oos_rel)}]  "
           f"L/S={(td.direction=='LONG').sum()}/{(td.direction=='SHORT').sum()}")
 
 

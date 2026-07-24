@@ -87,12 +87,12 @@ RETIRED (removed from the pack): `RUN_STAGE8.md`, `DOT_stage8_program_map.md`, `
 | **F7** | `mean_reversion.py` | Mean-reversion-from-extreme. | `results_F7_*` | exploratory |
 | **F8** | `cross_variable_structure.py` | Relative / cross-variable structure. | `results_F8_*` | exploratory |
 | **F9** | `session_temporal.py` | Temporal / session / calendar conditioner. | `results_F9_*` | exploratory |
-| **F10** | — | *No standalone scanner file in the pack.* | — | **GAP — flag** |
+| **F10** | — | *Not a separate scanner: the concurrence lens was **FOLDED INTO F0** (lens null). F12 (`concurrence_profiler.py`) is the diagnostic remnant.* | — | **FOLDED INTO F0** |
 | **F11** | `rolling_leadlag.py` | Cross-variable × windowed (rolling lead-lag / correlation). | `results_F11_*` | exploratory |
 | **F12** | `concurrence_profiler.py` | Raw variable-depth concurrence **measurement** (does stacking depth predict outcome?). MEASURES, never selects. Secondary lens reads `dots_results/deduped_survivors.csv`. | 9 × `concurrence_*.csv` | exploratory / diagnostic |
 | **F13** | `single_variable_extremes.py` | Single-variable extremes (percentile sweep, both dirs, both D2D polarities). Standalone, NOT convergence. | `results_F13_single_variable_extremes.csv` | exploratory — **documented negative** (0 stars / 0 candidates; convergence necessary) |
 
-**Committed path:** F0 (→ BOOK-50) + the 2 F1 pairs adopted into BOOK-50. Everything else (F2–F13) is exploratory/diagnostic. **F10 has no file** — either never built or folded into a neighbour; flagged for the Supervisor to confirm.
+**Committed path:** F0 (→ BOOK-50) + the 2 F1 pairs adopted into BOOK-50. Everything else (F2–F13) is exploratory/diagnostic. **F10 is FOLDED INTO F0** (concurrence lens null; F12 is the diagnostic remnant) — not a gap; the family set is complete. This line previously carried a stale GAP flag contradicting the Resolution status below; corrected per spec §1.4.
 
 ---
 
@@ -180,6 +180,10 @@ Oracle / wf / core are byte-identical to the project copies (§7) and must stay 
 | `scanners/run_f1_parallel.py` | `230427fcbd04` | MATCH |
 | `master.py` | `db8957587844` | run entry point (S0 re-ingests split parts, natural-sort) |
 | `rebuild.py` | `609580a417fe` | data-prep entry point (raw export → data/) |
+| `engine/family_evidence.py` | *(see manifest)* | S3B per-family evidence review + D2D gate measurement (spec A.1–A.5, E.1) |
+| `engine/selection.py` | *(see manifest)* | S5B selection layer: objective, per-direction greedy, constraints, hygiene (spec C, D.1–D.2, G, H) |
+| `engine/wf_selection.py` | *(see manifest)* | S5C walk-forward on the selection process (spec I) |
+| `engine/cluster_profiler.py` | *(see manifest)* | S8B cluster-participation profiler + §D reach measurements |
 | `_packutil.py` | `6c8f2a3a7d04` | shared helpers (natural-sort + auto-split), no import side-effects |
 | `master_guide.md` | `027be57e8634` | current operator doc |
 | `data/equiDOT_recon171_step7_part1..8.csv` | `9b27119ab564` … `3605299a3fa1` | MATCH (all 8 parts) |
@@ -238,6 +242,10 @@ Deprecated figures (not files): modelled `$90,103` (S.20 harness) / `$92,567` (D
 **ACCEPTANCE:** `python master.py --book book50_signals.csv` → net $92,347 / 2,698 tr → **REPRODUCED**.
 
 ---
+
+## Stage list (current)
+
+`S0 → S1 → S2 → S3 → S3B → S4 → S5 → S6 → S5B → S5C → S7 → S8 → S8B → S9`. S3B, S5B, S5C and S8B were added by the discovery redesign; no existing stage was renumbered. S5C is named for the selection layer it validates and is dispatched after S5B.
 
 ## Resolution status (all reconciled in the master build)
 1. **F10** — FOLDED INTO F0 (concurrence lens null; F12 profiler is the diagnostic remnant). Not a gap; the family set is complete.
