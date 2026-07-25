@@ -273,6 +273,32 @@ def provenance_is_current(csv_path, input_sha):
     return True, 'current'
 
 
+def verify_diagnostic_outputs(results_dir, input_sha, families=('F12', 'F13')):
+    gaps = []
+    rows = []
+    for fam in families:
+        name = DIAGNOSTIC_OUTPUTS.get(fam)
+        if not name:
+            continue
+        csv = os.path.join(results_dir, name)
+        ok, why = provenance_is_current(csv, input_sha)
+        rows.append((fam, name, 'OK' if ok else 'MISSING', why))
+        if not ok:
+            gaps.append(f'{fam} ({name}: {why})')
+    print(f"  DIAGNOSTIC OUTPUT VERIFICATION — after the stage ran, not before:", flush=True)
+    for fam, name, state, why in rows:
+        print(f"    {fam:4} {state:8} {name} — {why}", flush=True)
+    if gaps:
+        raise SystemExit(
+            "ABORT — a diagnostic family was scheduled but produced no current output: "
+            + '; '.join(gaps) +
+            ". SCHEDULING IS NOT COVERAGE. The pipeline was supposed to have just produced this, so "
+            "the same standard applies as to an ingested CSV: the file must exist and carry the "
+            "current input_sha. A multi-day scan must not complete reporting 14-family coverage with "
+            "a family empty.")
+    return rows
+
+
 def verify_family_coverage(queued_pool, queued_diag, input_sha, results_dir):
     rows = []
     gaps = []

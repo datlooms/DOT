@@ -33,7 +33,6 @@ FOLD_BASIS_NOTE = ('folds and OOS are PROPORTIONAL, never calendar. The loaded p
                    'TRADING DAY into a final-third hold-out and a leading two-thirds; the two-thirds is then cut '
                    'into six equal contiguous folds. Folds and the hold-out are DISJOINT, so the two headline '
                    'figures are independent measurements rather than the same trades counted twice.')
-FOLDS = ['2026.01', '2026.02', '2026.03', '2026.04', '2026.05', '2026.06']
 OOS_MONTHS = ['2026.05', '2026.06']
 OOS_LEGACY_NOTE = 'LEGACY DIAGNOSTIC, STALE: fixed calendar months, neither out-of-sample nor segment-relative on a stitched series; not a selection input (spec B.1). oos_rel_* are the data-relative counterpart.'
 OOS_REL_N_MONTHS = 2
@@ -229,7 +228,8 @@ def s3_discovery(out, workers, input_sha, scope, df=None, ad=None, st=None, w=No
     print('   and re-scans only the incomplete ones, so the worst case loss is ONE family, not the whole stage.)')
     orch.orchestrate(scope, workers=workers, df=df, adaptive=ad, structural=st, warmup=w,
                      frame_path=frame_path, input_sha=input_sha)
-    run_diagnostic_families(results, workers, input_sha)
+    run_diagnostic_families(results, workers, input_sha, df=df)
+    orch.verify_diagnostic_outputs(results, input_sha)
     if frame_path is not None and os.path.exists(frame_path):
         os.remove(frame_path)
         print(f'  worker frame {os.path.basename(frame_path)} removed on S3 completion')
@@ -488,43 +488,67 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
     return r
 
 
-def run_diagnostic_families(results_dir, workers, input_sha):
+def run_diagnostic_families(results_dir, workers, input_sha, df=None):
     import discovery_orchestrator as orch
+    import portfolio_simulation_engine as engine
+    _orig_loader = engine.load_sealed_baseline
+    if df is not None:
+        def _injected_loader(*_a, **_k):
+            return df
+        engine.load_sealed_baseline = _injected_loader
+        print('  DIAGNOSTIC FRAME INJECTION: F12 and F13 call engine.load_sealed_baseline() internally,')
+        print('  which hardcodes equiDOT_recon171_step7_* — the WRONG dataset. The loader is overridden')
+        print('  at runtime to return the frame S0 ingested (module-global override, no scanner edit),')
+        print('  so their output and its provenance stamp refer to the data actually under test.')
     print('  DIAGNOSTIC FAMILIES (F12, F13) — separate stages: they emit measurement artifacts, not')
     print('  14-column pool rows, so they cannot collate into discovery_master.csv. Both run on the')
     print('  same single command with the operator --workers value and their own internal parallelism.')
     f13_csv = os.path.join(results_dir, 'results_F13_single_variable_extremes.csv')
     ok13, why13 = orch.provenance_is_current(f13_csv, input_sha)
     if ok13:
-        print(f'  [F13] already current for this input_sha — skipping')
+        print('  [F13] already current for this input_sha — skipping')
     else:
         print(f'  [F13] running ({why13}); native _f13_shards/*.done checkpointing preserved as-is')
-        try:
-            import single_variable_extremes as f13
-            f13.RESULTS_DIR = results_dir
-            f13.OUT_CSV = f13_csv
-            f13.SHARD_DIR = os.path.join(results_dir, '_f13_shards')
-            f13.run(min(workers, 12))
-            if os.path.exists(f13_csv):
-                orch.stamp_provenance(f13_csv, input_sha)
-        except Exception as exc:
-            print(f'  [F13] FAILED {type(exc).__name__}: {exc}')
-    f12_csv = os.path.join(results_dir, 'concurrence_depth_bars.csv')
+        import single_variable_extremes as f13
+        f13.OUT_CSV = f13_csv
+        f13.SHARD_DIR = os.path.join(results_dir, '_f13_shards')
+        f13.RESULTS_DIR = results_dir
+        f13.run(min(workers, 12))
+        if not os.path.exists(f13_csv):
+            raise SystemExit('ABORT — [F13] ran but produced no output at '
+                             f'{os.path.basename(f13_csv)}. A diagnostic family that cannot emit is '
+                             'not coverage; the run stops rather than report 14-family coverage with '
+                             'one family empty.')
+        orch.stamp_provenance(f13_csv, input_sha)
+
+    f12_csv = os.path.join(results_dir, orch.DIAGNOSTIC_OUTPUTS['F12'])
     ok12, why12 = orch.provenance_is_current(f12_csv, input_sha)
     if ok12:
-        print(f'  [F12] already current for this input_sha — skipping')
+        print('  [F12] already current for this input_sha — skipping')
     else:
-        print(f'  [F12] running ({why12}); nine concurrence CSVs into the run tree')
-        try:
-            import concurrence_profiler as f12
-            f12.RESULTS_DIR = results_dir
-            if hasattr(f12, 'main'):
-                f12.main()
-            for nm in os.listdir(results_dir):
-                if nm.startswith('concurrence_') and nm.endswith('.csv'):
-                    orch.stamp_provenance(os.path.join(results_dir, nm), input_sha)
-        except Exception as exc:
-            print(f'  [F12] FAILED {type(exc).__name__}: {exc}')
+        print(f'  [F12] running ({why12}); concurrence CSVs into the run tree')
+        before = {}
+        for nm in os.listdir(results_dir):
+            fp = os.path.join(results_dir, nm)
+            if os.path.isfile(fp):
+                before[nm] = os.path.getmtime(fp)
+        import concurrence_profiler as f12
+        f12.RESULTS_DIR = results_dir
+        f12.run(n_workers=min(workers, 8))
+        produced = []
+        for nm in sorted(os.listdir(results_dir)):
+            fp = os.path.join(results_dir, nm)
+            if not (os.path.isfile(fp) and nm.startswith('concurrence_') and nm.endswith('.csv')):
+                continue
+            if nm not in before or os.path.getmtime(fp) > before[nm]:
+                produced.append(nm)
+        for nm in produced:
+            orch.stamp_provenance(os.path.join(results_dir, nm), input_sha)
+        print(f'  [F12] produced {len(produced)} concurrence CSVs this run: '
+              f'{", ".join(produced) if produced else "NONE"}')
+        print('  [F12] provenance stamped on THOSE FILES ONLY — never by pattern match on whatever '
+              'happens to be on disk, which would launder a stale artifact from another dataset')
+    engine.load_sealed_baseline = _orig_loader
 
 
 # ── S3B PER-FAMILY EVIDENCE REVIEW (spec A.1-A.5) + D2D GATE MEASUREMENT (spec E.1) ──
