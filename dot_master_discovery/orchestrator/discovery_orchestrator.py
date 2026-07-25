@@ -273,6 +273,32 @@ def provenance_is_current(csv_path, input_sha):
     return True, 'current'
 
 
+FOLD_GAP_NOTE = (
+    'POOL PROPERTY THE SELECTION LAYER MUST KNOW — folds_plus and min_fold_pf on EVERY row of this '
+    'pool come from sacred wf.FOLDS, which is the CALENDAR LITERAL Jan..Jun. Any month outside that '
+    'window contributes NOTHING to any row fold evidence. On a series running past June (this run '
+    'ends {last}), the newest month is invisible to fold_plus, so S5 gate folds_plus >= 4 is decided '
+    'on Jan-Jun alone. This CANNOT be fixed without editing wf.py, which is sacred and byte-locked '
+    'at 793e6e5f8d9a; recording it at the point of use is the honest resolution. The proportional '
+    'six-slice fold plan used for the COMMITTED-SYSTEM headline (master.py fold_plan) is a separate '
+    'and data-relative mechanism and is NOT what produced these columns.')
+
+
+def write_pool_note(master_path, df):
+    last = str(df['Time'].values[-1])[:10] if df is not None and len(df) else 'unknown'
+    note = FOLD_GAP_NOTE.format(last=last)
+    path = os.path.splitext(master_path)[0] + '.POOL_NOTE.txt'
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        f.write(note + chr(10))
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
+    print('  POOL NOTE -> ' + os.path.basename(path), flush=True)
+    print('    ' + note[:150] + '...', flush=True)
+    return path
+
+
 def verify_diagnostic_outputs(results_dir, input_sha, families=('F12', 'F13')):
     gaps = []
     rows = []
@@ -895,7 +921,8 @@ def _parity_estimate(fam, n_units, n_full):
 
 
 def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=None,
-                warmup=None, frame_path=None):
+                warmup=None, frame_path=None, input_sha=None, diagnostics=('F12', 'F13'),
+                limit=0):
     os.makedirs(RESULTS_DIR, exist_ok=True)
     print(f"equiDOT — discovery orchestrator | scope={scope} | workers={workers} | target lot 1.0", flush=True)
     if df is None:
@@ -915,6 +942,8 @@ def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=Non
         structural = dt.compute_structural_gates(df)
     builders = _scope(scope)
     f1_csv_present = os.path.exists(os.path.join(RESULTS_DIR, F1_CSV))
+    pool_queued = [f[0] for f in FAMILIES if not (f[0] == 'F1' and f1_csv_present)]
+    verify_family_coverage(pool_queued, list(diagnostics), input_sha, RESULTS_DIR)
     schedule = [(fam, script, mod, fmt) for fam, script, mod, fmt in FAMILIES
                 if not (fam == 'F1' and f1_csv_present)]
     total = len(schedule)
@@ -948,6 +977,9 @@ def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=Non
         for fam, script, _mod, _fmt in pending:
             kw = builders[fam](df, adaptive, structural, warmup)
             bounds, n_axis = _bounds_for(fam, kw)
+            if limit:
+                n_axis = min(limit, n_axis)
+                bounds = [(lo, min(hi, n_axis)) for (lo, hi) in bounds if lo < n_axis]
             if fam == 'F1':
                 expected_cands[fam] = (len(kw['cond_labels']) ** 2 * len(kw['lags'])
                                        * len(kw['directions']))
@@ -1083,6 +1115,7 @@ def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=Non
     master = pd.DataFrame(all_rows, columns=SCHEMA)
     master_path = os.path.join(RESULTS_DIR, "discovery_master.csv")
     _write_atomic_csv(sort_master(master), master_path)
+    write_pool_note(master_path, df)
     print(f"\nCollated {len(master)} candidates -> {master_path} "
           f"(sorted: folds_plus, min_fold_pf, worst_day_usd, agg_pf, WR; no rows dropped)", flush=True)
     by_fam = master.groupby('family').size().to_dict()

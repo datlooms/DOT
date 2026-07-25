@@ -1,0 +1,254 @@
+From 17e68d6ade8a1b0fa40ade77d11bfb459409127f Mon Sep 17 00:00:00 2001
+From: Ticky <ticky@dot.local>
+Date: Sat, 25 Jul 2026 15:44:36 +0000
+Subject: [PATCH] S3 executable end to end: orchestrate() gains input_sha=None
+ (its absence raised TypeError on line one of the real path and survived three
+ builds because the stage was never run); permanent frame binding installed in
+ main() right after S0 and never restored, so none of the 27
+ load_sealed_baseline call sites across 22 files can reach the hardcoded
+ equiDOT_recon171_step7_* parts, replacing the per-stage override which was
+ also not exception-safe; static pre-flight loader audit against a frozen
+ allowlist that fails on any new call site; --s3-limit to bound axis units per
+ family for smoke-testing; fold-gap recorded on the pool artifact as
+ discovery_master.POOL_NOTE.txt because folds_plus/min_fold_pf come from
+ sacred calendar-literal wf.FOLDS and exclude July.
+
+---
+ dot_master_discovery/master.py                | 95 ++++++++++++++++---
+ .../orchestrator/discovery_orchestrator.py    | 35 ++++++-
+ 2 files changed, 115 insertions(+), 15 deletions(-)
+
+diff --git a/dot_master_discovery/master.py b/dot_master_discovery/master.py
+index b53c98a..7f45f58 100644
+--- a/dot_master_discovery/master.py
++++ b/dot_master_discovery/master.py
+@@ -199,7 +199,7 @@ def s2_pool(df, ad, st):
+ 
+ 
+ # ── S3 DISCOVERY (long pole; delegates to the ratified orchestrator; per-family checkpoint) ──
+-def s3_discovery(out, workers, input_sha, scope, df=None, ad=None, st=None, w=None):
++def s3_discovery(out, workers, input_sha, scope, df=None, ad=None, st=None, w=None, limit=0):
+     results = os.path.join(out, 'results')
+     os.makedirs(results, exist_ok=True)
+     if is_done(out, 'S3', input_sha):
+@@ -227,7 +227,7 @@ def s3_discovery(out, workers, input_sha, scope, df=None, ad=None, st=None, w=No
+     print('   .done marker carrying the row count and CSV sha256. A restart re-reads any complete family from disk')
+     print('   and re-scans only the incomplete ones, so the worst case loss is ONE family, not the whole stage.)')
+     orch.orchestrate(scope, workers=workers, df=df, adaptive=ad, structural=st, warmup=w,
+-                     frame_path=frame_path, input_sha=input_sha)
++                     frame_path=frame_path, input_sha=input_sha, limit=limit)
+     run_diagnostic_families(results, workers, input_sha, df=df)
+     orch.verify_diagnostic_outputs(results, input_sha)
+     if frame_path is not None and os.path.exists(frame_path):
+@@ -488,18 +488,80 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
+     return r
+ 
+ 
++LOADER_ALLOWLIST = {
++    'engine/analysis_engine.py': 2, 'engine/portfolio_simulation_engine.py': 2,
++    'engine/run_full_analysis.py': 1, 'engine/score_book50.py': 1, 'engine/score_g.py': 1,
++    'engine/wf.py': 1, 'orchestrator/discovery_orchestrator.py': 2,
++    'scanners/concurrence_profiler.py': 1, 'scanners/conditional_interaction.py': 1,
++    'scanners/cross_variable_structure.py': 1, 'scanners/divergence_nonconfirm.py': 1,
++    'scanners/f0_to_schema.py': 1, 'scanners/mean_reversion.py': 1,
++    'scanners/persistence_autocorr.py': 1, 'scanners/rolling_leadlag.py': 1,
++    'scanners/run_f1_parallel.py': 1, 'scanners/sequential_temporal.py': 1,
++    'scanners/session_temporal.py': 1, 'scanners/single_variable_extremes.py': 1,
++    'scanners/state_transition.py': 1, 'scanners/threshold_crossing.py': 1,
++    'scanners/triple_convergence_and_d2ddir.py': 3,
++}
++
++
++def preflight_loader_audit():
++    found = {}
++    for sub in ('engine', 'scanners', 'orchestrator'):
++        root = os.path.join(_HERE, sub)
++        if not os.path.isdir(root):
++            continue
++        for nm in sorted(os.listdir(root)):
++            if not nm.endswith('.py'):
++                continue
++            rel = f'{sub}/{nm}'
++            txt = open(os.path.join(root, nm), 'r', encoding='utf-8').read()
++            n = txt.count('load_sealed_baseline')
++            if n:
++                found[rel] = n
++    new = {k: v for k, v in found.items() if k not in LOADER_ALLOWLIST}
++    grew = {k: (LOADER_ALLOWLIST[k], v) for k, v in found.items()
++            if k in LOADER_ALLOWLIST and v > LOADER_ALLOWLIST[k]}
++    total = sum(found.values())
++    print(f'  LOADER AUDIT — {total} references to load_sealed_baseline across {len(found)} files, '
++          f'all on the frozen allowlist' if not (new or grew) else
++          f'  LOADER AUDIT — FAIL', flush=True)
++    if new or grew:
++        msg = []
++        for k, v in new.items():
++            msg.append(f'{k} ({v} new occurrence(s))')
++        for k, (was, now) in grew.items():
++            msg.append(f'{k} ({was} allowed, {now} found)')
++        raise SystemExit(
++            'ABORT — new load_sealed_baseline call site(s): ' + '; '.join(msg) +
++            '. That function hardcodes equiDOT_recon171_step7_* and has silently loaded the WRONG '
++            'dataset in three separate places already. Any new call site must either take an '
++            'injected frame or be added to LOADER_ALLOWLIST with a reason.')
++    return found
++
++
++def bind_ingested_frame_permanently(df, input_sha):
++    import portfolio_simulation_engine as engine
++    fingerprint = (len(df), str(df['Time'].values[0]), str(df['Time'].values[-1]))
++
++    def _ingested_loader(*_a, **_k):
++        got = (len(df), str(df['Time'].values[0]), str(df['Time'].values[-1]))
++        if got != fingerprint:
++            raise SystemExit(f'ABORT — the ingested frame changed under the permanent loader '
++                             f'binding: expected {fingerprint}, got {got}. No stage may mutate the '
++                             f'frame S0 validated.')
++        return df
++
++    engine.load_sealed_baseline = _ingested_loader
++    print(f'  PERMANENT FRAME BINDING — engine.load_sealed_baseline now returns the frame S0 '
++          f'ingested, for the REST OF THE RUN. It is never restored.')
++    print(f'    frame fingerprint: {fingerprint[0]:,} rows | {fingerprint[1]} -> {fingerprint[2]} '
++          f'| input_sha {input_sha}')
++    print(f'    the sacred definition hardcodes equiDOT_recon171_step7_* and is referenced by 26 '
++          f'call sites across 22 files; binding here makes it structurally impossible for any of '
++          f'them to reach the wrong dataset, rather than relying on each stage remembering to inject.')
++
++
+ def run_diagnostic_families(results_dir, workers, input_sha, df=None):
+     import discovery_orchestrator as orch
+-    import portfolio_simulation_engine as engine
+-    _orig_loader = engine.load_sealed_baseline
+-    if df is not None:
+-        def _injected_loader(*_a, **_k):
+-            return df
+-        engine.load_sealed_baseline = _injected_loader
+-        print('  DIAGNOSTIC FRAME INJECTION: F12 and F13 call engine.load_sealed_baseline() internally,')
+-        print('  which hardcodes equiDOT_recon171_step7_* — the WRONG dataset. The loader is overridden')
+-        print('  at runtime to return the frame S0 ingested (module-global override, no scanner edit),')
+-        print('  so their output and its provenance stamp refer to the data actually under test.')
+     print('  DIAGNOSTIC FAMILIES (F12, F13) — separate stages: they emit measurement artifacts, not')
+     print('  14-column pool rows, so they cannot collate into discovery_master.csv. Both run on the')
+     print('  same single command with the operator --workers value and their own internal parallelism.')
+@@ -548,7 +610,6 @@ def run_diagnostic_families(results_dir, workers, input_sha, df=None):
+               f'{", ".join(produced) if produced else "NONE"}')
+         print('  [F12] provenance stamped on THOSE FILES ONLY — never by pattern match on whatever '
+               'happens to be on disk, which would launder a stale artifact from another dataset')
+-    engine.load_sealed_baseline = _orig_loader
+ 
+ 
+ # ── S3B PER-FAMILY EVIDENCE REVIEW (spec A.1-A.5) + D2D GATE MEASUREMENT (spec E.1) ──
+@@ -1528,6 +1589,9 @@ def main():
+     ap.add_argument('--chunk-mb', type=int, default=9)
+     ap.add_argument('--parity', default=None,
+                     help="run the chunking parity harness and exit: a family (e.g. F0) or 'all'")
++    ap.add_argument('--s3-limit', type=int, default=0,
++                    help='bound each family to its first N axis units in S3 (0 = unbounded); for '
++                         'smoke-testing the stage without committing days')
+     ap.add_argument('--parity-limit', type=int, default=200,
+                     help='cap each family to the first N axis units, applied to BOTH parity legs')
+     args = ap.parse_args()
+@@ -1538,6 +1602,7 @@ def main():
+     print('DOT MASTER ORCHESTRATOR')
+     print('═' * 68)
+     sacred = verify_sacred()
++    preflight_loader_audit()
+     data_dir = resolve_data(args.data)
+     book_file = resolve_book(args.book)
+     out = args.out
+@@ -1549,6 +1614,7 @@ def main():
+     only = args.stage
+     print('\n[S0] INGEST & VALIDATE')
+     df, attest, input_sha = s0_ingest(data_dir, out, args.chunk_mb)
++    bind_ingested_frame_permanently(df, input_sha)
+     print('\n[S1] ADAPTIVE THRESHOLDS (oracle)')
+     ad, st = s1_thresholds(df)
+     print('\n[S2] POOL & ANCHORS')
+@@ -1597,7 +1663,8 @@ def main():
+         print('  Run `python master.py` (no --book) or `--stage S3` for the full 1–2 day discovery.')
+     if (run_all and discover) or only == 'S3':
+         print('\n[S3] FAMILY DISCOVERY (long-pole; delegates to ratified orchestrator)')
+-        s3_discovery(out, args.workers, input_sha, 'full', df=df, ad=ad, st=st, w=w)
++        s3_discovery(out, args.workers, input_sha, 'full', df=df, ad=ad, st=st, w=w,
++                     limit=args.s3_limit)
+     if run_all or only == 'S3B':
+         print('\n[S3B] PER-FAMILY EVIDENCE REVIEW + D2D GATE MEASUREMENT')
+         evidence = s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest)
+diff --git a/dot_master_discovery/orchestrator/discovery_orchestrator.py b/dot_master_discovery/orchestrator/discovery_orchestrator.py
+index b86f244..83c4e6f 100644
+--- a/dot_master_discovery/orchestrator/discovery_orchestrator.py
++++ b/dot_master_discovery/orchestrator/discovery_orchestrator.py
+@@ -273,6 +273,32 @@ def provenance_is_current(csv_path, input_sha):
+     return True, 'current'
+ 
+ 
++FOLD_GAP_NOTE = (
++    'POOL PROPERTY THE SELECTION LAYER MUST KNOW — folds_plus and min_fold_pf on EVERY row of this '
++    'pool come from sacred wf.FOLDS, which is the CALENDAR LITERAL Jan..Jun. Any month outside that '
++    'window contributes NOTHING to any row fold evidence. On a series running past June (this run '
++    'ends {last}), the newest month is invisible to fold_plus, so S5 gate folds_plus >= 4 is decided '
++    'on Jan-Jun alone. This CANNOT be fixed without editing wf.py, which is sacred and byte-locked '
++    'at 793e6e5f8d9a; recording it at the point of use is the honest resolution. The proportional '
++    'six-slice fold plan used for the COMMITTED-SYSTEM headline (master.py fold_plan) is a separate '
++    'and data-relative mechanism and is NOT what produced these columns.')
++
++
++def write_pool_note(master_path, df):
++    last = str(df['Time'].values[-1])[:10] if df is not None and len(df) else 'unknown'
++    note = FOLD_GAP_NOTE.format(last=last)
++    path = os.path.splitext(master_path)[0] + '.POOL_NOTE.txt'
++    tmp = path + '.tmp'
++    with open(tmp, 'w', encoding='utf-8') as f:
++        f.write(note + chr(10))
++        f.flush()
++        os.fsync(f.fileno())
++    os.replace(tmp, path)
++    print('  POOL NOTE -> ' + os.path.basename(path), flush=True)
++    print('    ' + note[:150] + '...', flush=True)
++    return path
++
++
+ def verify_diagnostic_outputs(results_dir, input_sha, families=('F12', 'F13')):
+     gaps = []
+     rows = []
+@@ -895,7 +921,8 @@ def _parity_estimate(fam, n_units, n_full):
+ 
+ 
+ def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=None,
+-                warmup=None, frame_path=None):
++                warmup=None, frame_path=None, input_sha=None, diagnostics=('F12', 'F13'),
++                limit=0):
+     os.makedirs(RESULTS_DIR, exist_ok=True)
+     print(f"equiDOT — discovery orchestrator | scope={scope} | workers={workers} | target lot 1.0", flush=True)
+     if df is None:
+@@ -915,6 +942,8 @@ def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=Non
+         structural = dt.compute_structural_gates(df)
+     builders = _scope(scope)
+     f1_csv_present = os.path.exists(os.path.join(RESULTS_DIR, F1_CSV))
++    pool_queued = [f[0] for f in FAMILIES if not (f[0] == 'F1' and f1_csv_present)]
++    verify_family_coverage(pool_queued, list(diagnostics), input_sha, RESULTS_DIR)
+     schedule = [(fam, script, mod, fmt) for fam, script, mod, fmt in FAMILIES
+                 if not (fam == 'F1' and f1_csv_present)]
+     total = len(schedule)
+@@ -948,6 +977,9 @@ def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=Non
+         for fam, script, _mod, _fmt in pending:
+             kw = builders[fam](df, adaptive, structural, warmup)
+             bounds, n_axis = _bounds_for(fam, kw)
++            if limit:
++                n_axis = min(limit, n_axis)
++                bounds = [(lo, min(hi, n_axis)) for (lo, hi) in bounds if lo < n_axis]
+             if fam == 'F1':
+                 expected_cands[fam] = (len(kw['cond_labels']) ** 2 * len(kw['lags'])
+                                        * len(kw['directions']))
+@@ -1083,6 +1115,7 @@ def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=Non
+     master = pd.DataFrame(all_rows, columns=SCHEMA)
+     master_path = os.path.join(RESULTS_DIR, "discovery_master.csv")
+     _write_atomic_csv(sort_master(master), master_path)
++    write_pool_note(master_path, df)
+     print(f"\nCollated {len(master)} candidates -> {master_path} "
+           f"(sorted: folds_plus, min_fold_pf, worst_day_usd, agg_pf, WR; no rows dropped)", flush=True)
+     by_fam = master.groupby('family').size().to_dict()
+-- 
+2.43.0
+

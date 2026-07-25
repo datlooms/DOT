@@ -199,7 +199,7 @@ def s2_pool(df, ad, st):
 
 
 # ── S3 DISCOVERY (long pole; delegates to the ratified orchestrator; per-family checkpoint) ──
-def s3_discovery(out, workers, input_sha, scope, df=None, ad=None, st=None, w=None):
+def s3_discovery(out, workers, input_sha, scope, df=None, ad=None, st=None, w=None, limit=0):
     results = os.path.join(out, 'results')
     os.makedirs(results, exist_ok=True)
     if is_done(out, 'S3', input_sha):
@@ -227,7 +227,7 @@ def s3_discovery(out, workers, input_sha, scope, df=None, ad=None, st=None, w=No
     print('   .done marker carrying the row count and CSV sha256. A restart re-reads any complete family from disk')
     print('   and re-scans only the incomplete ones, so the worst case loss is ONE family, not the whole stage.)')
     orch.orchestrate(scope, workers=workers, df=df, adaptive=ad, structural=st, warmup=w,
-                     frame_path=frame_path, input_sha=input_sha)
+                     frame_path=frame_path, input_sha=input_sha, limit=limit)
     run_diagnostic_families(results, workers, input_sha, df=df)
     orch.verify_diagnostic_outputs(results, input_sha)
     if frame_path is not None and os.path.exists(frame_path):
@@ -488,18 +488,80 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
     return r
 
 
+LOADER_ALLOWLIST = {
+    'engine/analysis_engine.py': 2, 'engine/portfolio_simulation_engine.py': 2,
+    'engine/run_full_analysis.py': 1, 'engine/score_book50.py': 1, 'engine/score_g.py': 1,
+    'engine/wf.py': 1, 'orchestrator/discovery_orchestrator.py': 2,
+    'scanners/concurrence_profiler.py': 1, 'scanners/conditional_interaction.py': 1,
+    'scanners/cross_variable_structure.py': 1, 'scanners/divergence_nonconfirm.py': 1,
+    'scanners/f0_to_schema.py': 1, 'scanners/mean_reversion.py': 1,
+    'scanners/persistence_autocorr.py': 1, 'scanners/rolling_leadlag.py': 1,
+    'scanners/run_f1_parallel.py': 1, 'scanners/sequential_temporal.py': 1,
+    'scanners/session_temporal.py': 1, 'scanners/single_variable_extremes.py': 1,
+    'scanners/state_transition.py': 1, 'scanners/threshold_crossing.py': 1,
+    'scanners/triple_convergence_and_d2ddir.py': 3,
+}
+
+
+def preflight_loader_audit():
+    found = {}
+    for sub in ('engine', 'scanners', 'orchestrator'):
+        root = os.path.join(_HERE, sub)
+        if not os.path.isdir(root):
+            continue
+        for nm in sorted(os.listdir(root)):
+            if not nm.endswith('.py'):
+                continue
+            rel = f'{sub}/{nm}'
+            txt = open(os.path.join(root, nm), 'r', encoding='utf-8').read()
+            n = txt.count('load_sealed_baseline')
+            if n:
+                found[rel] = n
+    new = {k: v for k, v in found.items() if k not in LOADER_ALLOWLIST}
+    grew = {k: (LOADER_ALLOWLIST[k], v) for k, v in found.items()
+            if k in LOADER_ALLOWLIST and v > LOADER_ALLOWLIST[k]}
+    total = sum(found.values())
+    print(f'  LOADER AUDIT — {total} references to load_sealed_baseline across {len(found)} files, '
+          f'all on the frozen allowlist' if not (new or grew) else
+          f'  LOADER AUDIT — FAIL', flush=True)
+    if new or grew:
+        msg = []
+        for k, v in new.items():
+            msg.append(f'{k} ({v} new occurrence(s))')
+        for k, (was, now) in grew.items():
+            msg.append(f'{k} ({was} allowed, {now} found)')
+        raise SystemExit(
+            'ABORT — new load_sealed_baseline call site(s): ' + '; '.join(msg) +
+            '. That function hardcodes equiDOT_recon171_step7_* and has silently loaded the WRONG '
+            'dataset in three separate places already. Any new call site must either take an '
+            'injected frame or be added to LOADER_ALLOWLIST with a reason.')
+    return found
+
+
+def bind_ingested_frame_permanently(df, input_sha):
+    import portfolio_simulation_engine as engine
+    fingerprint = (len(df), str(df['Time'].values[0]), str(df['Time'].values[-1]))
+
+    def _ingested_loader(*_a, **_k):
+        got = (len(df), str(df['Time'].values[0]), str(df['Time'].values[-1]))
+        if got != fingerprint:
+            raise SystemExit(f'ABORT — the ingested frame changed under the permanent loader '
+                             f'binding: expected {fingerprint}, got {got}. No stage may mutate the '
+                             f'frame S0 validated.')
+        return df
+
+    engine.load_sealed_baseline = _ingested_loader
+    print(f'  PERMANENT FRAME BINDING — engine.load_sealed_baseline now returns the frame S0 '
+          f'ingested, for the REST OF THE RUN. It is never restored.')
+    print(f'    frame fingerprint: {fingerprint[0]:,} rows | {fingerprint[1]} -> {fingerprint[2]} '
+          f'| input_sha {input_sha}')
+    print(f'    the sacred definition hardcodes equiDOT_recon171_step7_* and is referenced by 26 '
+          f'call sites across 22 files; binding here makes it structurally impossible for any of '
+          f'them to reach the wrong dataset, rather than relying on each stage remembering to inject.')
+
+
 def run_diagnostic_families(results_dir, workers, input_sha, df=None):
     import discovery_orchestrator as orch
-    import portfolio_simulation_engine as engine
-    _orig_loader = engine.load_sealed_baseline
-    if df is not None:
-        def _injected_loader(*_a, **_k):
-            return df
-        engine.load_sealed_baseline = _injected_loader
-        print('  DIAGNOSTIC FRAME INJECTION: F12 and F13 call engine.load_sealed_baseline() internally,')
-        print('  which hardcodes equiDOT_recon171_step7_* — the WRONG dataset. The loader is overridden')
-        print('  at runtime to return the frame S0 ingested (module-global override, no scanner edit),')
-        print('  so their output and its provenance stamp refer to the data actually under test.')
     print('  DIAGNOSTIC FAMILIES (F12, F13) — separate stages: they emit measurement artifacts, not')
     print('  14-column pool rows, so they cannot collate into discovery_master.csv. Both run on the')
     print('  same single command with the operator --workers value and their own internal parallelism.')
@@ -548,7 +610,6 @@ def run_diagnostic_families(results_dir, workers, input_sha, df=None):
               f'{", ".join(produced) if produced else "NONE"}')
         print('  [F12] provenance stamped on THOSE FILES ONLY — never by pattern match on whatever '
               'happens to be on disk, which would launder a stale artifact from another dataset')
-    engine.load_sealed_baseline = _orig_loader
 
 
 # ── S3B PER-FAMILY EVIDENCE REVIEW (spec A.1-A.5) + D2D GATE MEASUREMENT (spec E.1) ──
@@ -1528,6 +1589,9 @@ def main():
     ap.add_argument('--chunk-mb', type=int, default=9)
     ap.add_argument('--parity', default=None,
                     help="run the chunking parity harness and exit: a family (e.g. F0) or 'all'")
+    ap.add_argument('--s3-limit', type=int, default=0,
+                    help='bound each family to its first N axis units in S3 (0 = unbounded); for '
+                         'smoke-testing the stage without committing days')
     ap.add_argument('--parity-limit', type=int, default=200,
                     help='cap each family to the first N axis units, applied to BOTH parity legs')
     args = ap.parse_args()
@@ -1538,6 +1602,7 @@ def main():
     print('DOT MASTER ORCHESTRATOR')
     print('═' * 68)
     sacred = verify_sacred()
+    preflight_loader_audit()
     data_dir = resolve_data(args.data)
     book_file = resolve_book(args.book)
     out = args.out
@@ -1549,6 +1614,7 @@ def main():
     only = args.stage
     print('\n[S0] INGEST & VALIDATE')
     df, attest, input_sha = s0_ingest(data_dir, out, args.chunk_mb)
+    bind_ingested_frame_permanently(df, input_sha)
     print('\n[S1] ADAPTIVE THRESHOLDS (oracle)')
     ad, st = s1_thresholds(df)
     print('\n[S2] POOL & ANCHORS')
@@ -1597,7 +1663,8 @@ def main():
         print('  Run `python master.py` (no --book) or `--stage S3` for the full 1–2 day discovery.')
     if (run_all and discover) or only == 'S3':
         print('\n[S3] FAMILY DISCOVERY (long-pole; delegates to ratified orchestrator)')
-        s3_discovery(out, args.workers, input_sha, 'full', df=df, ad=ad, st=st, w=w)
+        s3_discovery(out, args.workers, input_sha, 'full', df=df, ad=ad, st=st, w=w,
+                     limit=args.s3_limit)
     if run_all or only == 'S3B':
         print('\n[S3B] PER-FAMILY EVIDENCE REVIEW + D2D GATE MEASUREMENT')
         evidence = s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest)
