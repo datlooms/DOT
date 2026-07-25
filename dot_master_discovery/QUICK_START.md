@@ -40,11 +40,13 @@ If it says PASS -> good, the parts are in `data\`. If it says FAIL or ABORT -> t
 ## STEP 5 — run the system
 Pick ONE:
 
-### A) THE FULL DISCOVERY SCAN (1-2 DAYS)
+### A) THE FULL DISCOVERY SCAN (MEASURED 5-25 HOURS at --workers 16)
 ```
-python master.py --workers 10
+python master.py --workers 16
 ```
-**Always use `--workers 10`.** The built-in default is 2, which is sized for an 8 GB machine and would leave a 32 GB / 16-thread laptop idle. See "HOW MANY WORKERS?" below.
+**Always use `--workers 16`.** The built-in default is 2, which is sized for an 8 GB machine and would leave a 32 GB / 16-thread laptop idle. See "HOW MANY WORKERS?" below.
+
+**WHERE THE 5-25 HOUR RANGE COMES FROM — measured, not estimated.** F1 dominates the scan: 239 A-labels x 15 lags = 3,585 chunks, 478 candidates each, 1,713,630 candidates total. Two chunks were timed at full scope: one at **63.9 s with 0 survivors**, one at **380.5 s with 338 survivors**. Cost tracks survivors, not candidate count (base 63.9 s to screen a chunk, plus 0.937 s for every candidate that clears MIN_TRADES and runs the full portfolio simulation). Those two measurements bound F1 at **4.0 h to 23.7 h at 16 workers** (63.6 h to 378.9 h single-threaded). The other nine families total roughly 2.25 h single-threaded on the reference profile, well under an hour once chunked across 16 workers. The range is wide because the global MIN_TRADES pass rate is not yet measured across all 3,585 chunks — the two samples differed 70.7% versus 0%. **The old "1-2 days" figure predated any measurement and is withdrawn.**
 
 Leave it running. If the PC crashes or reboots, run the SAME command again -- it resumes. See "WHAT ACTUALLY RESUMES".
 
@@ -97,7 +99,7 @@ That's it.
 - `python rebuild.py --in D:\path\to\SOME_EXPORT.csv`  = prep a specific file (skip the raw\ folder)
 - `python master.py --stage S8`   = skip everything, just re-score (fast check)
 - valid `--stage` values, in run order: `S0 S1 S2 S3 S3B S4 S5 S6 S5B S5C S7 S8 S8B S9`
-  - `S3`  = the 1-2 day family discovery scan (the long pole; only runs on the no-book path)
+  - `S3`  = the family discovery scan, measured 5-25 h at 16 workers (the long pole; only runs on the no-book path)
   - `S3B` = per-family evidence review + the D2D gate measurement
   - `S5B` = the selection layer (hygiene, bounds, DepthYield, persistence)
   - `S5C` = the walk-forward on the selection process (splits, embargo, null arm, attestation)
@@ -111,7 +113,7 @@ Full version: `master_guide.md` (same folder).
 ## WHAT THE FULL DISCOVERY SCAN ACTUALLY DOES
 Running `python master.py` with NO `--book` is the real scan. In order it will:
 1. ingest and validate your data (S0-S2)
-2. run all 13 family scanners -- **this is the 1-2 day part** (S3)
+2. run all 13 family scanners -- **this is the long part, measured 5-25 h at 16 workers** (S3)
 3. review what each family produced and measure the D2D gate (S3B)
 4. unify and filter to candidates (S4-S6)
 5. run the selection layer and the walk-forward on it (S5B, S5C)
@@ -123,33 +125,33 @@ Running `python master.py` with NO `--book` is the real scan. In order it will:
 
 **Between stages:** every stage writes a `.done` marker. A completed stage is never re-run.
 
-**Inside S3, the 1-2 day stage:** each of the 10 in-process families writes its own CSV **atomically** (temp file -> fsync -> rename) and then a `.done` marker holding that CSV's sha256. On restart the orchestrator re-reads every family whose CSV matches its marker and re-scans only the rest. A CSV that was half-written when the power went is caught by the sha mismatch and re-run rather than trusted.
+**Inside S3, the long stage:** every family is split into **chunks along its candidate axis**, and each chunk writes its own CSV **atomically** (temp file -> fsync -> rename) followed by its own `.done` marker holding that chunk's sha256. On restart the orchestrator re-reads every chunk whose CSV matches its marker and re-scans only the rest. A chunk half-written when the power went is caught by the sha mismatch and re-run rather than trusted. The family-level `.done` marker is still written when all its chunks collate, so a fully finished family is skipped outright.
 
 **True worst-case loss if the machine dies at the worst possible moment:**
 
 | what | resumes? | worst case lost |
 |---|---|---|
 | completed stages (S0-S2, S3B, S5B, ...) | yes | nothing |
-| completed families inside S3 | yes, read back from disk | nothing |
-| the family that was mid-scan | no | **that one family's scan** |
+| completed chunks inside S3 | yes, read back from disk | nothing |
+| the chunks in flight when it died | no | **one chunk per busy worker** |
+| F1 | yes, per chunk (3,585 chunks) | one chunk = **64 s to 381 s measured** |
+| F2-F9, F11 | yes, per chunk | one chunk |
 | F13 (single-variable extremes) | yes, per shard | one shard |
-| F1 parallel runner | yes, per chunk | one chunk |
-| F2-F9, F11 | all-or-nothing per family | that family only |
 
-So the honest answer: **you lose at most one family's worth of work, not the stage.** On the measured proof scope the slowest family was ~35s; on the full scope expect hours, so it is still worth not killing a run casually.
+So the honest answer: **you lose at most one chunk per worker that was busy, never a whole family and never the stage.** Proven by killing a live run at 15 of 50 chunks and restarting: it printed `RESUME: 18 of 50 chunks already complete on disk` and re-scanned only the remaining 32, finishing with an identical candidate set.
 
 --------------------------------------------------------
-## HOW MANY WORKERS? (`--workers` — USE 10)
+## HOW MANY WORKERS? (`--workers` — USE 16)
 
 ```
-python master.py --workers 10
+python master.py --workers 16
 ```
 
 **Use 10. Every time. The built-in default of 2 is wrong for this machine.**
 
 `--workers` controls how many of the 10 discovery families run at once in S3. **It only affects the full scan** -- `--book` skips S3, so the flag does nothing there.
 
-**THE CEILING IS 10, NOT YOUR CORE COUNT.** Two caps apply: `master.py` clamps to 12, and the orchestrator clamps to `min(workers, pending_families)`. There are 10 parallelisable families, so 10 saturates it. `--workers 16` behaves identically to `--workers 10`.
+**THE CEILING IS 16 AND EVERY THREAD IS USABLE.** `master.py` clamps to 16. The old `min(workers, pending_families)` clamp is GONE: work is now split into **chunks along each family's candidate axis** and all chunks go into ONE queue, so a worker that finishes takes the next chunk of any family. When only F1 remains it gets all 16 workers — the previous build left 15 of 16 threads idle for 224 minutes in exactly that situation. Chunk boundaries are independent of worker count, so changing `--workers` never changes the output and never invalidates resume.
 
 **Each worker loads its own copy of the data**, so memory is the limit, not cores. Measured on the 177,251-row dataset: **~733 MB per worker** once thresholds are built.
 

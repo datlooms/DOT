@@ -88,7 +88,7 @@ def _scope(kind):
         if not proof:
             print(f"[F1] full scope = {len(labels)}^2 x {len(lags)} lags x 2 dir = {n:,} candidates")
             if n > MAX_CANDIDATES_WARN:
-                print(f"[F1 WARN] {n:,} ordered-pair candidates — heavy; run F1 out-of-process.")
+                print(f"[F1] {n:,} ordered-pair candidates — heavy; chunked across workers on the A-label axis.")
         return dict(pool=pool, cond_labels=labels, lags=lags, anchor='ST_Flip',
                     directions=['LONG', 'SHORT'])
 
@@ -292,19 +292,176 @@ def run_family(fam, script, mod, fmt, kw_builder, df, adaptive, structural, warm
     return common
 
 
-def _worker_entry(payload):
-    fam, script, scope, results_dir, frame_path = payload
+CHUNK_AXIS = {'F1': ('cond_labels', 'lags'), 'F2': 'cond_labels', 'F3': 'base_pool',
+              'F4': 'price_feats', 'F5': 'cond_labels', 'F6': 'cross_feats',
+              'F7': 'stretch_feats', 'F8': 'pairs', 'F9': 'base_labels', 'F11': 'pairs'}
+COST_ORDER = ['F1', 'F3', 'F9', 'F11', 'F4', 'F2', 'F7', 'F5', 'F8', 'F6']
+TARGET_CHUNKS_PER_FAMILY = 64
+_WCACHE = {}
+
+
+def _axis_units(kw, axis):
+    if isinstance(axis, tuple):
+        sizes = [len(kw[a]) for a in axis]
+        n = 1
+        for x in sizes:
+            n *= x
+        return n, sizes
+    return len(kw[axis]), [len(kw[axis])]
+
+
+def _one_axis(kw, name, lo, hi):
+    src = kw[name]
+    if isinstance(src, dict):
+        keys = list(src.keys())[lo:hi]
+        return {k: src[k] for k in keys}
+    return list(src)[lo:hi]
+
+
+def _slice_axis(kw, axis, lo, hi):
+    out = dict(kw)
+    if not isinstance(axis, tuple):
+        out[axis] = _one_axis(kw, axis, lo, hi)
+        return out
+    outer, inner = axis
+    n_inner = len(kw[inner])
+    i = lo // n_inner
+    j = lo % n_inner
+    out[outer] = _one_axis(kw, outer, i, i + 1)
+    out[inner] = _one_axis(kw, inner, j, j + (hi - lo))
+    return out
+
+
+def _chunk_bounds(n_items, target=TARGET_CHUNKS_PER_FAMILY, unit_cap=None):
+    if n_items <= 0:
+        return []
+    size = 1 if n_items <= target else -(-n_items // target)
+    if unit_cap is not None:
+        size = min(size, unit_cap)
+    return [(i, min(i + size, n_items)) for i in range(0, n_items, size)]
+
+
+def _bounds_for(fam, kw):
+    axis = CHUNK_AXIS[fam]
+    n_units, sizes = _axis_units(kw, axis)
+    if isinstance(axis, tuple):
+        return _chunk_bounds(n_units, target=n_units, unit_cap=sizes[1]), n_units
+    return _chunk_bounds(n_units), n_units
+
+
+def _chunk_paths(fam, script, idx):
+    csv = os.path.join(RESULTS_DIR, f"results_{fam}_{script}_c{idx:04d}.csv")
+    done = os.path.join(RESULTS_DIR, f"results_{fam}_{script}_c{idx:04d}.done")
+    return csv, done
+
+
+def chunk_is_complete(fam, script, idx):
+    csv, done = _chunk_paths(fam, script, idx)
+    if not (os.path.exists(csv) and os.path.exists(done)):
+        return False
+    try:
+        meta = json.load(open(done, 'r', encoding='utf-8'))
+    except Exception:
+        return False
+    return meta.get('csv_sha256') == _sha_file(csv)
+
+
+def _worker_context(scope, frame_path, fam):
+    if _WCACHE.get('frame_path') != frame_path:
+        _WCACHE.clear()
+        _WCACHE['frame_path'] = frame_path
+        _WCACHE['df'] = pd.read_csv(frame_path)
+        _WCACHE['warmup'] = engine.warmup_floor(_WCACHE['df'], verbose=False)
+        _WCACHE['adaptive'] = dt.compute_adaptive_thresholds(_WCACHE['df'])
+        _WCACHE['structural'] = dt.compute_structural_gates(_WCACHE['df'])
+        _WCACHE['kw'] = {}
+        _WCACHE['builders'] = _scope(scope)
+    df = _WCACHE['df']
+    if fam not in _WCACHE['kw']:
+        _WCACHE['kw'][fam] = _WCACHE['builders'][fam](df, _WCACHE['adaptive'],
+                                                      _WCACHE['structural'], _WCACHE['warmup'])
+    return df, _WCACHE['adaptive'], _WCACHE['structural'], _WCACHE['warmup'], _WCACHE['kw'][fam]
+
+
+def run_chunk_rows(fam, script, df, adaptive, structural, warmup, kw, lo, hi):
+    spec = {f[0]: f for f in FAMILIES}[fam]
+    mod, fmt = spec[2], spec[3]
+    sub = _slice_axis(kw, CHUNK_AXIS[fam], lo, hi)
+    orig = df['D2D_Trend_Dir'].values.copy()
+    try:
+        if fam == 'F1':
+            import run_f1_parallel as f1p
+            month = pd.Series(df['Time'].values).str[:7].values
+            anchor_event = f1.anchor_array(df, kw['anchor'])
+            a_labels = sub['cond_labels']
+            b_labels = list(kw['cond_labels'])
+            lags = sub['lags']
+            expected = len(a_labels) * len(b_labels) * len(lags) * len(kw['directions'])
+            common = f1p._score_pairs(a_labels, b_labels, kw['pool'], df, month, anchor_event,
+                                      lags, kw['directions'], adaptive, structural, warmup)
+            return common, expected
+        rows = mod.run_search(df, adaptive=adaptive, structural=structural, warmup=warmup, **sub)
+    finally:
+        df['D2D_Trend_Dir'] = orig
+    return fmt(rows, script), None
+
+
+def _chunk_worker(payload):
+    fam, script, scope, results_dir, frame_path, idx, lo, hi = payload
     import discovery_orchestrator as orch
     orch.RESULTS_DIR = results_dir
-    df = pd.read_csv(frame_path)
-    adaptive = dt.compute_adaptive_thresholds(df)
-    structural = dt.compute_structural_gates(df)
-    warmup = engine.warmup_floor(df, verbose=False)
-    builders = orch._scope(scope)
-    spec = {f[0]: f for f in orch.FAMILIES}[fam]
-    orch.run_family(spec[0], spec[1], spec[2], spec[3], builders[fam],
-                    df, adaptive, structural, warmup)
-    return fam
+    if orch.chunk_is_complete(fam, script, idx):
+        return (fam, idx, -1, 0.0, hi - lo)
+    df, adaptive, structural, warmup, kw = orch._worker_context(scope, frame_path, fam)
+    t0 = time.time()
+    common, expected = orch.run_chunk_rows(fam, script, df, adaptive, structural, warmup, kw, lo, hi)
+    if expected is not None:
+        cpath = os.path.join(results_dir, f"results_{fam}_{script}_c{idx:04d}.cand")
+        tmpc = cpath + '.tmp'
+        with open(tmpc, 'w', encoding='utf-8') as fh:
+            fh.write(str(int(expected)))
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmpc, cpath)
+    csv, done = orch._chunk_paths(fam, script, idx)
+    orch._write_atomic_csv(pd.DataFrame(common, columns=SCHEMA), csv)
+    orch._mark_family_done(csv, done, len(common))
+    return (fam, idx, len(common), time.time() - t0, hi - lo)
+
+
+def candidate_invariant(fam, script, n_chunks, expected_total):
+    if expected_total is None:
+        return True, 'n/a'
+    got = 0
+    for idx in range(n_chunks):
+        cpath = os.path.join(RESULTS_DIR, f"results_{fam}_{script}_c{idx:04d}.cand")
+        if not os.path.exists(cpath):
+            return False, 'missing per-chunk candidate count'
+        got += int(open(cpath, 'r', encoding='utf-8').read().strip())
+    if got != expected_total:
+        return False, f'{got} != {expected_total}'
+    return True, f'{got} == {expected_total}'
+
+
+def collate_family_chunks(fam, script, n_chunks, expected_total=None):
+    ok, detail = candidate_invariant(fam, script, n_chunks, expected_total)
+    if not ok and detail != 'missing per-chunk candidate count':
+        raise SystemExit(f"ABORT [{fam}] CANDIDATE-COUNT INVARIANT FAILED: sum of per-chunk candidate "
+                         f"counts {detail}. Chunking changed the search space; results are NOT trustworthy.")
+    frames = []
+    for idx in range(n_chunks):
+        if not chunk_is_complete(fam, script, idx):
+            return False, 0
+        csv, _d = _chunk_paths(fam, script, idx)
+        try:
+            frames.append(pd.read_csv(csv))
+        except pd.errors.EmptyDataError:
+            frames.append(pd.DataFrame(columns=SCHEMA))
+    merged = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=SCHEMA)
+    csv, done = _family_paths(fam, script)
+    _write_atomic_csv(merged[SCHEMA], csv)
+    _mark_family_done(csv, done, len(merged))
+    return True, len(merged)
 
 
 class _Heartbeat:
@@ -369,6 +526,61 @@ def sort_master(master_df):
         ascending=[False, False, True, False, False]).reset_index(drop=True)
 
 
+def parity_check(scope='proof', workers=1, df=None, adaptive=None, structural=None, warmup=None,
+                 families=None):
+    if df is None:
+        df = engine.load_sealed_baseline(verbose=False) if hasattr(engine, 'load_sealed_baseline') else None
+    if warmup is None:
+        warmup = engine.warmup_floor(df, verbose=False)
+    if adaptive is None:
+        adaptive = dt.compute_adaptive_thresholds(df)
+    if structural is None:
+        structural = dt.compute_structural_gates(df)
+    builders = _scope(scope)
+    names = families or [f[0] for f in FAMILIES]
+    print(f"PARITY HARNESS — chunked vs unchunked, scope={scope}, {len(names)} families", flush=True)
+    all_pass = True
+    for fam, script, mod, fmt in FAMILIES:
+        if fam not in names:
+            continue
+        kw = builders[fam](df, adaptive, structural, warmup)
+        bounds, n_units = _bounds_for(fam, kw)
+        orig_s = df['D2D_Trend_Dir'].values.copy()
+        try:
+            serial = fmt(mod.run_search(df, adaptive=adaptive, structural=structural,
+                                        warmup=warmup, **kw), script)
+        finally:
+            df['D2D_Trend_Dir'] = orig_s
+        exp_one = None
+        if fam == 'F1':
+            exp_one = len(kw['cond_labels']) ** 2 * len(kw['lags']) * len(kw['directions'])
+        parts = []
+        cand = 0
+        for lo, hi in bounds:
+            rows, exp = run_chunk_rows(fam, script, df, adaptive, structural, warmup, kw, lo, hi)
+            parts.extend(rows)
+            if exp is not None:
+                cand += exp
+        a = pd.DataFrame(serial, columns=SCHEMA)
+        b = pd.DataFrame(parts, columns=SCHEMA)
+        key = list(SCHEMA)
+        a = a.sort_values(key).reset_index(drop=True)
+        b = b.sort_values(key).reset_index(drop=True)
+        same = a.equals(b)
+        cand_txt = ''
+        if exp_one is not None:
+            cand_ok = cand == exp_one
+            same = same and cand_ok
+            cand_txt = f" | candidates {cand} vs {exp_one} {'OK' if cand_ok else 'MISMATCH'}"
+        print(f"  {fam:4} {len(bounds):5} chunks | serial {len(a):5} rows | chunked {len(b):5} rows "
+              f"| {'PASS' if same else 'FAIL'}{cand_txt}", flush=True)
+        all_pass = all_pass and same
+        del kw
+    print(f"PARITY {'PASS' if all_pass else 'FAIL'} — chunking changes nothing a scanner computes"
+          if all_pass else "PARITY FAIL — chunking altered results; do NOT run a long scan", flush=True)
+    return all_pass
+
+
 def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=None,
                 warmup=None, frame_path=None):
     os.makedirs(RESULTS_DIR, exist_ok=True)
@@ -414,56 +626,113 @@ def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=Non
         print("  already inside a worker process — running sequentially to prevent recursive spawn", flush=True)
         workers = 1
     ran_parallel = False
-    if workers and workers > 1 and pending and frame_path is not None:
+    if workers and workers >= 1 and pending and frame_path is not None:
         from concurrent.futures import ProcessPoolExecutor, as_completed
         from concurrent.futures.process import BrokenProcessPool
         import multiprocessing as _mp2
-        payloads = [(fam, script, scope, RESULTS_DIR, frame_path) for fam, script, _m, _f in pending]
-        nw = min(workers, len(payloads))
-        print(f"  running {len(payloads)} families across {nw} worker processes "
-              f"(each loads its own frame; the gate column cannot be shared or corrupted)", flush=True)
-        print(f"  MEMORY: each worker holds its own copy of the frame. If a worker is killed by the OS for memory "
-              f"the parent reports it and finishes the remaining families sequentially.", flush=True)
+        plan = []
+        expected_cands = {}
+        for fam, script, _mod, _fmt in pending:
+            kw = builders[fam](df, adaptive, structural, warmup)
+            bounds, n_axis = _bounds_for(fam, kw)
+            if fam == 'F1':
+                expected_cands[fam] = (len(kw['cond_labels']) ** 2 * len(kw['lags'])
+                                       * len(kw['directions']))
+            plan.append((fam, script, n_axis, bounds))
+            del kw
+        order = {f: i for i, f in enumerate(COST_ORDER)}
+        plan.sort(key=lambda r: order.get(r[0], 999))
+        queue = []
+        already = 0
+        for fam, script, _n, bounds in plan:
+            for idx, (lo, hi) in enumerate(bounds):
+                if chunk_is_complete(fam, script, idx):
+                    already += 1
+                    continue
+                queue.append((fam, script, scope, RESULTS_DIR, frame_path, idx, lo, hi))
+        total_chunks = sum(len(b) for _f, _s, _n, b in plan)
+        print(f"  CHUNK PLAN: {total_chunks} chunks across {len(plan)} families "
+              f"(axis split, {TARGET_CHUNKS_PER_FAMILY} chunks max per family, "
+              f"independent of worker count):", flush=True)
+        for fam, script, n_axis, bounds in plan:
+            print(f"    {fam:4} axis '{CHUNK_AXIS[fam]}' = {n_axis} items -> {len(bounds)} chunks", flush=True)
+        if already:
+            print(f"  RESUME: {already} of {total_chunks} chunks already complete on disk", flush=True)
+        nw = min(workers, max(1, len(queue)))
+        print(f"  running {len(queue)} pending chunks across {nw} worker processes from ONE queue — "
+              f"a worker that finishes takes the next chunk of ANY family, so no thread idles while "
+              f"work remains and the last family gets every worker", flush=True)
+        print(f"  submission order is longest-family-first (scheduling only; collation is by axis order, "
+              f"so output cannot depend on it)", flush=True)
+        fam_secs = {}
+        fam_units = {}
+        pend_units = {}
+        for pl in queue:
+            pend_units[pl[0]] = pend_units.get(pl[0], 0) + (pl[7] - pl[6])
         t0 = time.time()
         died = False
         try:
-            with _Heartbeat(f"S3 parallel pass over {len(payloads)} families"):
+            with _Heartbeat(f"S3 chunk queue ({len(queue)} chunks)"):
                 with ProcessPoolExecutor(max_workers=nw,
                                          mp_context=_mp2.get_context('spawn')) as ex:
-                    futures = {ex.submit(_worker_entry, pl): pl[0] for pl in payloads}
+                    futures = {ex.submit(_chunk_worker, pl): (pl[0], pl[5]) for pl in queue}
                     done_n = 0
                     for fut in as_completed(futures):
-                        fam = futures[fut]
+                        fam, idx = futures[fut]
                         try:
-                            fut.result()
+                            fam_r, idx_r, n_rows, secs, units = fut.result()
                         except BrokenProcessPool:
                             died = True
                             break
                         except Exception as exc:
-                            print(f"  [{fam}] worker raised {type(exc).__name__}: {exc}", flush=True)
+                            print(f"  [{fam} c{idx:04d}] worker raised {type(exc).__name__}: {exc}", flush=True)
                             continue
                         done_n += 1
+                        if n_rows >= 0:
+                            fam_secs[fam_r] = fam_secs.get(fam_r, 0.0) + secs
+                            fam_units[fam_r] = fam_units.get(fam_r, 0) + units
+                        pend_units[fam_r] = pend_units.get(fam_r, 0) - units
                         el = time.time() - t0
-                        rate = el / done_n
-                        eta = rate * (len(payloads) - done_n)
-                        print(f"  [{done_n}/{len(payloads)}] {fam} complete | elapsed {_hms(el)} "
-                              f"| ETA {_hms(eta)}", flush=True)
+                        pct = 100.0 * done_n / len(queue)
+                        serial = 0.0
+                        unmeasured = []
+                        for f_, u_ in pend_units.items():
+                            if u_ <= 0:
+                                continue
+                            if fam_units.get(f_):
+                                serial += u_ * (fam_secs[f_] / fam_units[f_])
+                            else:
+                                unmeasured.append(f_)
+                        eta_txt = (f"ETA {_hms(serial / nw)}" if not unmeasured
+                                   else f"ETA >= {_hms(serial / nw)} ({len(unmeasured)} unmeasured: "
+                                        f"{','.join(sorted(unmeasured))})")
+                        if serial <= 0 and unmeasured:
+                            eta_txt = f"ETA forming ({len(unmeasured)} families unmeasured)"
+                        note = 'resumed' if n_rows < 0 else f'{n_rows} survivors in {secs:.1f}s'
+                        print(f"  [{done_n}/{len(queue)} {pct:5.1f}%] {fam_r} c{idx_r:04d} {note} "
+                              f"| elapsed {_hms(el)} | {eta_txt} "
+                              f"| {done_n / el * 60 if el > 0 else 0:.1f} chunks/min", flush=True)
         except BrokenProcessPool:
             died = True
         if died:
             print("", flush=True)
             print("  *** A WORKER PROCESS DIED WITHOUT RAISING — almost always the OS killing it for memory. ***",
                   flush=True)
-            print("  Families that finished are on disk and will NOT be re-scanned. Completing the rest",
+            print("  Completed CHUNKS are on disk and will NOT be re-scanned. Completing the rest",
                   flush=True)
             print("  sequentially in this process. If this recurs, lower --workers.", flush=True)
             print("", flush=True)
+        for fam, script, _n, bounds in plan:
+            ok, n_rows = collate_family_chunks(fam, script, len(bounds), expected_cands.get(fam))
+            if ok:
+                inv = candidate_invariant(fam, script, len(bounds), expected_cands.get(fam))[1]
+                print(f"  [{fam}] collated {len(bounds)} chunks -> {n_rows} rows "
+                      f"| candidate invariant {inv}", flush=True)
         ran_parallel = not died
-        if died:
-            pending = [(fam, script, mod, fmt) for fam, script, mod, fmt in pending
-                       if not family_is_complete(fam, script)[0]]
-        else:
-            pending = []
+        pending = [(fam, script, mod, fmt) for fam, script, mod, fmt in pending
+                   if not family_is_complete(fam, script)[0]]
+        if pending and ran_parallel:
+            ran_parallel = False
     if pending and not ran_parallel:
         for i, (fam, script, mod, fmt) in enumerate(pending, 1):
             mean = (sum(durations) / len(durations)) if durations else None

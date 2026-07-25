@@ -1463,7 +1463,7 @@ def main():
     ap.add_argument('--market-label', default='US30 (sealed baseline)')
     ap.add_argument('--chunk-mb', type=int, default=9)
     args = ap.parse_args()
-    args.workers = min(args.workers, 12)
+    args.workers = min(args.workers, 16)
 
     t0 = time.time()
     print('═' * 68)
