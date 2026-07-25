@@ -533,10 +533,15 @@ def run_family(fam, script, mod, fmt, kw_builder, df, adaptive, structural, warm
     kw = kw_builder(df, adaptive, structural, warmup)
     t0 = time.time()
     try:
-        rows = mod.run_search(df, adaptive=adaptive, structural=structural, warmup=warmup, **kw)
+        if fam == 'F0':
+            _b, n_units = _bounds_for(fam, kw)
+            raw, _exp = run_f0_chunk(df, adaptive, structural, warmup, kw, 0, n_units)
+            common = f0_rows_from_raw(df, adaptive, structural, warmup, raw)
+        else:
+            rows = mod.run_search(df, adaptive=adaptive, structural=structural, warmup=warmup, **kw)
+            common = fmt(rows, script)
     finally:
         df['D2D_Trend_Dir'] = orig
-    common = fmt(rows, script)
     csv, done = _family_paths(fam, script)
     _write_atomic_csv(pd.DataFrame(common, columns=SCHEMA), csv)
     _mark_family_done(csv, done, len(common))
@@ -981,8 +986,7 @@ def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=Non
                 n_axis = min(limit, n_axis)
                 bounds = [(lo, min(hi, n_axis)) for (lo, hi) in bounds if lo < n_axis]
             if fam == 'F1':
-                expected_cands[fam] = (len(kw['cond_labels']) ** 2 * len(kw['lags'])
-                                       * len(kw['directions']))
+                expected_cands[fam] = (n_axis * len(kw['cond_labels']) * len(kw['directions']))
             if fam == 'F0':
                 expected_cands[fam] = f0_combo_count(kw, 0, n_axis)
             plan.append((fam, script, n_axis, bounds))

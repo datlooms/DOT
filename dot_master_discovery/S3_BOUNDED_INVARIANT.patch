@@ -1,0 +1,53 @@
+From b5b05d139a01661904611255d467d71ae170d1c9 Mon Sep 17 00:00:00 2001
+From: Ticky <ticky@dot.local>
+Date: Sat, 25 Jul 2026 17:07:39 +0000
+Subject: [PATCH] S3 bounded-scope invariant: F1's expected candidate total is
+ derived from the BOUNDED axis (n_axis * |cond_labels| * |directions|), so
+ --s3-limit no longer collides with the candidate-count invariant; unbounded
+ arithmetic is unchanged (3585*239*2 = 1,713,630) and limit=3 now expects
+ 1,434 which is what the chunks actually search. F0 already used the bounded
+ axis; the other nine carry no expectation, so F1 was the only affected
+ family. Also fix run_family's sequential fallback to dispatch F0 through
+ run_f0_chunk instead of calling run_search with adaptive/structural/warmup
+ kwargs it does not accept, which raised TypeError whenever the chunked path
+ was skipped.
+
+---
+ .../orchestrator/discovery_orchestrator.py           | 12 ++++++++----
+ 1 file changed, 8 insertions(+), 4 deletions(-)
+
+diff --git a/dot_master_discovery/orchestrator/discovery_orchestrator.py b/dot_master_discovery/orchestrator/discovery_orchestrator.py
+index 83c4e6f..c44f887 100644
+--- a/dot_master_discovery/orchestrator/discovery_orchestrator.py
++++ b/dot_master_discovery/orchestrator/discovery_orchestrator.py
+@@ -533,10 +533,15 @@ def run_family(fam, script, mod, fmt, kw_builder, df, adaptive, structural, warm
+     kw = kw_builder(df, adaptive, structural, warmup)
+     t0 = time.time()
+     try:
+-        rows = mod.run_search(df, adaptive=adaptive, structural=structural, warmup=warmup, **kw)
++        if fam == 'F0':
++            _b, n_units = _bounds_for(fam, kw)
++            raw, _exp = run_f0_chunk(df, adaptive, structural, warmup, kw, 0, n_units)
++            common = f0_rows_from_raw(df, adaptive, structural, warmup, raw)
++        else:
++            rows = mod.run_search(df, adaptive=adaptive, structural=structural, warmup=warmup, **kw)
++            common = fmt(rows, script)
+     finally:
+         df['D2D_Trend_Dir'] = orig
+-    common = fmt(rows, script)
+     csv, done = _family_paths(fam, script)
+     _write_atomic_csv(pd.DataFrame(common, columns=SCHEMA), csv)
+     _mark_family_done(csv, done, len(common))
+@@ -981,8 +986,7 @@ def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=Non
+                 n_axis = min(limit, n_axis)
+                 bounds = [(lo, min(hi, n_axis)) for (lo, hi) in bounds if lo < n_axis]
+             if fam == 'F1':
+-                expected_cands[fam] = (len(kw['cond_labels']) ** 2 * len(kw['lags'])
+-                                       * len(kw['directions']))
++                expected_cands[fam] = (n_axis * len(kw['cond_labels']) * len(kw['directions']))
+             if fam == 'F0':
+                 expected_cands[fam] = f0_combo_count(kw, 0, n_axis)
+             plan.append((fam, script, n_axis, bounds))
+-- 
+2.43.0
+
