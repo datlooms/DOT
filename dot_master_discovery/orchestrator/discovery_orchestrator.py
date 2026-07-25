@@ -525,6 +525,8 @@ def _one_axis(kw, name, lo, hi):
 
 def _slice_axis(kw, axis, lo, hi):
     out = dict(kw)
+    if axis == '__combos__':
+        return out
     if not isinstance(axis, tuple):
         out[axis] = _one_axis(kw, axis, lo, hi)
         return out
@@ -744,64 +746,126 @@ def sort_master(master_df):
         ascending=[False, False, True, False, False]).reset_index(drop=True)
 
 
+PARITY_LIMIT_DEFAULT = 200
+
+
+def _parity_chunk_worker(payload):
+    fam, script, scope, frame_path, lo, hi = payload
+    import discovery_orchestrator as orch
+    df, adaptive, structural, warmup, kw = orch._worker_context(scope, frame_path, fam)
+    rows, exp = orch.run_chunk_rows(fam, script, df, adaptive, structural, warmup, kw, lo, hi)
+    return rows, exp
+
+
 def parity_check(scope='proof', workers=1, df=None, adaptive=None, structural=None, warmup=None,
-                 families=None):
+                 families=None, limit=PARITY_LIMIT_DEFAULT, frame_path=None):
     if df is None:
-        df = engine.load_sealed_baseline(verbose=False) if hasattr(engine, 'load_sealed_baseline') else None
-    if warmup is None:
-        warmup = engine.warmup_floor(df, verbose=False)
-    if adaptive is None:
-        adaptive = dt.compute_adaptive_thresholds(df)
-    if structural is None:
-        structural = dt.compute_structural_gates(df)
+        raise SystemExit(
+            "ABORT — parity_check requires the INGESTED frame. It must never fall back to "
+            "engine.load_sealed_baseline(), which hardcodes equiDOT_recon171_step7_* and would "
+            "silently test a DIFFERENT dataset from the one S0 validated. Pass df/adaptive/"
+            "structural/warmup explicitly (master.py --parity does this).")
+    if adaptive is None or structural is None or warmup is None:
+        raise SystemExit("ABORT — parity_check requires adaptive, structural and warmup from S1/S2; "
+                         "recomputing them here could diverge from the run under test.")
     builders = _scope(scope)
     names = families or [f[0] for f in FAMILIES]
-    print(f"PARITY HARNESS — chunked vs unchunked, scope={scope}, {len(names)} families", flush=True)
+    print(f"PARITY HARNESS — chunked+collated vs unchunked, scope={scope}, "
+          f"limit={limit} axis units per family, workers={workers}", flush=True)
+    print(f"  the SERIAL REFERENCE leg is one process BY DEFINITION — parallelising it would use the "
+          f"very chunk mechanism under test. Only the chunked leg honours --workers.", flush=True)
+    print(f"  both legs are bounded by the SAME limit value, so they always see an identical range.",
+          flush=True)
     all_pass = True
     for fam, script, mod, fmt in FAMILIES:
         if fam not in names:
             continue
         kw = builders[fam](df, adaptive, structural, warmup)
-        bounds, n_units = _bounds_for(fam, kw)
+        bounds_full, n_full = _bounds_for(fam, kw)
+        n_units = min(limit, n_full) if limit else n_full
+        bounds = [(lo, hi) for (lo, hi) in bounds_full if lo < n_units]
+        bounds = [(lo, min(hi, n_units)) for (lo, hi) in bounds]
+        est = _parity_estimate(fam, n_units, n_full)
+        print(f"  {fam}: {n_units} of {n_full} axis units | {len(bounds)} chunks | {est}", flush=True)
+        t0 = time.time()
         orig_s = df['D2D_Trend_Dir'].values.copy()
         try:
             if fam == 'F0':
-                serial, exp_f0 = run_f0_chunk(df, adaptive, structural, warmup, kw, 0, n_units)
+                serial_raw, exp_one = run_f0_chunk(df, adaptive, structural, warmup, kw, 0, n_units)
+                serial = f0_rows_from_raw(df, adaptive, structural, warmup, serial_raw)
             else:
+                sub = _slice_axis(kw, CHUNK_AXIS[fam], 0, n_units) if n_units < n_full else dict(kw)
                 serial = fmt(mod.run_search(df, adaptive=adaptive, structural=structural,
-                                            warmup=warmup, **kw), script)
+                                            warmup=warmup, **sub), script)
+                exp_one = None
+                if fam == 'F1':
+                    exp_one = (len(sub['cond_labels']) * len(kw['cond_labels'])
+                               * len(sub['lags']) * len(kw['directions']))
         finally:
             df['D2D_Trend_Dir'] = orig_s
-        exp_one = None
-        if fam == 'F0':
-            exp_one = exp_f0
-        if fam == 'F1':
-            exp_one = len(kw['cond_labels']) ** 2 * len(kw['lags']) * len(kw['directions'])
+        t_serial = time.time() - t0
+        t0 = time.time()
         parts = []
         cand = 0
-        for lo, hi in bounds:
-            rows, exp = run_chunk_rows(fam, script, df, adaptive, structural, warmup, kw, lo, hi)
-            parts.extend(rows)
-            if exp is not None:
-                cand += exp
-        a = pd.DataFrame(serial, columns=SCHEMA)
-        b = pd.DataFrame(parts, columns=SCHEMA)
-        key = list(SCHEMA)
-        a = a.sort_values(key).reset_index(drop=True)
-        b = b.sort_values(key).reset_index(drop=True)
+        payloads = [(fam, script, scope, frame_path, lo, hi) for (lo, hi) in bounds]
+        if workers > 1 and frame_path is not None:
+            from concurrent.futures import ProcessPoolExecutor
+            import multiprocessing as _mp2
+            with ProcessPoolExecutor(max_workers=min(workers, len(payloads)),
+                                     mp_context=_mp2.get_context('spawn')) as ex:
+                for rows, exp in ex.map(_parity_chunk_worker, payloads):
+                    parts.extend(rows)
+                    if exp is not None:
+                        cand += exp
+        else:
+            if workers > 1:
+                print(f"    chunked leg run in-process: no frame_path supplied for worker "
+                      f"processes (result is identical, only slower)", flush=True)
+            for lo, hi in bounds:
+                rows, exp = run_chunk_rows(fam, script, df, adaptive, structural, warmup, kw, lo, hi)
+                parts.extend(rows)
+                if exp is not None:
+                    cand += exp
+        dedup_line = ''
+        if fam == 'F0':
+            chunked = f0_rows_from_raw(df, adaptive, structural, warmup, parts)
+            a_d = pd.DataFrame(serial, columns=SCHEMA).sort_values(list(SCHEMA)).reset_index(drop=True)
+            b_d = pd.DataFrame(chunked, columns=SCHEMA).sort_values(list(SCHEMA)).reset_index(drop=True)
+            dedup_ok = a_d.equals(b_d)
+            dedup_line = (f"    F0 COLLATION DEDUP VERIFIED: {'YES' if dedup_ok else 'NO'} — "
+                          f"{len(parts)} raw survivors from chunks -> global 80% overlap dedup at "
+                          f"collation -> {len(b_d)} rows; unchunked run deduped -> {len(a_d)} rows; "
+                          f"byte-identical: {dedup_ok}")
+            parts = chunked
+        t_chunk = time.time() - t0
+        a = pd.DataFrame(serial, columns=SCHEMA).sort_values(list(SCHEMA)).reset_index(drop=True)
+        b = pd.DataFrame(parts, columns=SCHEMA).sort_values(list(SCHEMA)).reset_index(drop=True)
         same = a.equals(b)
         cand_txt = ''
         if exp_one is not None:
             cand_ok = cand == exp_one
             same = same and cand_ok
-            cand_txt = f" | candidates {cand} vs {exp_one} {'OK' if cand_ok else 'MISMATCH'}"
-        print(f"  {fam:4} {len(bounds):5} chunks | serial {len(a):5} rows | chunked {len(b):5} rows "
-              f"| {'PASS' if same else 'FAIL'}{cand_txt}", flush=True)
+            cand_txt = f" | candidates serial {exp_one} vs chunked {cand} {'OK' if cand_ok else 'MISMATCH'}"
+        print(f"    {len(bounds):5} chunks | serial {len(a):5} rows ({t_serial:.1f}s) | "
+              f"chunked {len(b):5} rows ({t_chunk:.1f}s) | {'PASS' if same else 'FAIL'}{cand_txt}",
+              flush=True)
+        if dedup_line:
+            print(dedup_line, flush=True)
         all_pass = all_pass and same
         del kw
-    print(f"PARITY {'PASS' if all_pass else 'FAIL'} — chunking changes nothing a scanner computes"
-          if all_pass else "PARITY FAIL — chunking altered results; do NOT run a long scan", flush=True)
+    print(f"PARITY {'PASS' if all_pass else 'FAIL'}" +
+          (" — chunking plus collation changes nothing a scanner computes" if all_pass
+           else " — chunking altered results; do NOT run a long scan"), flush=True)
     return all_pass
+
+
+def _parity_estimate(fam, n_units, n_full):
+    per = {'F0': 0.40, 'F1': 0.35}.get(fam)
+    if per is None:
+        return "estimated runtime: seconds to a few minutes per leg"
+    secs = per * n_units
+    return (f"estimated runtime ~{secs:.0f}s per leg ({2 * secs:.0f}s both legs) "
+            f"at ~{per}s per axis unit")
 
 
 def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=None,

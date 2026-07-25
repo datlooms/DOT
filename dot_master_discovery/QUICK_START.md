@@ -40,6 +40,19 @@ If it says PASS -> good, the parts are in `data\`. If it says FAIL or ABORT -> t
 ## STEP 5 — run the system
 Pick ONE:
 
+### PRE-FLIGHT (DO THIS FIRST — takes minutes, not hours)
+```
+python master.py --parity all --parity-limit 200 --workers 16
+```
+Checks that splitting each family's work into chunks and reassembling it gives **exactly** the same answer as running it unsplit. It scans nothing and writes no pool -- it is a correctness check on the machinery, bounded to the first 200 units of each family so it finishes in minutes.
+
+Look for `PARITY PASS` at the end, and for F0 specifically the line `F0 COLLATION DEDUP VERIFIED: YES`.
+
+**If it says PARITY FAIL: do not start the scan.** A family is not reproducing its unsplit result, so the candidate pool would be wrong and every selection downstream would inherit that. Send the output to Ticky.
+
+Single family instead of all: `--parity F0`.
+
+--------------------------------------------------------
 ### A) THE FULL DISCOVERY SCAN — ALL FOURTEEN FAMILIES (MULTI-DAY)
 ```
 python master.py --workers 16

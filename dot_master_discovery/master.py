@@ -1502,6 +1502,10 @@ def main():
     ap.add_argument('--stage', default=None, choices=STAGES)
     ap.add_argument('--market-label', default='US30 (sealed baseline)')
     ap.add_argument('--chunk-mb', type=int, default=9)
+    ap.add_argument('--parity', default=None,
+                    help="run the chunking parity harness and exit: a family (e.g. F0) or 'all'")
+    ap.add_argument('--parity-limit', type=int, default=200,
+                    help='cap each family to the first N axis units, applied to BOTH parity legs')
     args = ap.parse_args()
     args.workers = min(args.workers, 16)
 
@@ -1525,6 +1529,40 @@ def main():
     ad, st = s1_thresholds(df)
     print('\n[S2] POOL & ANCHORS')
     pool, anchor, w = s2_pool(df, ad, st)
+
+    if args.parity:
+        import discovery_orchestrator as orch
+        results = os.path.join(out, 'results')
+        os.makedirs(results, exist_ok=True)
+        orch.RESULTS_DIR = results
+        fams = None if args.parity.lower() == 'all' else [x.strip().upper()
+                                                         for x in args.parity.split(',')]
+        frame_path = None
+        if args.workers > 1:
+            frame_path = os.path.join(results, f'_parity_frame_{input_sha}.csv')
+            if not os.path.exists(frame_path):
+                tmp = frame_path + '.tmp'
+                with open(tmp, 'w', encoding='utf-8', newline='') as f:
+                    df.to_csv(f, index=False, lineterminator='\n')
+                    f.flush()
+                    os.fsync(f.fileno())
+                os.replace(tmp, frame_path)
+        print('\n[PARITY] CHUNKING PARITY HARNESS — pre-flight check, no scan is run')
+        print('  scope=proof (the smaller candidate vocabulary): parity proves a MECHANISM —')
+        print('  that chunked+collated equals unchunked over the SAME bounded range. Full scope')
+        print('  would cost hours per leg and prove nothing further about the mechanism.')
+        ok = orch.parity_check('proof', workers=args.workers, df=df, adaptive=ad, structural=st,
+                               warmup=w, families=fams, limit=args.parity_limit,
+                               frame_path=frame_path)
+        if frame_path and os.path.exists(frame_path):
+            os.remove(frame_path)
+        print('\n' + '=' * 68)
+        print('PARITY PASS — chunking is sound on this dataset; the full scan may be started.'
+              if ok else
+              'PARITY FAIL — a chunked family does NOT reproduce its unchunked result on this '
+              'dataset. DO NOT start the scan; the pool would be wrong.')
+        print('=' * 68)
+        sys.exit(0 if ok else 1)
 
     contenders = committed = profile = evidence = selection_state = wf_state = None
     run_all = only is None
