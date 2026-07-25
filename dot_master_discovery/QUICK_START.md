@@ -40,13 +40,15 @@ If it says PASS -> good, the parts are in `data\`. If it says FAIL or ABORT -> t
 ## STEP 5 — run the system
 Pick ONE:
 
-### A) THE FULL DISCOVERY SCAN (MEASURED 5-25 HOURS at --workers 16)
+### A) THE FULL DISCOVERY SCAN — ALL FOURTEEN FAMILIES (MULTI-DAY)
 ```
 python master.py --workers 16
 ```
 **Always use `--workers 16`.** The built-in default is 2, which is sized for an 8 GB machine and would leave a 32 GB / 16-thread laptop idle. See "HOW MANY WORKERS?" below.
 
-**WHERE THE 5-25 HOUR RANGE COMES FROM — measured, not estimated.** F1 dominates the scan: 239 A-labels x 15 lags = 3,585 chunks, 478 candidates each, 1,713,630 candidates total. Two chunks were timed at full scope: one at **63.9 s with 0 survivors**, one at **380.5 s with 338 survivors**. Cost tracks survivors, not candidate count (base 63.9 s to screen a chunk, plus 0.937 s for every candidate that clears MIN_TRADES and runs the full portfolio simulation). Those two measurements bound F1 at **4.0 h to 23.7 h at 16 workers** (63.6 h to 378.9 h single-threaded). The other nine families total roughly 2.25 h single-threaded on the reference profile, well under an hour once chunked across 16 workers. The range is wide because the global MIN_TRADES pass rate is not yet measured across all 3,585 chunks — the two samples differed 70.7% versus 0%. **The old "1-2 days" figure predated any measurement and is withdrawn.**
+**ALL FOURTEEN FAMILIES RUN ON THIS ONE COMMAND.** F0 (triple convergence — the family that produced 48 of the committed book's 50 signals), F1-F9 and F11 are chunked onto a single shared work queue. F10 is fused into F0. F12 (concurrence) and F13 (single-variable extremes) run as their own stages with their own internal parallelism. Nothing is run separately and nothing is skipped: S3 now **aborts** rather than start if any of the fourteen is neither queued nor satisfied by a CSV stamped for the current dataset.
+
+**HOW LONG — READ THIS BEFORE YOU START.** Expect **multiple days**. The earlier "5-25 hours" figure excluded F0 entirely and is **withdrawn**. F0's full-scope cost has NOT been measured: it searches C(117,3) = 257,180 feature-triples, and on the small proof scope it was still only 7.9% through its combos after 841 s. F0 is expected to dominate the run. The other thirteen families are the smaller part. Set the machine up to run undisturbed, and rely on the resume guarantee below rather than on a completion estimate.
 
 Leave it running. If the PC crashes or reboots, run the SAME command again -- it resumes. See "WHAT ACTUALLY RESUMES".
 

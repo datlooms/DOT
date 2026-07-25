@@ -228,7 +228,8 @@ def s3_discovery(out, workers, input_sha, scope, df=None, ad=None, st=None, w=No
     print('   .done marker carrying the row count and CSV sha256. A restart re-reads any complete family from disk')
     print('   and re-scans only the incomplete ones, so the worst case loss is ONE family, not the whole stage.)')
     orch.orchestrate(scope, workers=workers, df=df, adaptive=ad, structural=st, warmup=w,
-                     frame_path=frame_path)
+                     frame_path=frame_path, input_sha=input_sha)
+    run_diagnostic_families(results, workers, input_sha)
     if frame_path is not None and os.path.exists(frame_path):
         os.remove(frame_path)
         print(f'  worker frame {os.path.basename(frame_path)} removed on S3 completion')
@@ -485,6 +486,45 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
     r['sigs'] = sigs
     mark_done(out, 'S8', {'input_sha': input_sha, 'net': r['net'], 'trades': r['trades'], 'canary': canary})
     return r
+
+
+def run_diagnostic_families(results_dir, workers, input_sha):
+    import discovery_orchestrator as orch
+    print('  DIAGNOSTIC FAMILIES (F12, F13) — separate stages: they emit measurement artifacts, not')
+    print('  14-column pool rows, so they cannot collate into discovery_master.csv. Both run on the')
+    print('  same single command with the operator --workers value and their own internal parallelism.')
+    f13_csv = os.path.join(results_dir, 'results_F13_single_variable_extremes.csv')
+    ok13, why13 = orch.provenance_is_current(f13_csv, input_sha)
+    if ok13:
+        print(f'  [F13] already current for this input_sha — skipping')
+    else:
+        print(f'  [F13] running ({why13}); native _f13_shards/*.done checkpointing preserved as-is')
+        try:
+            import single_variable_extremes as f13
+            f13.RESULTS_DIR = results_dir
+            f13.OUT_CSV = f13_csv
+            f13.SHARD_DIR = os.path.join(results_dir, '_f13_shards')
+            f13.run(min(workers, 12))
+            if os.path.exists(f13_csv):
+                orch.stamp_provenance(f13_csv, input_sha)
+        except Exception as exc:
+            print(f'  [F13] FAILED {type(exc).__name__}: {exc}')
+    f12_csv = os.path.join(results_dir, 'concurrence_depth_bars.csv')
+    ok12, why12 = orch.provenance_is_current(f12_csv, input_sha)
+    if ok12:
+        print(f'  [F12] already current for this input_sha — skipping')
+    else:
+        print(f'  [F12] running ({why12}); nine concurrence CSVs into the run tree')
+        try:
+            import concurrence_profiler as f12
+            f12.RESULTS_DIR = results_dir
+            if hasattr(f12, 'main'):
+                f12.main()
+            for nm in os.listdir(results_dir):
+                if nm.startswith('concurrence_') and nm.endswith('.csv'):
+                    orch.stamp_provenance(os.path.join(results_dir, nm), input_sha)
+        except Exception as exc:
+            print(f'  [F12] FAILED {type(exc).__name__}: {exc}')
 
 
 # ── S3B PER-FAMILY EVIDENCE REVIEW (spec A.1-A.5) + D2D GATE MEASUREMENT (spec E.1) ──

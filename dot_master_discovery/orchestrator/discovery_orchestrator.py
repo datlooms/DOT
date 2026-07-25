@@ -3,6 +3,7 @@ import os
 import time
 import hashlib
 import json
+import pickle
 import threading
 import numpy as np
 import pandas as pd
@@ -10,6 +11,8 @@ import dots_thresholds as dt
 import portfolio_simulation_engine as engine
 import wf
 
+import triple_convergence_and_d2ddir as f0m
+import f0_to_schema as f0s
 import sequential_temporal as f1
 import state_transition as f2
 import conditional_interaction as f3
@@ -74,6 +77,24 @@ def _common(family, script, signal_def, direction, d2d_mode, row):
 # ── per-family scope builders: return kwargs for run_search ──────────────
 def _scope(kind):
     proof = kind == 'proof'
+
+    def f0_kw(df, adaptive, structural, warmup):
+        feat_candidates, equality_candidates = f0m.build_candidates(df)
+        eligible = (df['ADX_Value'].values >= 15) & (df['Volume'].values > 50)
+        vol_zero = df['Volume'].values == 0
+        warm = np.arange(len(df)) < warmup
+        fri_block = ((df['EST_DayOfWeek'].values == 5)
+                     & ((df['EST_Hour'].values > 16)
+                        | ((df['EST_Hour'].values == 16) & (df['EST_Minute'].values >= 45))))
+        entry_allowed = eligible & ~vol_zero & ~fri_block & ~warm
+        feature_conditions = f0m.build_conditions(df, feat_candidates, equality_candidates,
+                                                  adaptive, structural, eligible)
+        arrays = (df['High'].values, df['Low'].values, df['Close'].values, df['ATR_1M'].values,
+                  df['EST_DayOfWeek'].values, df['EST_Hour'].values, df['EST_Minute'].values)
+        return dict(feature_conditions=feature_conditions,
+                    all_features=feat_candidates + equality_candidates,
+                    entry_allowed=entry_allowed, d2d_dir=df['D2D_Trend_Dir'].values, arrays=arrays)
+
 
     def f1_kw(df, adaptive, structural, warmup):
         pool = f1.build_condition_pool(df, adaptive, structural, warmup)
@@ -152,7 +173,7 @@ def _scope(kind):
         return dict(pairs=f11.PAIRS, windows=windows, relations=f11.RELATIONS,
                     directions=['LONG', 'SHORT'])
 
-    return {'F1': f1_kw, 'F2': f2_kw, 'F3': f3_kw, 'F4': f4_kw, 'F5': f5_kw,
+    return {'F0': f0_kw, 'F1': f1_kw, 'F2': f2_kw, 'F3': f3_kw, 'F4': f4_kw, 'F5': f5_kw,
             'F6': f6_kw, 'F7': f7_kw, 'F8': f8_kw, 'F9': f9_kw, 'F11': f11_kw}
 
 
@@ -203,7 +224,186 @@ def _rows_F11(rows, s):
                     r['direction'], 'confirm', r) for r in rows]
 
 
+ALL_FAMILIES = [
+    ('F0', 'triple_convergence_and_d2ddir', 'pool'),
+    ('F1', 'sequential_temporal', 'pool'),
+    ('F2', 'state_transition', 'pool'),
+    ('F3', 'conditional_interaction', 'pool'),
+    ('F4', 'divergence_nonconfirm', 'pool'),
+    ('F5', 'persistence_autocorr', 'pool'),
+    ('F6', 'threshold_crossing', 'pool'),
+    ('F7', 'mean_reversion', 'pool'),
+    ('F8', 'cross_variable_structure', 'pool'),
+    ('F9', 'session_temporal', 'pool'),
+    ('F10', None, 'fused_into_F0'),
+    ('F11', 'rolling_leadlag', 'pool'),
+    ('F12', 'concurrence_profiler', 'diagnostic'),
+    ('F13', 'single_variable_extremes', 'diagnostic'),
+]
+DIAGNOSTIC_OUTPUTS = {'F12': 'concurrence_depth_bars.csv',
+                      'F13': 'results_F13_single_variable_extremes.csv'}
+
+
+def _provenance_path(csv_path):
+    return os.path.splitext(csv_path)[0] + '.provenance'
+
+
+def stamp_provenance(csv_path, input_sha):
+    payload = {'input_sha': input_sha, 'csv_sha256': _sha_file(csv_path)}
+    tmp = _provenance_path(csv_path) + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        json.dump(payload, f, sort_keys=True)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, _provenance_path(csv_path))
+
+
+def provenance_is_current(csv_path, input_sha):
+    pp = _provenance_path(csv_path)
+    if not (os.path.exists(csv_path) and os.path.exists(pp)):
+        return False, 'no provenance stamp'
+    try:
+        meta = json.load(open(pp, 'r', encoding='utf-8'))
+    except Exception:
+        return False, 'unreadable provenance'
+    if meta.get('input_sha') != input_sha:
+        return False, f"stamped for input_sha {str(meta.get('input_sha'))[:12]}, current is {str(input_sha)[:12]}"
+    if meta.get('csv_sha256') != _sha_file(csv_path):
+        return False, 'csv changed since stamping'
+    return True, 'current'
+
+
+def verify_family_coverage(queued_pool, queued_diag, input_sha, results_dir):
+    rows = []
+    gaps = []
+    for fam, script, role in ALL_FAMILIES:
+        if role == 'fused_into_F0':
+            rows.append((fam, 'FUSED', 'concurrence lens fused into F0; covered when F0 runs'))
+            if 'F0' not in queued_pool:
+                gaps.append(f'{fam} (fused into F0, but F0 is not covered)')
+            continue
+        if role == 'pool':
+            if fam in queued_pool:
+                rows.append((fam, 'QUEUED', 'chunked onto the S3 queue'))
+                continue
+            csv = os.path.join(results_dir, f'results_{fam}_{script}.csv')
+            ok, why = provenance_is_current(csv, input_sha)
+            if ok:
+                rows.append((fam, 'INGESTED', 'existing CSV, provenance current'))
+            else:
+                rows.append((fam, 'MISSING', why))
+                gaps.append(f'{fam} ({why})')
+            continue
+        if fam in queued_diag:
+            rows.append((fam, 'QUEUED', 'diagnostic stage scheduled this run'))
+            continue
+        csv = os.path.join(results_dir, DIAGNOSTIC_OUTPUTS.get(fam, ''))
+        ok, why = provenance_is_current(csv, input_sha)
+        if ok:
+            rows.append((fam, 'INGESTED', 'existing diagnostic output, provenance current'))
+        else:
+            rows.append((fam, 'MISSING', why))
+            gaps.append(f'{fam} ({why})')
+    n_q = sum(1 for r in rows if r[1] == 'QUEUED')
+    n_i = sum(1 for r in rows if r[1] == 'INGESTED')
+    n_f = sum(1 for r in rows if r[1] == 'FUSED')
+    n_m = len(gaps)
+    print(f"  FAMILY COVERAGE — {len(ALL_FAMILIES)} families: {n_q} queued, {n_i} ingested, "
+          f"{n_f} fused, {n_m} MISSING", flush=True)
+    for fam, state, why in rows:
+        print(f"    {fam:4} {state:9} {why}", flush=True)
+    if gaps:
+        raise SystemExit("ABORT — S3 would complete without these families: " + '; '.join(gaps) +
+                         ". A run must never silently omit a family, and a stale ingested CSV is not "
+                         "coverage. Queue them or supply a CSV stamped for this input_sha.")
+    return rows
+
+
+def _rows_F0(rows, script):
+    return list(rows)
+
+
+def f0_combo_count(kw, lo, hi):
+    import itertools as _it
+    feats = kw['all_features']
+    fc = kw['feature_conditions']
+    total = 0
+    for (i, j, k) in list(_it.combinations(range(len(feats)), 3))[lo:hi]:
+        total += (len(fc[feats[i]]) * len(fc[feats[j]]) * len(fc[feats[k]]) * 2)
+    return total
+
+
+F0_MIN_TRADES_OVERRIDE = 30
+F0_MIN_PF_OVERRIDE = 2.0
+F0_ASYMMETRY_NOTE = (
+    'F0 POOL PROPERTY — RECORDED, NOT HIDDEN. F0 candidates pass an APPROXIMATE PF pre-screen that '
+    'F2-F11 candidates never face. F0 first scores every triple with its own fast single-pass scorer '
+    '(same SPREAD 3.0, same BE trigger, same BE/LF/SL/FC exit types, walking real bars to real exits, '
+    'but strictly one-position-at-a-time with NO jar, NO conviction sizing and NO gap fillers), so the '
+    'TRADE COUNT IS EXACT while the PF is a flat-1-lot no-jar proxy. Only triples clearing that proxy '
+    f'PF >= {F0_MIN_PF_OVERRIDE} and trades >= {F0_MIN_TRADES_OVERRIDE} are re-scored through the '
+    'ratified engine. The PF gate is deliberately LOOSE (the scanner default is 4.0; it is overridden '
+    'DOWN to 2.0) because pre-gating hard on an approximated metric would discard candidates the '
+    'ratified engine might rate well. Consequence for selection: a triple the proxy rates below 2.0 '
+    'never reaches the pool even if the ratified engine would have rated it higher.')
+
+
+def run_f0_chunk(df, adaptive, structural, warmup, kw, lo, hi):
+    import itertools as _it
+    f0m.MIN_PF = F0_MIN_PF_OVERRIDE
+    f0m.MIN_TRADES = F0_MIN_TRADES_OVERRIDE
+    orig_comb = f0m.combinations
+
+    def _sliced(iterable, r):
+        return list(_it.combinations(iterable, r))[lo:hi]
+
+    f0m.combinations = _sliced
+    try:
+        survivors = f0m.run_search(df, kw['feature_conditions'], kw['all_features'],
+                                   kw['entry_allowed'], kw['d2d_dir'], kw['arrays'])
+    finally:
+        f0m.combinations = orig_comb
+    return list(survivors), f0_combo_count(kw, lo, hi)
+
+
+def f0_rows_from_raw(df, adaptive, structural, warmup, raw_survivors):
+    kept = f0m.deduplicate(list(raw_survivors))
+    month = pd.Series(df['Time'].values).str[:7].values
+    return [f0s.score_survivor(df, row, month, adaptive, structural, warmup) for row in kept]
+
+
+def _f0_chunk_pickle(script, idx):
+    return os.path.join(RESULTS_DIR, f"results_F0_{script}_c{idx:04d}.pkl")
+
+
+def collate_f0(script, n_chunks, df, adaptive, structural, warmup, expected_total, input_sha):
+    ok, detail = candidate_invariant('F0', script, n_chunks, expected_total)
+    if not ok and detail != 'missing per-chunk candidate count':
+        raise SystemExit(f"ABORT [F0] CANDIDATE-COUNT INVARIANT FAILED: {detail}. Chunking changed "
+                         f"the combo space; results are NOT trustworthy.")
+    raw = []
+    for idx in range(n_chunks):
+        pk = _f0_chunk_pickle(script, idx)
+        if not (os.path.exists(pk) and chunk_is_complete('F0', script, idx)):
+            return False, 0
+        with open(pk, 'rb') as f:
+            raw.extend(pickle.load(f))
+    n_raw = len(raw)
+    rows = f0_rows_from_raw(df, adaptive, structural, warmup, raw)
+    csv, done = _family_paths('F0', script)
+    _write_atomic_csv(pd.DataFrame(rows, columns=SCHEMA), csv)
+    _mark_family_done(csv, done, len(rows))
+    if input_sha is not None:
+        stamp_provenance(csv, input_sha)
+    with open(os.path.splitext(csv)[0] + '.note', 'w', encoding='utf-8') as f:
+        f.write(F0_ASYMMETRY_NOTE + '\n')
+    print(f"  [F0] {n_raw} raw survivors across {n_chunks} chunks -> global 80% overlap dedup at "
+          f"COLLATION (single pass, ascending chunk order) -> {len(rows)} pool rows", flush=True)
+    return True, len(rows)
+
+
 FAMILIES = [
+    ('F0', 'triple_convergence_and_d2ddir', f0m, _rows_F0),
     ('F1', 'sequential_temporal', f1, _rows_F1),
     ('F2', 'state_transition', f2, _rows_F2),
     ('F3', 'conditional_interaction', f3, _rows_F3),
@@ -292,15 +492,20 @@ def run_family(fam, script, mod, fmt, kw_builder, df, adaptive, structural, warm
     return common
 
 
-CHUNK_AXIS = {'F1': ('cond_labels', 'lags'), 'F2': 'cond_labels', 'F3': 'base_pool',
+CHUNK_AXIS = {'F0': '__combos__', 'F1': ('cond_labels', 'lags'), 'F2': 'cond_labels', 'F3': 'base_pool',
               'F4': 'price_feats', 'F5': 'cond_labels', 'F6': 'cross_feats',
               'F7': 'stretch_feats', 'F8': 'pairs', 'F9': 'base_labels', 'F11': 'pairs'}
-COST_ORDER = ['F1', 'F3', 'F9', 'F11', 'F4', 'F2', 'F7', 'F5', 'F8', 'F6']
+COST_ORDER = ['F1', 'F0', 'F3', 'F9', 'F11', 'F4', 'F2', 'F7', 'F5', 'F8', 'F6']
 TARGET_CHUNKS_PER_FAMILY = 64
+TARGET_CHUNKS_F0 = 512
 _WCACHE = {}
 
 
 def _axis_units(kw, axis):
+    if axis == '__combos__':
+        import itertools as _it
+        n = len(kw['all_features'])
+        return sum(1 for _ in _it.combinations(range(n), 3)), [n]
     if isinstance(axis, tuple):
         sizes = [len(kw[a]) for a in axis]
         n = 1
@@ -344,6 +549,8 @@ def _chunk_bounds(n_items, target=TARGET_CHUNKS_PER_FAMILY, unit_cap=None):
 def _bounds_for(fam, kw):
     axis = CHUNK_AXIS[fam]
     n_units, sizes = _axis_units(kw, axis)
+    if axis == '__combos__':
+        return _chunk_bounds(n_units, target=TARGET_CHUNKS_F0), n_units
     if isinstance(axis, tuple):
         return _chunk_bounds(n_units, target=n_units, unit_cap=sizes[1]), n_units
     return _chunk_bounds(n_units), n_units
@@ -389,6 +596,8 @@ def run_chunk_rows(fam, script, df, adaptive, structural, warmup, kw, lo, hi):
     sub = _slice_axis(kw, CHUNK_AXIS[fam], lo, hi)
     orig = df['D2D_Trend_Dir'].values.copy()
     try:
+        if fam == 'F0':
+            return run_f0_chunk(df, adaptive, structural, warmup, kw, lo, hi)
         if fam == 'F1':
             import run_f1_parallel as f1p
             month = pd.Series(df['Time'].values).str[:7].values
@@ -415,6 +624,15 @@ def _chunk_worker(payload):
     df, adaptive, structural, warmup, kw = orch._worker_context(scope, frame_path, fam)
     t0 = time.time()
     common, expected = orch.run_chunk_rows(fam, script, df, adaptive, structural, warmup, kw, lo, hi)
+    if fam == 'F0':
+        pk = orch._f0_chunk_pickle(script, idx)
+        tmpp = pk + '.tmp'
+        with open(tmpp, 'wb') as fh:
+            pickle.dump(common, fh)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmpp, pk)
+        common = []
     if expected is not None:
         cpath = os.path.join(results_dir, f"results_{fam}_{script}_c{idx:04d}.cand")
         tmpc = cpath + '.tmp'
@@ -547,11 +765,16 @@ def parity_check(scope='proof', workers=1, df=None, adaptive=None, structural=No
         bounds, n_units = _bounds_for(fam, kw)
         orig_s = df['D2D_Trend_Dir'].values.copy()
         try:
-            serial = fmt(mod.run_search(df, adaptive=adaptive, structural=structural,
-                                        warmup=warmup, **kw), script)
+            if fam == 'F0':
+                serial, exp_f0 = run_f0_chunk(df, adaptive, structural, warmup, kw, 0, n_units)
+            else:
+                serial = fmt(mod.run_search(df, adaptive=adaptive, structural=structural,
+                                            warmup=warmup, **kw), script)
         finally:
             df['D2D_Trend_Dir'] = orig_s
         exp_one = None
+        if fam == 'F0':
+            exp_one = exp_f0
         if fam == 'F1':
             exp_one = len(kw['cond_labels']) ** 2 * len(kw['lags']) * len(kw['directions'])
         parts = []
@@ -638,6 +861,8 @@ def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=Non
             if fam == 'F1':
                 expected_cands[fam] = (len(kw['cond_labels']) ** 2 * len(kw['lags'])
                                        * len(kw['directions']))
+            if fam == 'F0':
+                expected_cands[fam] = f0_combo_count(kw, 0, n_axis)
             plan.append((fam, script, n_axis, bounds))
             del kw
         order = {f: i for i, f in enumerate(COST_ORDER)}
@@ -723,11 +948,18 @@ def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=Non
             print("  sequentially in this process. If this recurs, lower --workers.", flush=True)
             print("", flush=True)
         for fam, script, _n, bounds in plan:
-            ok, n_rows = collate_family_chunks(fam, script, len(bounds), expected_cands.get(fam))
+            if fam == 'F0':
+                ok, n_rows = collate_f0(script, len(bounds), df, adaptive, structural, warmup,
+                                        expected_cands.get('F0'), input_sha)
+            else:
+                ok, n_rows = collate_family_chunks(fam, script, len(bounds),
+                                                   expected_cands.get(fam))
             if ok:
                 inv = candidate_invariant(fam, script, len(bounds), expected_cands.get(fam))[1]
                 print(f"  [{fam}] collated {len(bounds)} chunks -> {n_rows} rows "
                       f"| candidate invariant {inv}", flush=True)
+                if input_sha is not None:
+                    stamp_provenance(_family_paths(fam, script)[0], input_sha)
         ran_parallel = not died
         pending = [(fam, script, mod, fmt) for fam, script, mod, fmt in pending
                    if not family_is_complete(fam, script)[0]]
