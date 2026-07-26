@@ -54,6 +54,22 @@ The full DOT system is the convergence book **plus conviction self-scaling, gap-
 | Max drawdown | **−$145.9** | −$165.6 |
 | Monthly folds positive | **6 / 6** | 6 / 6 |
 
+> **NOTE ON THESE FIGURES — dated 2026-07-27.** These are the ratified historical record and stand
+> as such, but they are **broken-clock figures**. `ExportDataForAnalysis()` wrote the bar's SERVER
+> time into `EST_Hour` / `EST_Minute` / `EST_DayOfWeek` instead of true EST (DOT.cs L730-731 pass
+> `Time[i]` into a parameter declared `gmtTime`). The scoring engine's Friday gate reads those
+> columns, so it blocked 3,280 bars from true 13:00 rather than the intended 100 bars at 16:45 —
+> **Friday afternoons were never traded in any backtest before this date.**
+> Re-scored on a corrected clock, same 152,983-bar window: **2,739 trades, WR 91.9%, PF 5.92,
+> net $91,506** (+41 trades, −$789). On the full stitched 177,251-bar series: **3,101 trades,
+> WR 90.6%, PF 4.81, net $97,675.**
+>
+> **The EA's LIVE clock was always correct** — `GetEstTime()` (L1770) uses `TimeGMT()`, and the
+> chart, session containers, DST transitions and live Friday cutoff have behaved properly
+> throughout. Only the export was wrong, and only three columns. Full detail:
+> `foundational_documents/DOT_codebase_map.md` §5 and `DOT_post_update_checklist.txt` PHASE L.
+
+
 **Out-of-sample (May–June, never used to select the system):**
 
 | Metric | **DOT full system (crown jewel)** | convergence base |
@@ -282,6 +298,11 @@ On the validated six-month sample, at 1 lot base, with the full built-and-audite
 - **Stronger on unseen data than on the data it was built from** — the signature of a real edge, not a curve-fit
 - **Held through a real ~10% bear crash** (the US-Iran war stretch) still profitable
 - **Worst single day −$104.4** — well inside the account's daily-loss ceiling, by a factor of roughly twenty-four
+
+> **These are broken-clock figures — see the dated note above.** Corrected: 2,739 trades,
+> PF 5.92, net $91,506 on the same window. Friday afternoons were excluded throughout by an
+> export-clock defect, not by design. The live EA clock was always correct.
+
 
 These are backtested figures, independently reconstructed and audited from source. The final word belongs to live execution, which trims a proven edge but does not invert one. That's what the demo phase is for.
 
