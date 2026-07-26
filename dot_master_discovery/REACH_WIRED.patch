@@ -1,0 +1,134 @@
+From d31837453e3e90004e4ed40e03225b65310f46cb Mon Sep 17 00:00:00 2001
+From: T <t@d.local>
+Date: Sun, 26 Jul 2026 12:24:30 +0000
+Subject: [PATCH] REACH wired: the S2B terrain is now consumed and coverage is
+ reported per direction. Root cause of both prior failures found by reading
+ the enclosing function: the REACH block sits inside s3b_family_evidence, not
+ a separate S5B function, and ent_map was never defined there; cp.book_events
+ already returns {1: long entry bars, -1: short entry bars}, which is exactly
+ the shape coverage_by_direction wants, so the fix is to bind ev_book. Three
+ further latent NameErrors in the same scope fixed: segment_label was
+ referenced but never assigned, selection was not imported, and s5b_selection
+ was called by the --stage S5B dispatch but did not exist. The denominator is
+ the S2B terrain built by terrain.build_terrain, the same construction and
+ grid S2B writes, never a locally improvised episode set. Coverage is never
+ pooled: the BOTH row is labelled reported-only and is not the score.
+ entry_pos_median is emitted as a descriptive column because coverage counts
+ presence, not capture, and no taper is built on it.
+
+---
+ dot_master_discovery/engine/selection.py | 13 ++++++++++-
+ dot_master_discovery/master.py           | 28 ++++++++++++++----------
+ 2 files changed, 29 insertions(+), 12 deletions(-)
+
+diff --git a/dot_master_discovery/engine/selection.py b/dot_master_discovery/engine/selection.py
+index 9996906..9d6b230 100644
+--- a/dot_master_discovery/engine/selection.py
++++ b/dot_master_discovery/engine/selection.py
+@@ -839,13 +839,24 @@ def coverage_by_direction(entry_bars_by_dir, thrust_cs, label='BOOK'):
+             cid = thrust_cs['cid'][d][bars]
+             allowed = set(sub['cluster_id'].tolist()) if total else set()
+             touched = {int(c) for c in cid if c >= 0 and int(c) in allowed}
++        pos = []
++        if len(bars) and total:
++            spans = {int(r['cluster_id']): (int(r['b0']), int(r['b1'])) for _i, r in sub.iterrows()}
++            cid = thrust_cs['cid'][d][bars]
++            for bar, c in zip(bars, cid):
++                if c < 0 or int(c) not in spans:
++                    continue
++                b0, b1 = spans[int(c)]
++                pos.append(0.0 if b1 == b0 else (float(bar) - b0) / float(b1 - b0))
+         rows.append({'direction': name, 'terrain_episodes': total, 'touched': len(touched),
+                      'coverage_pct': round(100.0 * len(touched) / total, 3) if total else 0.0,
+                      'missed': total - len(touched), 'scored_for': label,
++                     'entry_pos_median': round(float(np.median(pos)), 3) if pos else '',
+                      'population': 'terrain=MARKET, entries=BOOK'})
+     tot = len(cl)
+     hit = sum(r['touched'] for r in rows)
+-    rows.append({'direction': 'BOTH', 'terrain_episodes': tot, 'touched': hit,
++    rows.append({'direction': 'BOTH (reported only, never used as the score)',
++                 'terrain_episodes': tot, 'touched': hit, 'entry_pos_median': '',
+                  'coverage_pct': round(100.0 * hit / tot, 3) if tot else 0.0,
+                  'missed': tot - hit, 'scored_for': label,
+                  'population': 'terrain=MARKET, entries=BOOK'})
+diff --git a/dot_master_discovery/master.py b/dot_master_discovery/master.py
+index 9a680a6..158b26b 100644
+--- a/dot_master_discovery/master.py
++++ b/dot_master_discovery/master.py
+@@ -719,6 +719,10 @@ def s2b_terrain(df, w, out, input_sha, attest):
+ 
+ 
+ # ── S3B PER-FAMILY EVIDENCE REVIEW (spec A.1-A.5) + D2D GATE MEASUREMENT (spec E.1) ──
++def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest):
++    return s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest)
++
++
+ def s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest):
+     import cluster_profiler as cp
+     import family_evidence as fe
+@@ -793,6 +797,8 @@ def s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha,
+     d2d['tolerance_N'] = 5
+     d2d['dataset_rows'] = len(df)
+     d2d['note'] = 'single-run full gate removal is not computable without editing sacred build_signal_masks; per-direction free runs isolate the jar'
++    months = sorted(set(pd.Series(df['Time'].astype(str).values).str[:7].tolist()))
++    segment_label = f'{months[0]}..{months[-1]}' if months else 'unknown'
+     ev_book, bk = cp.book_events(executed)
+     f1_names = set()
+     if 'signal_idx' in executed.columns:
+@@ -802,25 +808,24 @@ def s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha,
+                    'basis2': cp.build_cluster_set(n, ev_qual, 5)}
+     try:
+         import terrain as tr
++        import selection as sel
+         cell = (15, 0.85, 0.75)
+         if _TERRAIN.get('cells'):
+             cs_thr = _TERRAIN['cells'][cell]
+             terrain_src = 'S2B MARKET TERRAIN (fixed denominator, identical for every candidate book)'
+         else:
+-            fwd, mag, eff, valid, thr, mcol, ecol = cp.thrust_thresholds(df, 15, (0.85,), (0.75,))
+-            ev_thr = cp.thrust_events(fwd, mag, eff, valid, thr[(mcol, 'k85')], thr[(ecol, 'e75')], w)
+-            cs_thr = cp.build_cluster_set(n, ev_thr, tr.CONTIGUOUS_TOLERANCE)
+-            terrain_src = 'locally derived (S2B terrain unavailable this run)'
+-        ent_by_dir = {d: (np.concatenate(list(ent_map[d].values())) if ent_map[d]
+-                          else np.array([], dtype=np.int64)) for d in (1, -1)}
+-        covdir = sel.coverage_by_direction(ent_by_dir, cs_thr, label='INCUMBENT BOOK')
++            cs_thr = tr.build_terrain(df, w)[1][cell]
++            terrain_src = ('S2B MARKET TERRAIN rebuilt in-process by terrain.build_terrain — the '
++                           'SAME construction and the SAME grid S2B writes, so the denominator is '
++                           'identical; never a locally improvised episode set')
++        covdir = sel.coverage_by_direction(ev_book, cs_thr, label='INCUMBENT BOOK')
+         covdir['W'] = cell[0]
+         covdir['K_pct'] = cell[1]
+         covdir['E_pct'] = cell[2]
+         covdir['terrain_source'] = terrain_src
+         _write_with_header(os.path.join(out, 'selection_coverage.csv'), covdir, [
+             'DOT S5B REACH — coverage of the S2B MARKET TERRAIN, scored PER DIRECTION',
+-            f'dataset_rows={attest["rows"]} segment={segment_label}',
++            f'dataset_rows={attest["rows"]}',
+             f'terrain source: {terrain_src}',
+             f'grid cell W={cell[0]} K=p{int(cell[1] * 100)} E=p{int(cell[2] * 100)} | '
+             f'mask {tr.eligibility_label()}',
+@@ -836,8 +841,9 @@ def s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha,
+         for _i, r in covdir.iterrows():
+             print(f"    REACH {r['direction']:<5} {r['coverage_pct']:6.3f}% of {int(r['terrain_episodes']):5} "
+                   f"terrain episodes ({int(r['touched'])} touched, {int(r['missed'])} missed)", flush=True)
+-        cov = {'episodes': int(covdir[covdir.direction == 'BOTH']['terrain_episodes'].iloc[0]),
+-               'coverage_pct': float(covdir[covdir.direction == 'BOTH']['coverage_pct'].iloc[0]),
++        both = covdir[covdir['direction'].str.startswith('BOTH')]
++        cov = {'episodes': int(both['terrain_episodes'].iloc[0]) if len(both) else 0,
++               'coverage_pct': float(both['coverage_pct'].iloc[0]) if len(both) else 0.0,
+                'by_direction': covdir}
+     except Exception as _exc:
+         print(f'    REACH UNAVAILABLE — {type(_exc).__name__}: {_exc}. The S2B terrain exists '
+@@ -859,7 +865,7 @@ def s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha,
+                         'PBO_reference_bar': 0.10}])
+     _write_with_header(os.path.join(out, 'selection_constraint_evaluation.csv'), ce, [
+         'DOT S5B spec C.3 constraint evaluation applied to the INCUMBENT as a self-reference fixture',
+-        f'dataset_rows={attest["rows"]} segment={segment_label}',
++            f'dataset_rows={attest["rows"]}',
+         'SELF-REFERENCE: the incumbent is compared against bounds derived FROM ITSELF, so F_max and TailDep pass by',
+         'construction. The informative cell is mcvar, where C_max is a p10 of the incumbent own distribution and',
+         'roughly a tenth of its signals therefore sit below it. This exercises the code path; it is NOT evidence',
+-- 
+2.43.0
+

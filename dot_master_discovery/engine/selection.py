@@ -839,13 +839,24 @@ def coverage_by_direction(entry_bars_by_dir, thrust_cs, label='BOOK'):
             cid = thrust_cs['cid'][d][bars]
             allowed = set(sub['cluster_id'].tolist()) if total else set()
             touched = {int(c) for c in cid if c >= 0 and int(c) in allowed}
+        pos = []
+        if len(bars) and total:
+            spans = {int(r['cluster_id']): (int(r['b0']), int(r['b1'])) for _i, r in sub.iterrows()}
+            cid = thrust_cs['cid'][d][bars]
+            for bar, c in zip(bars, cid):
+                if c < 0 or int(c) not in spans:
+                    continue
+                b0, b1 = spans[int(c)]
+                pos.append(0.0 if b1 == b0 else (float(bar) - b0) / float(b1 - b0))
         rows.append({'direction': name, 'terrain_episodes': total, 'touched': len(touched),
                      'coverage_pct': round(100.0 * len(touched) / total, 3) if total else 0.0,
                      'missed': total - len(touched), 'scored_for': label,
+                     'entry_pos_median': round(float(np.median(pos)), 3) if pos else '',
                      'population': 'terrain=MARKET, entries=BOOK'})
     tot = len(cl)
     hit = sum(r['touched'] for r in rows)
-    rows.append({'direction': 'BOTH', 'terrain_episodes': tot, 'touched': hit,
+    rows.append({'direction': 'BOTH (reported only, never used as the score)',
+                 'terrain_episodes': tot, 'touched': hit, 'entry_pos_median': '',
                  'coverage_pct': round(100.0 * hit / tot, 3) if tot else 0.0,
                  'missed': tot - hit, 'scored_for': label,
                  'population': 'terrain=MARKET, entries=BOOK'})
