@@ -524,6 +524,18 @@ def preflight_loader_audit():
     print(f'  LOADER AUDIT — {total} references to load_sealed_baseline across {len(found)} files, '
           f'all on the frozen allowlist' if not (new or grew) else
           f'  LOADER AUDIT — FAIL', flush=True)
+    hook = os.path.join(_HERE, 'sitecustomize.py')
+    binder = os.path.join(_HERE, 'dot_frame_binding.py')
+    if not (os.path.exists(hook) and os.path.exists(binder)):
+        raise SystemExit(
+            'ABORT — sitecustomize.py / dot_frame_binding.py missing from the pack root. Without '
+            'them the frame binding cannot reach spawned worker processes, and any family that '
+            'starts its own pool (F12, F13) will load the hardcoded equiDOT_recon171_step7_* parts.')
+    print('  SPAWN-SAFETY — sitecustomize.py present: the binding re-establishes at interpreter '
+          'startup in every spawned process, so the 27 call sites cannot reach the raw loader from '
+          'a worker. STATIC LIMIT: this is a presence check, not a proof; a spawned process that '
+          'starts with PYTHONPATH stripped would not import the hook, so the binding also asserts '
+          'and aborts inside the worker rather than trusting it.', flush=True)
     if new or grew:
         msg = []
         for k, v in new.items():
@@ -538,26 +550,33 @@ def preflight_loader_audit():
     return found
 
 
-def bind_ingested_frame_permanently(df, input_sha):
-    import portfolio_simulation_engine as engine
-    fingerprint = (len(df), str(df['Time'].values[0]), str(df['Time'].values[-1]))
-
-    def _ingested_loader(*_a, **_k):
-        got = (len(df), str(df['Time'].values[0]), str(df['Time'].values[-1]))
-        if got != fingerprint:
-            raise SystemExit(f'ABORT — the ingested frame changed under the permanent loader '
-                             f'binding: expected {fingerprint}, got {got}. No stage may mutate the '
-                             f'frame S0 validated.')
-        return df
-
-    engine.load_sealed_baseline = _ingested_loader
-    print(f'  PERMANENT FRAME BINDING — engine.load_sealed_baseline now returns the frame S0 '
-          f'ingested, for the REST OF THE RUN. It is never restored.')
-    print(f'    frame fingerprint: {fingerprint[0]:,} rows | {fingerprint[1]} -> {fingerprint[2]} '
-          f'| input_sha {input_sha}')
-    print(f'    the sacred definition hardcodes equiDOT_recon171_step7_* and is referenced by 26 '
-          f'call sites across 22 files; binding here makes it structurally impossible for any of '
-          f'them to reach the wrong dataset, rather than relying on each stage remembering to inject.')
+def bind_ingested_frame_permanently(df, input_sha, out_dir):
+    import dot_frame_binding as fb
+    os.makedirs(out_dir, exist_ok=True)
+    cache = os.path.join(out_dir, f'_frame_{input_sha}.csv')
+    for stale in glob.glob(os.path.join(out_dir, '_frame_*.csv')):
+        if os.path.basename(stale) != os.path.basename(cache):
+            os.remove(stale)
+    if not os.path.exists(cache):
+        tmp = cache + '.tmp'
+        with open(tmp, 'w', encoding='utf-8', newline='') as f:
+            df.to_csv(f, index=False, lineterminator='\n')
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, cache)
+    fp = fb.fingerprint_of(df)
+    fb.configure_environment(cache, input_sha, fp)
+    fb.install(df)
+    print(f'  FRAME BINDING — engine.load_sealed_baseline is bound to the frame S0 ingested, in THIS')
+    print(f'  process AND in every process spawned from it. The parent-only monkeypatch did not')
+    print(f'  survive spawn: F12 and F13 start their own pools, each worker re-imports a pristine')
+    print(f'  engine module and reached the hardcoded equiDOT_recon171_step7_* parts. The binding is')
+    print(f'  now re-established at INTERPRETER STARTUP via sitecustomize.py, which Python imports')
+    print(f'  before any family code runs, driven by DOT_FRAME_PATH/DOT_INPUT_SHA in the inherited')
+    print(f'  environment. A new entry point cannot bypass it because it does not have to opt in.')
+    print(f'    frame fingerprint: {fp[0]:,} rows | {fp[1]} -> {fp[2]} | input_sha {input_sha}')
+    print(f'    worker frame cache: {os.path.basename(cache)}')
+    return cache
 
 
 def run_diagnostic_families(results_dir, workers, input_sha, df=None):
@@ -1614,7 +1633,7 @@ def main():
     only = args.stage
     print('\n[S0] INGEST & VALIDATE')
     df, attest, input_sha = s0_ingest(data_dir, out, args.chunk_mb)
-    bind_ingested_frame_permanently(df, input_sha)
+    bind_ingested_frame_permanently(df, input_sha, os.path.join(out, 'results'))
     print('\n[S1] ADAPTIVE THRESHOLDS (oracle)')
     ad, st = s1_thresholds(df)
     print('\n[S2] POOL & ANCHORS')
