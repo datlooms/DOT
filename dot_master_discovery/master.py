@@ -256,7 +256,9 @@ def s4_schema(out, input_sha):
             uni.to_csv(master, index=False, lineterminator='\n')
             print(f'  schema-unify: {len(uni)} rows → results/discovery_master.csv')
         else:
-            print('  schema-unify: no discovery results present (discover-fresh not run) — skipping')
+            print('  schema-unify: no discovery results present (discover-fresh not run) — NOT marking '
+              'done. A stage that reports itself unexercised must NOT mark done: the marker would skip it permanently for this input_sha and the run would finish with that stage never having run.')
+        return
     mark_done(out, 'S4', {'input_sha': input_sha})
 
 
@@ -264,15 +266,28 @@ def s5_filter(out, input_sha):
     results = os.path.join(out, 'results')
     src = os.path.join(results, 'discovery_master.csv')
     if not os.path.exists(src):
-        print('  filter: no unified results — skipping (discover-fresh not run)')
-        mark_done(out, 'S5', {'input_sha': input_sha, 'candidates': 0})
+        print('  filter: no unified results (discover-fresh not run) — NOT marking done. A stage that reports itself unexercised must NOT mark done: the marker would skip it permanently for this input_sha and the run would finish with that stage never having run.')
         return
     r = pd.read_csv(src)
     keep = r[(r['trades'] >= 30) & (r['folds_plus'] >= 4) & (r['agg_pf'] >= 2.0)].copy()
     if 'worst_day_usd' in keep.columns:
         keep = keep.sort_values(['worst_day_usd', 'agg_pf'], ascending=[True, False])
+    import score_g
+    unscoreable = set(score_g.UNSCOREABLE_FAMILIES)
+    if 'family' in keep.columns and len(keep):
+        blocked = keep[keep['family'].isin(unscoreable)]
+        keep = keep[~keep['family'].isin(unscoreable)]
+        if len(blocked):
+            for fam, g in blocked.groupby('family'):
+                print(f'  filter: EXCLUDING {len(g)} {fam} candidate(s) — S8 cannot score this '
+                      f'family: {score_g.UNSCOREABLE_FAMILIES[fam]}')
+            print(f'  THE POOL IS NOT THE FULL FOURTEEN: {sorted(unscoreable)} are discovered and '
+                  f'reported but cannot enter a selected book until build_book can reconstruct '
+                  f'their masks. Stated so the operator is never told a book spans families it '
+                  f'does not.')
     keep.to_csv(os.path.join(results, 'candidates.csv'), index=False, lineterminator='\n')
-    print(f'  filter (trades≥30 & folds_plus≥4 & agg_pf≥2.0): {len(keep)}/{len(r)} candidates')
+    print(f'  filter (trades≥30 & folds_plus≥4 & agg_pf≥2.0): {len(keep)}/{len(r)} candidates '
+          f'scoreable by S8')
     mark_done(out, 'S5', {'input_sha': input_sha, 'candidates': int(len(keep))})
 
 
@@ -428,8 +443,7 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
     else:
         book = _assemble_fresh_book(out)
         if book is None:
-            print('  S8 discover-fresh: no candidates.csv — run discovery (S3–S5) first.')
-            mark_done(out, 'S8', {'input_sha': input_sha, 'skipped': 'no candidates'})
+            print('  S8 discover-fresh: no candidates.csv — run discovery (S3-S5) first. NOT marking done: a stage that reports itself unexercised must not claim it ran.')
             return None
         fresh_path = os.path.join(committed, 'discovered_book.csv')
         book.to_csv(fresh_path, index=False, lineterminator='\n')
@@ -905,7 +919,14 @@ def s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha, 
     print(f'  vocabulary {hyg["effective_vocabulary"].iloc[0]} effective | kappa {kappa:.3f} | C_max {c_max:.1f} | '
           f'survival {"PASS" if surv["passes"] else "FAIL"}')
     print(f'  selection search: {"candidates present" if exercised else "UNEXERCISED PENDING S3 (no candidate pool)"}')
-    mark_done(out, 'S5B', {'input_sha': input_sha, 'effective_vocabulary': int(hyg['effective_vocabulary'].iloc[0])})
+    if not exercised:
+        print('  S5B NOT MARKED DONE — it reported itself unexercised (no candidate pool). '
+              'A stage that did not do its work must not claim it did: marking done here '
+              'would skip selection permanently for this input_sha and a multi-day scan '
+              'would finish with NO SELECTION and no error.')
+    else:
+        mark_done(out, 'S5B', {'input_sha': input_sha, 'effective_vocabulary': int(hyg['effective_vocabulary'].iloc[0])})
+
     return {'report_lines': report_lines, 'hygiene': hyg, 'grid': grid, 'constraints': con, 'h3': h3}
 
 

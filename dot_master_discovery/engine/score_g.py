@@ -19,23 +19,101 @@ import conviction as C
 _F1 = re.compile(r'^(.*?)\s*->(\d+)->\s*(.*)$')
 
 
+_F1 = re.compile(r'^(.*?)\s*->(\d+)->\s*(.*)$')
+_F2 = re.compile(r'^(.+?):(-?\d+)->(-?\d+)$')
+_F3 = re.compile(r'^(.+?)\s+GATED-BY\s+(.+?)==(-?\d+)$')
+_F7 = re.compile(r'^FADE\s+(.+)$')
+_F9 = re.compile(r'^(.+?)\s+IN-SESSION\s+(\d{1,2}):(\d{2})$')
+
+UNSCOREABLE_FAMILIES = {
+    'F4': 'divergence_nonconfirm — "A NOT-CONFIRMED-BY B" needs the scanner divergence window and '
+          'its non-confirmation state machine, which run_search holds internally and does not expose',
+    'F6': 'threshold_crossing — "X up-cross(level=hi) ROC=none" needs the scanner crossing detector '
+          'and its ROC variant selection',
+    'F8': 'cross_variable_structure — "A > B" needs the scanner relative-structure normalisation',
+    'F11': 'rolling_leadlag — "A<->B N=30 leadlag_pos" needs the scanner rolling correlation window',
+}
+
+
+def _pool_mask(pool, label, fam, sig):
+    if label not in pool:
+        raise SystemExit(
+            f'ABORT [{fam}] signal_def "{sig}" references condition "{label}", which is not in the '
+            f'{len(pool)}-condition pool. The book cannot be scored; the candidate is NOT silently '
+            f'dropped and NOT reparsed as another family.')
+    return np.asarray(pool[label], dtype=bool)
+
+
+def family_mask(df, pool, fam, sig):
+    if fam == 'F5':
+        return _pool_mask(pool, sig.strip(), fam, sig)
+    if fam == 'F7':
+        m = _F7.match(sig)
+        if m:
+            return _pool_mask(pool, m.group(1).strip(), fam, sig)
+    if fam == 'F3':
+        m = _F3.match(sig)
+        if m:
+            base = _pool_mask(pool, m.group(1).strip(), fam, sig)
+            col, val = m.group(2).strip(), int(m.group(3))
+            if col not in df.columns:
+                raise SystemExit(f'ABORT [{fam}] gate column "{col}" absent from the frame for "{sig}".')
+            return base & (df[col].values == val)
+    if fam == 'F2':
+        m = _F2.match(sig)
+        if m:
+            col, a_v, b_v = m.group(1).strip(), int(m.group(2)), int(m.group(3))
+            if col not in df.columns:
+                raise SystemExit(f'ABORT [{fam}] state column "{col}" absent from the frame for "{sig}".')
+            v = df[col].values
+            out = np.zeros(len(v), dtype=bool)
+            out[1:] = (v[:-1] == a_v) & (v[1:] == b_v)
+            return out
+    if fam == 'F9':
+        m = _F9.match(sig)
+        if m:
+            base = _pool_mask(pool, m.group(1).strip(), fam, sig)
+            hh, mm = int(m.group(2)), int(m.group(3))
+            return base & (df['EST_Hour'].values == hh) & (df['EST_Minute'].values == mm)
+    if fam in UNSCOREABLE_FAMILIES:
+        raise SystemExit(
+            f'ABORT [{fam}] cannot be scored by build_book: {UNSCOREABLE_FAMILIES[fam]}. '
+            f'signal_def "{sig}". S5 should have filtered this family out before S8; if it reached '
+            f'here the filter and the scorer disagree.')
+    raise SystemExit(
+        f'ABORT [{fam}] unrecognised signal_def grammar: "{sig}". build_book will not guess and will '
+        f'not fall through to another family parser — that silent fall-through is what crashed S8.')
+
+
 def build_book(df, pool, anchor, book):
     rows = []
     fk = 0
     for _, b in book.iterrows():
-        if b['trigger'] == 'F0':
-            ft = [p.strip().rsplit(':', 1) for p in b['signal_def'].split('+')]
+        fam = str(b['family']).strip() if 'family' in book.columns else str(b['trigger']).strip()
+        sig = str(b['signal_def'])
+        if fam == 'F0':
+            ft = [p.strip().rsplit(':', 1) for p in sig.split('+')]
             rows.append({'feat_1': ft[0][0], 'thresh_1': ft[0][1], 'feat_2': ft[1][0],
                          'thresh_2': ft[1][1], 'feat_3': ft[2][0], 'thresh_3': ft[2][1],
                          'direction': b['direction']})
-        else:
-            m = _F1.match(b['signal_def'])
+            continue
+        col = f'__BOOK_{fk}'
+        fk += 1
+        if fam == 'F1':
+            m = _F1.match(sig)
+            if m is None:
+                raise SystemExit(
+                    f'ABORT [F1] signal_def "{sig}" does not match the sequential-pair grammar '
+                    f'A ->k-> B. Refusing to guess.')
             a, k, bb = m.group(1).strip(), int(m.group(2)), m.group(3).strip()
-            col = f'__F1_{fk}'
-            fk += 1
+            for lbl in (a, bb):
+                if lbl not in pool:
+                    raise SystemExit(f'ABORT [F1] "{lbl}" is not in the condition pool for "{sig}".')
             df[col] = seq.pair_mask(pool[a], pool[bb], k, anchor).astype(int)
-            rows.append({'feat_1': col, 'thresh_1': '==1', 'feat_2': col, 'thresh_2': '==1',
-                         'feat_3': col, 'thresh_3': '==1', 'direction': b['direction']})
+        else:
+            df[col] = family_mask(df, pool, fam, sig).astype(int)
+        rows.append({'feat_1': col, 'thresh_1': '==1', 'feat_2': col, 'thresh_2': '==1',
+                     'feat_3': col, 'thresh_3': '==1', 'direction': b['direction']})
     return pd.DataFrame(rows)
 
 
