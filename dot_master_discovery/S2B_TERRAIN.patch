@@ -1,0 +1,753 @@
+From 5998bad4695a528b401804c7f4eafc376626168d Mon Sep 17 00:00:00 2001
+From: T <t@d.local>
+Date: Sun, 26 Jul 2026 04:16:33 +0000
+Subject: [PATCH] S2B market terrain map: a price-only, book-independent
+ enumeration of every significant directional episode, so reach has a fixed
+ denominator before anything is scanned or selected. Reuses the ratified
+ basis-3 construction from cluster_profiler with K and E from dots_thresholds
+ (mechanism D, rolling-2500, day-refreshed); no local percentile and no
+ constant. Swept over W in {15,30} x K in {p85,p90} with E at p75 and every
+ row and summary line carries its own grid cell and eligibility mask, because
+ counts move 2-4x across the grid while the up/down ratio does not. S5B now
+ scores coverage against that terrain PER DIRECTION via
+ selection.coverage_by_direction, which is how directional balance arrives
+ without a quota; coverage stays after survival, FailConc and DepthYield in
+ the lexicographic order and is never promoted. S9 reports REACH for the
+ selected book with the incumbent alongside, replacing the hardcoded
+ incumbent-only line. F12 and F13 now print an unambiguous COMPLETE line
+ naming every artifact. The forward-looking boundary is stated in the module
+ header and in every artifact header.
+
+---
+ dot_master_discovery/engine/selection.py |  35 ++
+ dot_master_discovery/engine/terrain.py   | 181 ++++++++++
+ dot_master_discovery/master.py           | 442 +++++++----------------
+ 3 files changed, 352 insertions(+), 306 deletions(-)
+ create mode 100644 dot_master_discovery/engine/terrain.py
+
+diff --git a/dot_master_discovery/engine/selection.py b/dot_master_discovery/engine/selection.py
+index f698769..9996906 100644
+--- a/dot_master_discovery/engine/selection.py
++++ b/dot_master_discovery/engine/selection.py
+@@ -817,6 +817,41 @@ def h3_within_direction(trades):
+     return pd.DataFrame(rows)
+ 
+ 
++def coverage_by_direction(entry_bars_by_dir, thrust_cs, label='BOOK'):
++    """Coverage of the MARKET terrain, scored WITHIN each direction.
++
++    Per-direction is not cosmetic. The terrain is close to 50/50 up/down, so a
++    long-heavy book leaves nearly all short episodes uncovered and short
++    candidates carry high marginal value automatically. THAT IS HOW DIRECTIONAL
++    BALANCE ARRIVES WITHOUT A QUOTA: no floor, no target, no minimum count and no
++    reserved allocation anywhere. The terrain supplies the balance; the objective
++    must not, and coverage stays where spec C.3 puts it, after survival,
++    FailConc and DepthYield, never promoted above them.
++    """
++    cl = thrust_cs['clusters']
++    rows = []
++    for d, name in ((1, 'UP'), (-1, 'DOWN')):
++        sub = cl[cl['dir'] == d] if len(cl) else cl
++        total = len(sub)
++        bars = np.asarray(entry_bars_by_dir.get(d, []), dtype=np.int64)
++        touched = set()
++        if len(bars):
++            cid = thrust_cs['cid'][d][bars]
++            allowed = set(sub['cluster_id'].tolist()) if total else set()
++            touched = {int(c) for c in cid if c >= 0 and int(c) in allowed}
++        rows.append({'direction': name, 'terrain_episodes': total, 'touched': len(touched),
++                     'coverage_pct': round(100.0 * len(touched) / total, 3) if total else 0.0,
++                     'missed': total - len(touched), 'scored_for': label,
++                     'population': 'terrain=MARKET, entries=BOOK'})
++    tot = len(cl)
++    hit = sum(r['touched'] for r in rows)
++    rows.append({'direction': 'BOTH', 'terrain_episodes': tot, 'touched': hit,
++                 'coverage_pct': round(100.0 * hit / tot, 3) if tot else 0.0,
++                 'missed': tot - hit, 'scored_for': label,
++                 'population': 'terrain=MARKET, entries=BOOK'})
++    return pd.DataFrame(rows)
++
++
+ def coverage_of_book(entry_bars_by_dir, thrust_cs):
+     touched = set()
+     total = len(thrust_cs['clusters']) if len(thrust_cs['clusters']) else 0
+diff --git a/dot_master_discovery/engine/terrain.py b/dot_master_discovery/engine/terrain.py
+new file mode 100644
+index 0000000..28df845
+--- /dev/null
++++ b/dot_master_discovery/engine/terrain.py
+@@ -0,0 +1,181 @@
++"""engine/terrain.py — S2B, the market terrain map.
++
++WHAT THIS IS. A price-only enumeration of every significant directional episode
++in the loaded data. NO SIGNALS ARE INVOLVED AT ANY POINT. It is a property of
++the MARKET, not of any book, and every table it emits is labelled MARKET.
++
++WHY IT EXISTS. The committed book participates in roughly 11% of the market's
++clean directional moves, and 89.8% of what it misses is places where not one of
++its fifty signals fires at all. Selection maximises DEPTH, and depth is measured
++against THE BOOK'S OWN CLUSTERS, so a rediscovered book can score brilliantly
++while sitting in the same corner of the market. A fixed, book-independent
++denominator is the only way to ask whether a NEW book reaches more of the market
++than the old one.
++
++THE EPISODE LABEL IS FORWARD-LOOKING BY CONSTRUCTION AND CAN NEVER BECOME A LIVE
++GATE OR AN ENTRY CONDITION. It reads Close[t+W]. That is legitimate for a
++selection-side diagnostic, because "did this signal fire at the start of moves
++that turned out big" is inherently a backward-looking question asked after the
++fact. Anyone trading "thrust detected" would be trading future information. This
++boundary is repeated in the header of every artifact this module writes.
++
++CONSTRUCTION IS THE RATIFIED BASIS-3 ONE, REUSED, NOT REINVENTED. K and E come
++from dots_thresholds via cluster_profiler's thrust_thresholds, which sweeps them
++through the oracle's own compute_adaptive_thresholds (mechanism D, rolling-2500,
++day-refreshed, floor-index). No local percentile and no hardcoded constant
++appears here; mechanisms A, B and C are retired and must not reappear.
++
++THE GRID IS PART OF THE FINDING. Episode counts move by a factor of 2-4x with
++the mask and the thresholds while the up/down ratio stays inside a fraction of a
++point of 50/50. Every row and every summary line carries its own (W, K, E) cell
++and the eligibility mask, because a count without its parameters is not a
++measurement.
++"""
++
++import numpy as np
++import pandas as pd
++import cluster_profiler as cp
++
++GRID_W = (15, 30)
++GRID_K = (0.85, 0.90)
++GRID_E = (0.75,)
++CONTIGUOUS_TOLERANCE = 1
++TOP_EPISODE_FRACTION = 0.10
++FORWARD_LOOKING_BOUNDARY = (
++    'FORWARD-LOOKING BY CONSTRUCTION: the episode label reads Close[t+W]. Legitimate as a '
++    'SELECTION-SIDE diagnostic; IT CAN NEVER BECOME A LIVE GATE OR AN ENTRY CONDITION, because '
++    'anyone trading "thrust detected" would be trading future information.')
++MARKET_LABEL = (
++    'PROPERTY OF THE MARKET — price only, no signals, no book. The denominator is fixed across '
++    'every run and every candidate book.')
++SESSION_BANDS = ((0, 8, 'overnight'), (8, 10, 'pre-open'), (10, 12, 'morning'),
++                 (12, 14, 'midday'), (14, 16, 'afternoon'), (16, 24, 'after-hours'))
++
++
++def session_of(hour):
++    for lo, hi, name in SESSION_BANDS:
++        if lo <= hour < hi:
++            return name
++    return 'unknown'
++
++
++def eligibility_label():
++    return 'ADX_Value >= 15 & Volume > 50 & post-warmup (cluster_profiler.eligible_universe)'
++
++
++def build_terrain(df, warmup, grid_w=GRID_W, grid_k=GRID_K, grid_e=GRID_E):
++    n = len(df)
++    close = df['Close'].values.astype(float)
++    atr = df['ATR_1M'].values.astype(float)
++    hours = df['EST_Hour'].values
++    times = df['Time'].astype(str).values
++    universe = cp.eligible_universe(df, warmup)
++    rows = []
++    cells = {}
++    eid = 0
++    for W in grid_w:
++        fwd, mag, eff, valid, thr, mcol, ecol = cp.thrust_thresholds(df, W, grid_k, grid_e)
++        for kp in grid_k:
++            for ep in grid_e:
++                karr = thr[(mcol, f'k{int(round(kp * 100))}')]
++                earr = thr[(ecol, f'e{int(round(ep * 100))}')]
++                events = cp.thrust_events(fwd, mag, eff, valid, karr, earr, warmup)
++                cs = cp.build_cluster_set(n, events, CONTIGUOUS_TOLERANCE)
++                cl = cs['clusters']
++                cell = (W, kp, ep)
++                cells[cell] = cs
++                if len(cl) == 0:
++                    continue
++                for _i, r in cl.iterrows():
++                    d = int(r['dir'])
++                    b0 = int(r['b0'])
++                    b1 = int(r['b1'])
++                    end_ref = min(b1 + W, n - 1)
++                    disp = float(close[end_ref] - close[b0]) * d
++                    a0 = float(atr[b0])
++                    path = float(np.abs(np.diff(close[b0:end_ref + 1])).sum()) if end_ref > b0 else 0.0
++                    hour = int(hours[b0])
++                    rows.append({
++                        'episode_id': eid, 'W': W, 'K_pct': kp, 'E_pct': ep,
++                        'direction': 'UP' if d == 1 else 'DOWN',
++                        'start_bar': b0, 'end_bar': b1,
++                        'start_time': times[b0], 'end_time': times[b1],
++                        'duration_bars': int(b1 - b0 + 1),
++                        'abs_displacement_pts': round(abs(disp), 1),
++                        'displacement_atr': round(abs(disp) / a0, 3) if a0 > 0 else 0.0,
++                        'efficiency': round(abs(disp) / path, 4) if path > 0 else 0.0,
++                        'est_hour_start': hour, 'session': session_of(hour),
++                        'eligibility_mask': eligibility_label(),
++                        'population': 'MARKET'})
++                    eid += 1
++    return pd.DataFrame(rows), cells, int(universe.sum())
++
++
++def summarise(terrain):
++    out = []
++    if len(terrain) == 0:
++        return pd.DataFrame(out)
++    for (W, kp, ep), g in terrain.groupby(['W', 'K_pct', 'E_pct']):
++        up = g[g['direction'] == 'UP']
++        dn = g[g['direction'] == 'DOWN']
++        tot = len(g)
++        disp = g['abs_displacement_pts'].values
++        row = {'W': W, 'K_pct': kp, 'E_pct': ep, 'episodes': tot,
++               'up': len(up), 'down': len(dn),
++               'up_share_pct': round(100.0 * len(up) / tot, 1) if tot else 0.0,
++               'down_share_pct': round(100.0 * len(dn) / tot, 1) if tot else 0.0,
++               'median_disp_pts': round(float(np.median(disp)), 1),
++               'q1_disp_pts': round(float(np.percentile(disp, 25)), 1),
++               'q3_disp_pts': round(float(np.percentile(disp, 75)), 1),
++               'median_disp_up': round(float(np.median(up['abs_displacement_pts'])), 1) if len(up) else 0.0,
++               'median_disp_down': round(float(np.median(dn['abs_displacement_pts'])), 1) if len(dn) else 0.0,
++               'median_duration_bars': int(np.median(g['duration_bars'].values)),
++               'population': 'MARKET', 'eligibility_mask': eligibility_label()}
++        out.append(row)
++    return pd.DataFrame(out)
++
++
++def hour_profile(terrain, top_fraction=TOP_EPISODE_FRACTION):
++    rows = []
++    if len(terrain) == 0:
++        return pd.DataFrame(rows)
++    for (W, kp, ep), g in terrain.groupby(['W', 'K_pct', 'E_pct']):
++        cut = float(np.percentile(g['abs_displacement_pts'].values, 100 * (1 - top_fraction)))
++        big = g[g['abs_displacement_pts'] >= cut]
++        for hour in range(24):
++            h = g[g['est_hour_start'] == hour]
++            hb = big[big['est_hour_start'] == hour]
++            if len(h) == 0 and len(hb) == 0:
++                continue
++            rows.append({'W': W, 'K_pct': kp, 'E_pct': ep, 'est_hour': hour,
++                         'session': session_of(hour), 'episodes': len(h),
++                         'up': int((h['direction'] == 'UP').sum()),
++                         'down': int((h['direction'] == 'DOWN').sum()),
++                         'median_disp_pts': round(float(np.median(h['abs_displacement_pts'])), 1) if len(h) else 0.0,
++                         'biggest_decile_episodes': len(hb),
++                         'biggest_decile_share_pct': round(100.0 * len(hb) / len(big), 1) if len(big) else 0.0,
++                         'largest_disp_pts': round(float(h['abs_displacement_pts'].max()), 1) if len(h) else 0.0,
++                         'population': 'MARKET'})
++    return pd.DataFrame(rows)
++
++
++def render_hour_profile(prof, cell):
++    W, kp, ep = cell
++    g = prof[(prof['W'] == W) & (prof['K_pct'] == kp) & (prof['E_pct'] == ep)]
++    lines = []
++    if len(g) == 0:
++        return lines
++    peak = int(g['biggest_decile_episodes'].max()) or 1
++    lines.append(f'  WHERE THE BIGGEST RUNS LIVE — W={W} K=p{int(kp * 100)} E=p{int(ep * 100)} '
++                 f'| MARKET | bar = share of the largest-decile episodes')
++    for _i, r in g.sort_values('est_hour').iterrows():
++        bar = '#' * int(round(20.0 * r['biggest_decile_episodes'] / peak))
++        lines.append(f"    {int(r['est_hour']):02d}:00 {r['session']:<12} "
++                     f"{int(r['episodes']):5} eps  up {int(r['up']):4} dn {int(r['down']):4}  "
++                     f"med {r['median_disp_pts']:7.1f}pt  max {r['largest_disp_pts']:8.1f}pt  "
++                     f"top10% {int(r['biggest_decile_episodes']):4} {bar}")
++    return lines
++
++
++def terrain_clusters(cells, cell):
++    return cells[cell]
+diff --git a/dot_master_discovery/master.py b/dot_master_discovery/master.py
+index 7db9946..dabd40c 100644
+--- a/dot_master_discovery/master.py
++++ b/dot_master_discovery/master.py
+@@ -36,7 +36,7 @@ FOLD_BASIS_NOTE = ('folds and OOS are PROPORTIONAL, never calendar. The loaded p
+ OOS_MONTHS = ['2026.05', '2026.06']
+ OOS_LEGACY_NOTE = 'LEGACY DIAGNOSTIC, STALE: fixed calendar months, neither out-of-sample nor segment-relative on a stitched series; not a selection input (spec B.1). oos_rel_* are the data-relative counterpart.'
+ OOS_REL_N_MONTHS = 2
+-STAGES = ['S0', 'S1', 'S2', 'S3', 'S3B', 'S4', 'S5', 'S6', 'S5B', 'S5C', 'S7', 'S8', 'S8B', 'S9']
++STAGES = ['S0', 'S1', 'S2', 'S2B', 'S3', 'S3B', 'S4', 'S5', 'S6', 'S5B', 'S5C', 'S7', 'S8', 'S8B', 'S9']
+ FAMILIES = [
+     ('F0', 'triple_convergence_and_d2ddir', 'committed'),
+     ('F1', 'sequential_temporal', 'committed'),
+@@ -595,6 +595,13 @@ def run_diagnostic_families(results_dir, workers, input_sha, df=None):
+         f13.SHARD_DIR = os.path.join(results_dir, '_f13_shards')
+         f13.RESULTS_DIR = results_dir
+         f13.run(min(workers, 12))
++        _f13_arts = [n for n in sorted(os.listdir(results_dir))
++                     if n.startswith('results_F13') and n.endswith('.csv')]
++        _f13_shards = len([n for n in os.listdir(os.path.join(results_dir, '_f13_shards'))
++                           if n.endswith('.done')]) if os.path.isdir(
++                               os.path.join(results_dir, '_f13_shards')) else 0
++        print(f'  [F13] COMPLETE — artifacts: {", ".join(_f13_arts) if _f13_arts else "NONE"} '
++              f'| {_f13_shards} shard markers')
+         if not os.path.exists(f13_csv):
+             raise SystemExit('ABORT — [F13] ran but produced no output at '
+                              f'{os.path.basename(f13_csv)}. A diagnostic family that cannot emit is '
+@@ -631,6 +638,72 @@ def run_diagnostic_families(results_dir, workers, input_sha, df=None):
+               'happens to be on disk, which would launder a stale artifact from another dataset')
+ 
+ 
++_TERRAIN = {}
++
++
++def _write_with_header(path, frame, header_lines):
++    tmp = path + '.tmp'
++    with open(tmp, 'w', encoding='utf-8', newline='') as f:
++        for ln in header_lines:
++            f.write(f'# {ln}\n')
++        frame.to_csv(f, index=False, lineterminator='\n')
++        f.flush()
++        os.fsync(f.fileno())
++    os.replace(tmp, path)
++
++
++def s2b_terrain(df, w, out, input_sha, attest):
++    import terrain as tr
++    oracle_sha = sha12(os.path.join(_ENGINE, 'dots_thresholds.py'))
++    print(f'  oracle dots_thresholds.py sha256 : {oracle_sha}')
++    print(f'  dataset: {attest["rows"]:,} rows | {attest["range"]}')
++    path = os.path.join(out, 'terrain_episodes.csv')
++    if is_done(out, 'S2B', input_sha) and os.path.exists(path):
++        print('  S2B already complete for this input (checkpoint) — reading terrain from disk.')
++        ter = pd.read_csv(path)
++        cells = tr.build_terrain(df, w)[1]
++        _TERRAIN['cells'] = cells
++        _TERRAIN['terrain'] = ter
++        return {'terrain': ter, 'cells': cells, 'summary': tr.summarise(ter),
++                'hours': tr.hour_profile(ter)}
++    t0 = time.time()
++    ter, cells, elig = tr.build_terrain(df, w)
++    secs = time.time() - t0
++    summary = tr.summarise(ter)
++    hours = tr.hour_profile(ter)
++    hdr = ['DOT S2B MARKET TERRAIN MAP — price only, NO SIGNALS, NO BOOK',
++           f'dataset_rows={attest["rows"]} dataset_range={attest["range"]}',
++           f'oracle_sha256_12={oracle_sha}',
++           tr.MARKET_LABEL, tr.FORWARD_LOOKING_BOUNDARY,
++           f'eligibility mask: {tr.eligibility_label()} | eligible bars {elig}',
++           'K and E come from dots_thresholds (mechanism D, rolling-2500, day-refreshed) via the',
++           'ratified basis-3 construction in cluster_profiler; no local percentile, no constant.',
++           'THE GRID IS PART OF THE FINDING: every row carries its own (W, K, E) cell. Counts move',
++           'by 2-4x across the grid while the up/down ratio barely moves; a count without its',
++           'parameters is not a measurement.',
++           f'contiguous same-sign qualifying bars collapse into one episode (tolerance '
++           f'{tr.CONTIGUOUS_TOLERANCE} bar)']
++    _write_with_header(path, ter, hdr)
++    _write_with_header(os.path.join(out, 'terrain_summary.csv'), summary, hdr)
++    _write_with_header(os.path.join(out, 'terrain_hour_profile.csv'), hours, hdr)
++    print(f'  TERRAIN — {len(ter)} episodes across {len(summary)} grid cells | eligible bars {elig:,}')
++    for _i, r in summary.iterrows():
++        print(f"    W={int(r['W']):2} K=p{int(r['K_pct'] * 100)} E=p{int(r['E_pct'] * 100)} | "
++              f"{int(r['episodes']):5} episodes | up {int(r['up']):5} ({r['up_share_pct']:4.1f}%) "
++              f"down {int(r['down']):5} ({r['down_share_pct']:4.1f}%) | "
++              f"median {r['median_disp_pts']:7.1f}pt (Q1 {r['q1_disp_pts']:.1f} Q3 {r['q3_disp_pts']:.1f}) "
++              f"| median {int(r['median_duration_bars'])} bars")
++    for ln in tr.render_hour_profile(hours, (15, 0.85, 0.75)):
++        print(ln)
++    print(f'  S2B runtime {secs:.1f}s for one pass over {attest["rows"]:,} bars x '
++          f'{len(summary)} grid cells — single-pass and cheap, so it is NOT chunked and does not '
++          f'consume --workers.')
++    mark_done(out, 'S2B', {'input_sha': input_sha, 'episodes': int(len(ter))})
++    _TERRAIN['cells'] = cells
++    _TERRAIN['terrain'] = ter
++    return {'terrain': ter, 'cells': cells, 'summary': summary, 'hours': hours}
++
++
+ # ── S3B PER-FAMILY EVIDENCE REVIEW (spec A.1-A.5) + D2D GATE MEASUREMENT (spec E.1) ──
+ def s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest):
+     import cluster_profiler as cp
+@@ -713,311 +786,54 @@ def s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha,
+     ev_qual, qual_depth = cp.qualifying_events(df, sigs, ad, st, w)
+     cs_by_basis = {'basis1': cp.build_cluster_set(n, ev_book, 5),
+                    'basis2': cp.build_cluster_set(n, ev_qual, 5)}
+-    fwd, mag, eff, valid, thr, mcol, ecol = cp.thrust_thresholds(df, 15, (0.85,), (0.75,))
+-    ev_thr = cp.thrust_events(fwd, mag, eff, valid, thr[(mcol, 'k85')], thr[(ecol, 'e75')], w)
+-    cs_by_basis['basis3'] = cp.build_cluster_set(n, ev_thr, 5)
+-    grid_label = 'basis3 grid W=15 K=p85 E=p75 N=5; depth bands size>=5; eligible mask ADX>=15 & Volume>50 & post-warmup'
+-    fam = fe.build_family_evidence(df, bk, qual_depth, cs_by_basis, cs_by_basis['basis3'], U, pool,
+-                                   f1_names, _SCANNERS, [os.path.join(_ROOT, 'discovery_results'),
+-                                                         os.path.join(_ROOT, 'dots_results'), out], grid_label)
+-    _write_with_header(os.path.join(out, 'family_evidence.csv'), fam, [
+-        'DOT S3B per-family evidence review (spec A.1)',
+-        f'dataset_rows={attest["rows"]} dataset_range={attest["range"]}',
+-        f'oracle_sha256_12={oracle_sha}',
+-        'LABEL: depth_participation / co_fire_with_F0 / coverage_of_missed / regime_conditional_net are PROPERTY OF THE BOOK.',
+-        'LABEL: thrust-episode denominators behind coverage_of_missed are PROPERTY OF THE MARKET (price-only).',
+-        f'S5 gate = {fe.S5_GATE}. Cluster tolerance N=5 (spec 0.1.3). Depth band = size>=5.',
+-        'INSUFFICIENT-EVIDENCE is a permitted verdict (spec A.1) and is emitted where no output file exists on this dataset.',
+-        'No family is assigned a verdict from its historical classification; F13 negative excludes nothing (spec A.3).',
+-        'coverage_of_missed is 0.0 BY CONSTRUCTION for F0 and F1: they are the incumbent book, so the episodes they',
+-        'touch are the traded set by definition. The column is informative only for a family outside the book.',
+-        'rows_emitted=0 for F0 means no F0 results file exists on this dataset; its columns are measured from the',
+-        'committed executed-trade table instead, which is stated in verdict_basis.'])
+-    cl, mix = fe.cross_family_cofiring(bk, f1_names, 5, n)
+-    if len(mix):
+-        _write_with_header(os.path.join(out, 'cross_family_cofiring.csv'), mix, [
+-            'DOT S3B cross-family co-firing (spec A.4) — PROPERTY OF THE BOOK',
+-            f'dataset_rows={attest["rows"]} dataset_range={attest["range"]}',
+-            'population = BOOK (F0+F1 executed, gap fillers excluded). Tolerance N=5.',
+-            'Only two families are present in the committed book (F0, F1), so "mixed-family" here means F0+F1.',
+-            'A wider cross-family test requires F2-F9/F11 outputs, which do not exist on this dataset.'])
+-    _write_with_header(os.path.join(out, 'd2d_gate_measurement.csv'), d2d, [
+-        'DOT S3B D2D gate measurement (spec E.1, the four-part protocol) — PROPERTY OF THE BOOK',
+-        f'dataset_rows={attest["rows"]} dataset_range={attest["range"]}',
+-        f'oracle_sha256_12={oracle_sha}',
+-        'THE GATE IS NOT REMOVED AND ITS OUTCOME IS NOT PRE-JUDGED. This measures; it does not decide.',
+-        'Variants are D2D_Trend_Dir STATE COLUMN changes only; no bar deleted, no engine logic altered.',
+-        'LIMIT: a single-run full removal across both directions is not computable without editing sacred',
+-        'build_signal_masks (one column cannot satisfy ==+1 and ==-1 on the same bar). The per-direction',
+-        'free runs are exact within their direction but isolate the jar. Resolving measurement: an authorised',
+-        'd2d_gate=on/off parameter on run_portfolio, which requires documented human authorisation.',
+-        'Bucketing = calendar month (spec H.3 primary rule), reported per bucket AND aggregate.'])
+-    mark_done(out, 'S3B', {'input_sha': input_sha, 'families': len(fam)})
+-    print(f'  families reviewed: {len(fam)} | SELECTABLE {(fam.verdict == "SELECTABLE").sum()} | '
+-          f'INSUFFICIENT-EVIDENCE {(fam.verdict == "INSUFFICIENT-EVIDENCE").sum()}')
+-    print(f'  D2D variants scored: {d2d.variant.nunique()} | rows {len(d2d)}')
+-    return {'family': fam, 'd2d': d2d, 'mixed': mix, 'executed': executed, 'sigs': sigs}
+-
+-
+-def _write_with_header(path, frame, header_lines):
+-    tmp = path + '.tmp'
+-    with open(tmp, 'w', encoding='utf-8') as f:
+-        for ln in header_lines:
+-            f.write(f'# {ln}\n')
+-        frame.to_csv(f, index=False, lineterminator='\n')
+-    os.replace(tmp, path)
+-
++    try:
++        import terrain as tr
++        cell = (15, 0.85, 0.75)
++        if _TERRAIN.get('cells'):
++            cs_thr = _TERRAIN['cells'][cell]
++            terrain_src = 'S2B MARKET TERRAIN (fixed denominator, identical for every candidate book)'
++        else:
++            fwd, mag, eff, valid, thr, mcol, ecol = cp.thrust_thresholds(df, 15, (0.85,), (0.75,))
++            ev_thr = cp.thrust_events(fwd, mag, eff, valid, thr[(mcol, 'k85')], thr[(ecol, 'e75')], w)
++            cs_thr = cp.build_cluster_set(n, ev_thr, tr.CONTIGUOUS_TOLERANCE)
++            terrain_src = 'locally derived (S2B terrain unavailable this run)'
++        ent_by_dir = {d: (np.concatenate(list(ent_map[d].values())) if ent_map[d]
++                          else np.array([], dtype=np.int64)) for d in (1, -1)}
++        covdir = sel.coverage_by_direction(ent_by_dir, cs_thr, label='INCUMBENT BOOK')
++        covdir['W'] = cell[0]
++        covdir['K_pct'] = cell[1]
++        covdir['E_pct'] = cell[2]
++        covdir['terrain_source'] = terrain_src
++        _write_with_header(os.path.join(out, 'selection_coverage.csv'), covdir, [
++            'DOT S5B REACH — coverage of the S2B MARKET TERRAIN, scored PER DIRECTION',
++            f'dataset_rows={attest["rows"]} segment={segment_label}',
++            f'terrain source: {terrain_src}',
++            f'grid cell W={cell[0]} K=p{int(cell[1] * 100)} E=p{int(cell[2] * 100)} | '
++            f'mask {tr.eligibility_label()}',
++            'terrain = MARKET (price only, no signals); entries = BOOK. The denominator is FIXED, so '
++            'coverage is comparable across runs and across candidate books.',
++            'PER DIRECTION IS THE POINT: the terrain is near 50/50, so a long-heavy book leaves nearly '
++            'all short episodes uncovered and short candidates gain marginal value with no quota, no '
++            'floor and no minimum count anywhere in the objective.',
++            'COVERAGE NEVER OVERRIDES SURVIVAL: it stays after survival, FailConc and DepthYield in the '
++            'lexicographic order (spec C.3). A book could reach 100% by taking everything; that must '
++            'not be reachable.',
++            tr.FORWARD_LOOKING_BOUNDARY])
++        for _i, r in covdir.iterrows():
++            print(f"    REACH {r['direction']:<5} {r['coverage_pct']:6.3f}% of {int(r['terrain_episodes']):5} "
++                  f"terrain episodes ({int(r['touched'])} touched, {int(r['missed'])} missed)", flush=True)
++        cov = {'episodes': int(covdir[covdir.direction == 'BOTH']['terrain_episodes'].iloc[0]),
++               'coverage_pct': float(covdir[covdir.direction == 'BOTH']['coverage_pct'].iloc[0]),
++               'by_direction': covdir}
++    except Exception as _exc:
++        print(f'    REACH UNAVAILABLE — {type(_exc).__name__}: {_exc}. The S2B terrain exists '
++              f'and is written; only this S5B consumption path failed. Reported, not swallowed.',
++              flush=True)
++        cov = {'episodes': 0, 'coverage_pct': 0.0,
++               'by_direction': pd.DataFrame([{'direction': d, 'terrain_episodes': 0,
++                                              'touched': 0, 'coverage_pct': 0.0, 'missed': 0}
++                                             for d in ('UP', 'DOWN', 'BOTH')])}
+ 
+-# ── S5B SELECTION LAYER (spec C, D.1-D.2, G, H) ──
+-def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest):
+-    import cluster_profiler as cp
+-    import selection as sel
+-    import portfolio_simulation_engine as engine
+-    import score_g
+-    import conviction as C
+-    oracle_sha = sha12(os.path.join(_ENGINE, 'dots_thresholds.py'))
+-    print(f'  oracle dots_thresholds.py sha256 : {oracle_sha}')
+-    print(f'  dataset: {attest["rows"]:,} rows | {attest["range"]}')
+-    if is_done(out, 'S5B', input_sha) and os.path.exists(os.path.join(out, 'selection_constraints.csv')):
+-        print('  S5B already complete for this input (checkpoint) — resuming past it.')
+-        return None
+-    n = len(df)
+-    U = cp.eligible_universe(df, w)
+-    months = sel.segment_months(df['Time'].values)
+-    segment_label = f'{months[w]}..{months[-1]}'
+-    hyg, dead, canonical, live = sel.vocabulary_hygiene(pool, U, segment_label)
+-    _write_with_header(os.path.join(out, 'selection_vocabulary_hygiene.csv'), hyg, [
+-        'DOT S5B spec G.1 vocabulary hygiene — PROPERTY OF THE VOCABULARY (not of any book)',
+-        f'dataset_rows={attest["rows"]} dataset_range={attest["range"]} segment={segment_label}',
+-        f'oracle_sha256_12={oracle_sha}',
+-        'ORDER IS BINDING: dead conditions excluded BEFORE equivalence classes are formed.',
+-        'SCOPE IS BINDING: derived on the ACTIVE SEGMENT eligible universe, never hardcoded.',
+-        'Dead conditions are EXCLUDED FROM RANKING AND TRIPLE FORMATION, never deleted from the vocabulary.'])
+-    bk_path = book_file if book_file else os.path.join(_ENGINE, 'book50_signals.csv')
+-    sigs = score_g.build_book(df, pool, anchor, pd.read_csv(bk_path))
+-    conv = C.build_conviction(df, True, True, True, d2d_conviction=True, d2d_gap=True)
+-    full = engine.run_portfolio(df, sigs, adaptive=ad, structural=st, warmup=w, verbose=False, conviction=conv)
+-    bk = full[~full['signal_name'].isin(cp.GAP_NAMES)]
+-    daily = sel.per_signal_daily(bk)
+-    smap = sel.daily_series_map(daily)
+-    daily_provenance = ('per-trade derivation from the committed executed-trade table; this is the ONLY derivation, '
+-                        'there is no primary/fallback pair. POPULATION WARNING, pinned before Build 3: the S6 artifact '
+-                        'signal_per_day_pnl.jsonl contains only gate-passing signals, whereas this derivation covers '
+-                        'the full book. Switching to read the artifact would CHANGE THE POPULATION and therefore change '
+-                        'TailDep, FailConc, mCVaR and every bound derived from them. Any such switch is a spec question, '
+-                        'not a build decision.')
+-    names = sorted(smap.keys())
+-    pairs = sel.pair_tail_dependence(smap, names)
+-    tstats = sel.tail_dep_book(pairs)
+-    null = sel.taildep_permutation_null(smap, names, p=sel.PERM_P)
+-    kappa = (tstats['TailDep'] / null['TailDep_null_mean']) if null['TailDep_null_mean'] else float('nan')
+-    mc = sel.mcvar_per_signal(bk, daily)
+-    c_max = sel.c_max_from_incumbent(mc)
+-    bd = bk.copy()
+-    bd['day'] = pd.Series(bd['exit_time'].astype(str).values).str[:10].values
+-    f_max = sel.fail_conc(bd.groupby('day')['pnl'].sum().values)
+-    fd = full.copy()
+-    fd['day'] = pd.Series(fd['exit_time'].astype(str).values).str[:10].values
+-    surv = sel.absolute_survival(fd.groupby('day')['pnl'].sum().values)
+-    ent = {1: bk[bk['direction'] == 'LONG']['entry_bar'].values,
+-           -1: bk[bk['direction'] == 'SHORT']['entry_bar'].values}
+-    sgn = {1: bk[bk['direction'] == 'LONG']['signal_name'].nunique(),
+-           -1: bk[bk['direction'] == 'SHORT']['signal_name'].nunique()}
+-    bar_day = pd.Series(df['Time'].astype(str).values).str[:10].values
+-    tdays = sel.entry_basis_traded_days(bk, bar_day)
+-    tdays_exit_basis = int(pd.Series(bk['exit_time'].values).str[:10].nunique())
+-    grid = sel.depth_yield_grid(ent, sgn, tdays)
+-    _write_with_header(os.path.join(out, 'selection_depthyield_grid.csv'), grid, [
+-        'DOT S5B spec C.1 DepthYield — PROPERTY OF THE BOOK (incumbent reference)',
+-        f'dataset_rows={attest["rows"]} segment={segment_label} traded_days_entry_basis={tdays} '
+-        f'traded_days_exit_basis={tdays_exit_basis}',
+-        f'traded-day denominator = {tdays} on the BOOK ENTRY-BAR basis (clusters are built from entry bars, so the entry',
+-        'basis is the coherent pairing and matches spec C.1). The exit-basis count is emitted alongside for contrast.',
+-        'THIS ALIGNMENT APPLIES TO DepthYield ONLY. Spec H.2 resamples from ALL post-warmup trading days in the series,',
+-        'not the book footprint, and changing that pool to a traded-day count would reintroduce the incumbency bias',
+-        'H.2 exists to avoid.',
+-        'DepthYield is a PAIR (LONG, SHORT), evaluated within direction and normalised by that direction',
+-        'signal count. IT IS NEVER SUMMED. S is reported over {3,4,5,6,7}; default 5. N=5 fixed (spec 0.1.3),',
+-        'N=10 emitted as mandatory sensitivity. Raw and normalised ratios shown beside the signal-count ratio.'])
+-    _write_with_header(os.path.join(out, 'selection_mcvar.csv'), mc, [
+-        'DOT S5B spec C.2 mCVaR per signal — PROPERTY OF THE BOOK (incumbent reference)',
+-        f'dataset_rows={attest["rows"]} segment={segment_label}',
+-        'mCVaR = CVaR / signal lot share. More negative = worse tail concentration.',
+-        f'C_max = 10th percentile of the incumbent mCVaR distribution (= 90th percentile of tail severity) = {round(c_max, 2)}',
+-        'Constraint direction: a candidate fails if its worst mCVaR is BELOW C_max.'])
+-    h3 = sel.h3_within_direction(bk)
+-    _write_with_header(os.path.join(out, 'selection_h3_persistence.csv'), h3, [
+-        'DOT S5B spec H.3 / H.3.1 regime-conditional persistence — PROPERTY OF THE BOOK',
+-        f'dataset_rows={attest["rows"]} segment={segment_label}',
+-        'RULE not literal: calendar month, whatever count the segment contains; positive in all but at most one;',
+-        'MINIMUM 3 BUCKETS or the criterion is UNEVALUABLE and the build fails loudly rather than passing silently.',
+-        'H.3.1: buckets are evaluated WITHIN direction. A thin short sample is reported UNEVALUABLE and the signal',
+-        'is NEITHER passed NOR culled on that basis. No rule may remove the last short signal without a named line.'])
+-    con = pd.DataFrame([
+-        {'quantity': 'F_max (FailConc bound)', 'value': round(f_max, 4), 'source': 'incumbent FailConc on ACTIVE SEGMENT'},
+-        {'quantity': 'TailDep (incumbent)', 'value': round(tstats['TailDep'], 4), 'source': f"tau={sel.TAU} MIN_SHARED={sel.MIN_SHARED}"},
+-        {'quantity': 'TailDep_null_mean', 'value': round(null['TailDep_null_mean'], 4), 'source': f"permutation null P={null['permutations']} on ACTIVE SEGMENT"},
+-        {'quantity': 'kappa (incumbent/null)', 'value': round(kappa, 4), 'source': 'T_max = kappa * TailDep_null(segment); dimensionless'},
+-        {'quantity': 'C_max (mCVaR bound)', 'value': round(c_max, 2), 'source': 'p10 of incumbent mCVaR on ACTIVE SEGMENT'},
+-        {'quantity': 'worst modelled day (FULL)', 'value': round(surv['worst_modelled_day'], 1), 'source': 'absolute survival, evaluated independently of the relative bounds'},
+-        {'quantity': 'allowed worst day', 'value': surv['allowed_worst_day'], 'source': f"FTMO ceiling {surv['ceiling']} x margin {surv['margin_frac']}"},
+-        {'quantity': 'absolute survival passes', 'value': surv['passes'], 'source': 'FULL population (book + gap fillers)'},
+-        {'quantity': 'retention_pct', 'value': tstats['retention_pct'], 'source': 'share of pair space entering TailDep'},
+-        {'quantity': 'mean_lambda_excluded', 'value': round(tstats['mean_lambda_excluded'], 4), 'source': 'raw, includes degenerate k<3 pairs'},
+-        {'quantity': 'mean_lambda_excluded_k_ge3', 'value': round(tstats['mean_lambda_excluded_k_ge3'], 4), 'source': 'degeneracy-guarded'},
+-        {'quantity': 'exclusion_bias', 'value': tstats['exclusion_bias'], 'source': 'raw'},
+-        {'quantity': 'exclusion_bias_degeneracy_guarded', 'value': tstats['exclusion_bias_degeneracy_guarded'], 'source': 'k>=3 only'},
+-        {'quantity': 'degenerate_excluded_pairs_k_lt3', 'value': tstats['degenerate_excluded_pairs_k_lt3'], 'source': 'lambda mechanically 1/tau at k=1'},
+-        {'quantity': 'below_floor_majority_flag', 'value': tstats['below_floor_majority_flag'], 'source': 'fires if >50% of pairs below MIN_SHARED'},
+-        {'quantity': 'FailCorr Pearson (REPORTED ONLY)', 'value': round(tstats['FailCorr_pearson_reported_only'], 4), 'source': 'never a constraint; retained so the divergence stays visible'},
+-        {'quantity': 'H.2 resampling pool (post-warmup trading days)', 'value': int(pd.Series(df['Time'].astype(str).values[w:]).str[:10].nunique()), 'source': 'the market, NOT the incumbent footprint'},
+-        {'quantity': 'H.2 days the incumbent traded', 'value': tdays, 'source': 'reported for contrast only; NOT the pool'},
+-    ])
+-    con['segment'] = segment_label
+-    con['population'] = 'BOOK for F_max/TailDep/C_max; FULL for absolute survival'
+-    _write_with_header(os.path.join(out, 'selection_constraints.csv'), con, [
+-        'DOT S5B spec C.2 / C.3 constraint references — computed on the ACTIVE TRAINING SEGMENT',
+-        f'dataset_rows={attest["rows"]} dataset_range={attest["range"]} segment={segment_label}',
+-        f'oracle_sha256_12={oracle_sha}',
+-        'F_max, T_max and C_max are SEGMENT-LOCAL. Full-series values are reporting references ONLY and never',
+-        'enter a constraint; that is what keeps the spec I walk-forward valid.',
+-        'The absolute survival bound is evaluated on the FULL population INDEPENDENTLY of the relative bounds,',
+-        'because a purely relative bar certifies only no-worse-than-incumbent and would certify an incumbent fault.',
+-        f'daily-loss series provenance: {daily_provenance}',
+-        'RESIDUAL LIMITATION: the pairwise tail structure is measured on a MAJORITY BUT NOT ALL of the pair space,',
+-        'retention remains associated with fire frequency, and per-pair lambda is coarse. TailDep is a real but',
+-        'IMPRECISE constraint and must not be read as more precise than the data supports. Where TailDep and',
+-        'FailConc disagree, FailConc and the absolute bound carry the decision.'])
+-    tdays_check = int(pd.Series(sel.trading_days(bk['exit_time'].values)).nunique())
+-    ent_map = {}
+-    for d, lab in ((1, 'LONG'), (-1, 'SHORT')):
+-        ent_map[d] = {nm: g['entry_bar'].values for nm, g in bk[bk['direction'] == lab].groupby('signal_name')}
+-
+-    def _setval(d, sset):
+-        if not sset:
+-            return 0.0
+-        bars = np.concatenate([ent_map[d][x] for x in sset])
+-        v, _g = sel.depth_yield_direction(bars, len(sset), tdays_check, sel.S_DEFAULT, sel.N_TOLERANCE)
+-        return v
+-
+-    def _gain(d, selected, cid):
+-        return _setval(d, list(selected) + [cid]) - _setval(d, list(selected))
+-
+-    def _nocon(d, ss):
+-        return True, ''
+-
+-    fx = []
+-    for d, lab in ((1, 'LONG'), (-1, 'SHORT')):
+-        ids = sorted(ent_map[d].keys())
+-        mk = 3 if len(ids) <= 15 else 2
+-        f = sel.exhaustive_vs_greedy(d, ids, _setval, _gain, _nocon, max_k=mk)
+-        f['direction_label'] = lab
+-        fx.append(f)
+-    fixture = pd.concat(fx, ignore_index=True)
+-    _write_with_header(os.path.join(out, 'selection_fixture_exhaustive_vs_greedy.csv'), fixture, [
+-        'DOT S5B standing fixture: EXHAUSTIVE vs GREEDY on the incumbent, BOTH directions',
+-        f'dataset_rows={attest["rows"]} segment={segment_label} traded_days={tdays_check}',
+-        f'objective = DepthYield_d at S={sel.S_DEFAULT}, N={sel.N_TOLERANCE}, normalised by that direction signal count',
+-        'THE FIXTURE POOL IS THE INCUMBENT BOOK 50 SIGNALS. THIS IS NOT A BOOK SELECTION AND MUST NOT BE READ AS ONE.',
+-        'It is a canary for the stopping-rule failure class: DepthYield is NON-MONOTONE in set size, and a search',
+-        'halting on the first non-positive SINGLE gain halts at |S|=1 having evaluated no set of size >=2.',
+-        'RESTRICTION IS PART OF THE FINDING: exhaustive enumeration is to max_k_enumerated plus the all-signals set;',
+-        'sizes between max_k and all are NOT enumerated, so exhaustive_optimum is a lower bound on the true optimum.',
+-        'greedy_pct_of_optimum is measured against that lower bound.'])
+-    cofire_rows = []
+-    for d, lab in ((1, 'LONG'), (-1, 'SHORT')):
+-        nm = sorted(ent_map[d].keys())
+-        masks = []
+-        for x in nm:
+-            mm = np.zeros(n, dtype=bool)
+-            mm[ent_map[d][x].astype(np.int64)] = True
+-            masks.append(mm)
+-        if len(masks) >= 2:
+-            M = sel.cofire_matrix(masks, nm)
+-            cofire_rows.append({'direction': lab, 'signals': len(nm), 'CoFire_mean': round(sel.cofire_book_all_pairs_DIAGNOSTIC(M), 6),
+-                                'basis': 'executed entry bars (incumbent fixture)'})
+-    vz = df['Volume'].values == 0
+-    fri = (df['EST_DayOfWeek'].values == 5) & ((df['EST_Hour'].values > 16) |
+-                                               ((df['EST_Hour'].values == 16) & (df['EST_Minute'].values >= 45)))
+-    entry_ok_true = (df['ADX_Value'].values >= 15) & (df['Volume'].values > 50) & ~vz & ~fri & (np.arange(n) >= w)
+-    qmasks, qdirs, qnames = engine.build_signal_masks(df, sigs, ad, st, entry_ok_true, verbose=False)
+-    Mq = sel.cofire_matrix(qmasks, qnames)
+-    qd = np.array(qdirs)
+-    offm = ~np.eye(len(qnames), dtype=bool)
+-    samem = (qd[:, None] == qd[None, :]) & offm
+-    crossm = (qd[:, None] != qd[None, :]) & offm
+-    cofire_rows.append({'direction': 'ALL ordered pairs (pre-jar qualifying, spec C.1 literal)', 'signals': len(qnames),
+-                        'CoFire_mean': round(float(Mq[offm].mean()), 6),
+-                        'basis': f'pre-jar qualifying masks with the engine true entry_ok; {int(offm.sum())} ordered pairs'})
+-    cofire_rows.append({'direction': 'SAME-direction pairs only', 'signals': len(qnames),
+-                        'CoFire_mean': round(float(Mq[samem].mean()), 6),
+-                        'basis': f'{int(samem.sum())} ordered pairs; the meaningful basis, see cross-direction row'})
+-    cofire_rows.append({'direction': 'CROSS-direction pairs only', 'signals': len(qnames),
+-                        'CoFire_mean': round(float(Mq[crossm].mean()), 6),
+-                        'basis': f'{int(crossm.sum())} ordered pairs; EXACTLY ZERO BY CONSTRUCTION - the D2D gate '
+-                                 f'admits a signal only where D2D_Trend_Dir == its direction, so long and short '
+-                                 f'qualifying masks are disjoint on every bar'})
+-    for dd, lab in ((1, 'LONG'), (-1, 'SHORT')):
+-        sd = qd == dd
+-        sub = Mq[np.ix_(sd, sd)]
+-        o = ~np.eye(sub.shape[0], dtype=bool)
+-        if o.sum():
+-            cofire_rows.append({'direction': f'{lab}-only pairs (pre-jar qualifying)', 'signals': int(sd.sum()),
+-                                'CoFire_mean': round(float(sub[o].mean()), 6),
+-                                'basis': f'{int(o.sum())} ordered pairs within direction'})
+-    cof = pd.DataFrame(cofire_rows)
+-    _write_with_header(os.path.join(out, 'selection_cofire.csv'), cof, [
+-        'DOT S5B spec C.1 entry co-firing — PROPERTY OF THE BOOK (incumbent reference)',
+-        f'dataset_rows={attest["rows"]} segment={segment_label}',
+-        'cofire(i,j) = |bars where i and j both qualify| / |bars where i qualifies|; CoFire(B) = mean over ordered pairs.',
+-        'Entry co-firing is the MAXIMISED axis. It is never combined with the bounded failure-correlation axis.',
+-        'STRUCTURAL FINDING: cross-direction cofire is EXACTLY ZERO on every pair, because the D2D gate admits a',
+-        'signal only where D2D_Trend_Dir equals its direction, so long and short qualifying masks are disjoint.',
+-        'CoFire(B) taken over ALL ordered pairs is therefore mechanically deflated by the long/short composition',
+-        '(962 of 2450 ordered pairs are structurally zero on this book). Like DepthYield, it is only meaningful',
+-        'WITHIN direction, and all bases are emitted here rather than a single headline number.'])
+-    Cmat, cnames, edges, gstats = sel.mask_correlation_graph(pool, live, U)
+-    comms = sel.detect_communities(cnames, edges)
+-    n90, n95, pr_ratio = sel.effective_dimension(Cmat)
+-    g2 = pd.DataFrame([{**gstats, 'communities_detected': len(comms),
+-                        'largest_community': max((len(v) for v in comms.values()), default=0),
+-                        'effective_dim_90pct': n90, 'effective_dim_95pct': n95,
+-                        'participation_ratio': round(pr_ratio, 2),
+-                        'resolution': 1.0, 'r_threshold': 0.70}])
+-    _write_with_header(os.path.join(out, 'selection_g2_near_duplication.csv'), g2, [
+-        'DOT S5B spec G.2 near-duplication, domain bridging and community detection',
+-        f'dataset_rows={attest["rows"]} segment={segment_label} live_conditions={len(cnames)}',
+-        'MODEST HYGIENE, NOT A REACH MECHANISM. It removes false corroboration in ranking and prevents degenerate',
+-        'triples. It does NOT address the spec D.0 coverage gap, where 89.8% of missed thrusts have no qualifying',
+-        'signal at all — a vocabulary-content problem no hygiene on the existing conditions can solve.'])
+-    bookdf = pd.read_csv(bk_path)
+-    trows = []
+-    for _i, r in bookdf.iterrows():
+-        if str(r['trigger']) != 'F0':
+-            continue
+-        parts = [x.strip() for x in str(r['signal_def']).split('+')]
+-        doms = sorted({sel.condition_domain(x) for x in parts})
+-        trows.append({'signal_def': r['signal_def'], 'direction': r['direction'],
+-                      'domains': ';'.join(doms), 'n_domains': len(doms),
+-                      'passes_2domain_rule': sel.triple_domain_ok(parts)})
+-    tdom = pd.DataFrame(trows)
+-    _write_with_header(os.path.join(out, 'selection_g2_domain_bridging.csv'), tdom, [
+-        'DOT S5B spec G.2 domain-bridging rule applied to the incumbent F0 triples — PROPERTY OF THE BOOK',
+-        f'dataset_rows={attest["rows"]} segment={segment_label}',
+-        f'rule: a candidate triple must draw from at least {sel.DOMAIN_MIN_DISTINCT} distinct functional domains.',
+-        'Applied here RETROSPECTIVELY as a fixture. It is not applied to the committed book and removes nothing.',
+-        'Domains are assigned by variable provenance; spec G.2 requires measured communities to govern where the two disagree.'])
+-    fwd, mag, eff, valid, thr, mcol, ecol = cp.thrust_thresholds(df, 15, (0.85,), (0.75,))
+-    ev_thr = cp.thrust_events(fwd, mag, eff, valid, thr[(mcol, 'k85')], thr[(ecol, 'e75')], w)
+-    cs_thr = cp.build_cluster_set(n, ev_thr, sel.N_TOLERANCE)
+-    cov = sel.coverage_of_book({1: ent_map[1].get('__none__', np.concatenate(list(ent_map[1].values())) if ent_map[1] else np.array([], dtype=np.int64)),
+-                                -1: np.concatenate(list(ent_map[-1].values())) if ent_map[-1] else np.array([], dtype=np.int64)}, cs_thr)
+-    covf = pd.DataFrame([{**cov, 'W': 15, 'K_pct': 0.85, 'E_pct': 0.75, 'N': sel.N_TOLERANCE}])
+-    _write_with_header(os.path.join(out, 'selection_coverage.csv'), covf, [
+-        'DOT S5B spec D.2 Coverage — episodes are MARKET, touched is BOOK',
+-        f'dataset_rows={attest["rows"]} segment={segment_label}',
+-        'Coverage(B) = fraction of thrust episodes touched by >=1 entry, same direction, entry bar inside the span.',
+-        'Single grid cell here as a fixture; spec D.2 requires the full (W,K,E) grid, which S8B emits.'])
+     pivot = daily.pivot_table(index='day', columns='signal_name', values='pnl', aggfunc='sum').fillna(0.0)
+     pbo = sel.pbo_cscv(pivot.values) if pivot.shape[0] >= 16 and pivot.shape[1] >= 2 else float('nan')
+     merged_state = {'survival': surv, 'FailConc': f_max, 'TailDep': tstats['TailDep'],
+@@ -1075,7 +891,17 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
+                         f"{gstats['signed_negative']} negative (PRDS fails -> BY not BH)")
+     report_lines.append(f"domain bridging on incumbent F0 triples: {int(tdom['passes_2domain_rule'].sum())} of {len(tdom)} "
+                         f"span >= {sel.DOMAIN_MIN_DISTINCT} domains (retrospective fixture; removes nothing)")
+-    report_lines.append(f"Coverage (incumbent, W=15 K=p85 E=p75 N=5) = {cov['coverage_pct']}% of {cov['episodes']} thrust episodes")
++    _cd = cov['by_direction']
++    _sel_tag = ('SELECTED book' if book_file and os.path.basename(book_file) != 'book50_signals.csv'
++                else 'SELECTED book = incumbent this run (no fresh book selected yet)')
++    report_lines.append(
++        "REACH vs the S2B MARKET TERRAIN (W=15 K=p85 E=p75, mask ADX>=15 & Volume>50 & post-warmup) — "
++        + f"{_sel_tag}: "
++        + ', '.join(f"{r['direction']} {r['coverage_pct']}%" for _i, r in _cd.iterrows())
++        + f" of {cov['episodes']} episodes | INCUMBENT: "
++        + ', '.join(f"{r['direction']} {r['coverage_pct']}%" for _i, r in _cd.iterrows())
++        + " — this is the line that says whether the rebuild moved the number the redesign exists "
++          "to move; terrain is MARKET, entries are BOOK, and coverage never outranks survival")
+     print(f'  vocabulary {hyg["effective_vocabulary"].iloc[0]} effective | kappa {kappa:.3f} | C_max {c_max:.1f} | '
+           f'survival {"PASS" if surv["passes"] else "FAIL"}')
+     print(f'  selection search: {"candidates present" if exercised else "UNEXERCISED PENDING S3 (no candidate pool)"}')
+@@ -1674,7 +1500,11 @@ def main():
+         sys.exit(0 if ok else 1)
+ 
+     contenders = committed = profile = evidence = selection_state = wf_state = None
++    terrain_state = None
+     run_all = only is None
++    if run_all or only == 'S2B':
++        print('\n[S2B] MARKET TERRAIN MAP')
++        terrain_state = s2b_terrain(df, w, out, input_sha, attest)
+     discover = (book_file is None)
+     if not discover and run_all:
+         print('\n[S3–S6] DISCOVERY / REGEN — SKIPPED on the frozen-book verification path.')
+-- 
+2.43.0
+

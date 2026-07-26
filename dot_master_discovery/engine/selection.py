@@ -817,6 +817,41 @@ def h3_within_direction(trades):
     return pd.DataFrame(rows)
 
 
+def coverage_by_direction(entry_bars_by_dir, thrust_cs, label='BOOK'):
+    """Coverage of the MARKET terrain, scored WITHIN each direction.
+
+    Per-direction is not cosmetic. The terrain is close to 50/50 up/down, so a
+    long-heavy book leaves nearly all short episodes uncovered and short
+    candidates carry high marginal value automatically. THAT IS HOW DIRECTIONAL
+    BALANCE ARRIVES WITHOUT A QUOTA: no floor, no target, no minimum count and no
+    reserved allocation anywhere. The terrain supplies the balance; the objective
+    must not, and coverage stays where spec C.3 puts it, after survival,
+    FailConc and DepthYield, never promoted above them.
+    """
+    cl = thrust_cs['clusters']
+    rows = []
+    for d, name in ((1, 'UP'), (-1, 'DOWN')):
+        sub = cl[cl['dir'] == d] if len(cl) else cl
+        total = len(sub)
+        bars = np.asarray(entry_bars_by_dir.get(d, []), dtype=np.int64)
+        touched = set()
+        if len(bars):
+            cid = thrust_cs['cid'][d][bars]
+            allowed = set(sub['cluster_id'].tolist()) if total else set()
+            touched = {int(c) for c in cid if c >= 0 and int(c) in allowed}
+        rows.append({'direction': name, 'terrain_episodes': total, 'touched': len(touched),
+                     'coverage_pct': round(100.0 * len(touched) / total, 3) if total else 0.0,
+                     'missed': total - len(touched), 'scored_for': label,
+                     'population': 'terrain=MARKET, entries=BOOK'})
+    tot = len(cl)
+    hit = sum(r['touched'] for r in rows)
+    rows.append({'direction': 'BOTH', 'terrain_episodes': tot, 'touched': hit,
+                 'coverage_pct': round(100.0 * hit / tot, 3) if tot else 0.0,
+                 'missed': tot - hit, 'scored_for': label,
+                 'population': 'terrain=MARKET, entries=BOOK'})
+    return pd.DataFrame(rows)
+
+
 def coverage_of_book(entry_bars_by_dir, thrust_cs):
     touched = set()
     total = len(thrust_cs['clusters']) if len(thrust_cs['clusters']) else 0
