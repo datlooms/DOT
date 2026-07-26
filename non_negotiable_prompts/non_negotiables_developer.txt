@@ -647,3 +647,123 @@ Data: sealed clean baseline equiDOT_recon171_step7_part1..8 (152,983 x 171,
   Jan 19 -> Jun 25, reconstructed by core.py, Auditor-ratified; supersedes the
   150,599 x 171 recon171_part set). core.py is the reconstruction script.
 Signals: recommended_set_76.csv (historical benchmark only; Stage 8 re-derives from scratch)
+
+S.22 — THE EXPORT CLOCK (DEFECT FOUND 2026-07-27; EA FIX PENDING, DOCUMENTED HERE):
+
+THE DEFECT — DOT.cs L730-731, ExportDataForAnalysis() ONLY.
+
+  LIVE   L1767-1772   long GetUSEasternOffsetSeconds() { return _GetEstOffsetForTime(TimeGMT()); }
+                      datetime GetEstTime() { return (datetime)(TimeGMT()+(datetime)GetUSEasternOffsetSeconds()); }
+  EXPORT L730         long estOffset=_GetEstOffsetForTime(Time[i]);
+         L731         datetime estBarTime=(datetime)(Time[i]+(datetime)estOffset);
+
+_GetEstOffsetForTime is declared at L1761 as `long _GetEstOffsetForTime(datetime gmtTime)`.
+THE PARAMETER IS NAMED gmtTime AND THE FUNCTION REQUIRES GMT. The live path satisfies that
+contract with TimeGMT(). The export path passes Time[i], which is the bar's SERVER time.
+TWO ERRORS ARE STACKED:
+  (1) SELECTION — _IsUSDST is evaluated on server time, so the DST branch can be taken on
+      the wrong instant. Measured blast radius on the Jan19-Jul21 span: ZERO BARS. The US
+      DST boundary (2026-03-08) and the broker's own switch both fall inside a weekend gap
+      — 2026.03.07 and 2026.03.08 carry 0 bars — so no bar is misassigned and no bar is
+      ambiguous. This error is latent, not active, on this dataset. It is still a defect.
+  (2) APPLICATION — the US-Eastern offset is added to server time instead of GMT, so the
+      exported clock is ahead of true EST by the server's whole GMT offset. THIS IS THE
+      ACTIVE ERROR.
+
+MEASURED MAGNITUDE (derived from price, not assumed). The broker follows the US DST
+schedule, not the EU one: the opening bell sits at broker 16:30 in EVERY week of the span,
+so server -> true EST is a CONSTANT -7 hours. Consequently the exported column was ahead by
+  +2h for bars <= 2026.03.06   (exported = server-5, true = server-7)
+  +3h for bars >= 2026.03.09   (exported = server-4, true = server-7)
+There is NO -6h window. A calendar argument predicting one assumes the broker runs on the
+EU schedule; the data refutes that. Note the EU/US divergence is real but shows up in the
+LONDON anchor, not the server offset: in 2026.03.09-03.27 London's open correctly reads
+04:00 EDT rather than 03:00.
+
+THE FIX — EXPORT PATH ONLY. Convert the bar's server time to GMT BEFORE calling
+_GetEstOffsetForTime, so the export satisfies the same contract the live path does:
+
+   long serverToGmtSeconds=_GetServerToGmtOffsetSeconds();
+   datetime gmtBarTime=(datetime)(Time[i]-(datetime)serverToGmtSeconds);
+   long estOffset=_GetEstOffsetForTime(gmtBarTime);
+   datetime estBarTime=(datetime)(gmtBarTime+(datetime)estOffset);
+
+RESIDUAL DESIGN DECISION, FOR THE HUMAN — how _GetServerToGmtOffsetSeconds() sources the
+offset for a HISTORICAL bar. MQL4 exposes no per-bar server-GMT offset. Three options, and
+the choice must be deliberate:
+  (a) (long)(TimeCurrent()-TimeGMT()) captured once at export time. Correct for bars in the
+      same DST regime as the export run; wrong by an hour for bars in the other regime.
+  (b) Schedule-derived: `_IsUSDST(gmtBarTime) ? 3*3600 : 2*3600`, valid because this broker
+      switches on the US schedule. Self-adjusting across regimes, but hardcodes two broker
+      constants and silently breaks on a broker change.
+  (c) (a) as the anchor, then step it by the broker's own switch schedule. Most correct,
+      most code.
+DO NOT SHIP (b) WITHOUT RECORDING THAT IT ENCODES A BROKER PROPERTY.
+
+LIVE BEHAVIOUR IS CORRECT AND MUST NOT BE TOUCHED. GetEstTime()/GetUSEasternOffsetSeconds()
+already feed TimeGMT(). The operator has watched the chart, the session containers and the
+DST transition behave properly for months and L1770 is why. Only ExportDataForAnalysis()
+changes. (One pre-existing imprecision is noted, NOT to be fixed as part of this: _IsUSDST
+compares against the second Sunday of March at 02:00 interpreted in its argument's own
+clock, so even the live path flips ~5h early on that one day per year. Out of scope.)
+
+BLAST RADIUS — CONFIRMED BY SOURCE GREP, NOT ASSUMED. estOffset/estBarTime appear ONLY at
+L730, L731, L734. estDt appears ONLY at L732-734 and L942-944. It feeds EXACTLY THREE
+COLUMNS: EST_Hour (field 6), EST_Minute (field 7), EST_DayOfWeek (field 8). Nothing else in
+the export reads them. Session_High/Low, PoC, VWAP, value-area and every other column derive
+from the EA's own internal state and are CORRECT. dots_thresholds.py takes its mechanism-D
+day boundary from the raw Time string (L104, `str(times[i])[8:10]`), NOT from EST_Hour, so
+every adaptive threshold is unaffected.
+
+ACCEPTANCE GATE ON THE FIX — this is a PARITY CHECK, not a code review. After the EA fix, a
+fresh export must reproduce the corrected columns bit-for-bit on overlapping bars against
+DOT_stitched172_TRUEEST_jan19_jul21_part01..10 (manifest
+DOT_stitched172_TRUEEST_manifest.csv). Those files were produced by recomputing the three
+columns as true EST = server Time - 7h with all 169 other columns text-preserved. A fresh
+export that disagrees on any of the three columns means the fix is wrong. Verify against all
+six independent anchors, each of which the corrected data passes: opening bell 09:30 (range
+step 32.00->101.69 R1 / 39.00->102.00 R2 / 37.00->89.19 R3); last cash bar 15:59 with the
+closing-auction volume peak there and collapse at 16:00; open-to-close span exactly 6.50h in
+all three regimes; CME maintenance break 17:05-18:04; 08:30 ET release step at 08:30; London
+open 03:00 (04:00 in the 2026.03.09-03.27 EU/US window); Asia open 20:00.
+
+FRIDAY GATE — SACRED FILE, NO CODE CHANGE, DO NOT TOUCH.
+portfolio_simulation_engine.py is byte-locked at bb498eb13ce3. Its L148 Friday gate reads
+EST_DayOfWeek / EST_Hour / EST_Minute FROM THE EXPORT. On the broken clock it blocked 3,835
+bars at true EST 16:00-19:00 — which, because the exported hour ran 2-3h fast, meant it fired
+from true 13:00 and removed roughly the final three hours of every Friday cash session.
+ON THE CORRECTED DATA THE SAME UNCHANGED LINE BLOCKS 115 BARS — true EST 16:45-16:49 on the
+23 Fridays whose session ends 16:49, which is exactly the intended window. THE GATE WAS
+ALWAYS CORRECT; IT WAS READING A WRONG CLOCK. Do not edit this file.
+
+EVERY FIGURE IN THE PROJECT RECORD BEFORE 2026-07-27 WAS MEASURED WITH FRIDAY AFTERNOONS
+EXCLUDED. Committed book, BOOK population, full conviction stack:
+  broken clock    3,057 trades  WR 90.9  PF 5.07  net $98,205
+  corrected clock 3,101 trades  WR 90.6  PF 4.81  net $97,675   (+44 trades, -$530)
+Newly scoreable Friday afternoon (true EST 13:00-16:59): 101 trades, net $240, WR 74.3%.
+The delta is small and slightly negative; the point is that the restriction was UNINTENDED,
+not that it was material.
+
+EVERY HOUR-LABELLED FINDING IN THE RECORD RELABELS. Do not inherit any of them. Restated:
+  - S2B terrain, W=15/K=p85/E=p75, MARKET: peak median displacement was reported at "12:00
+    midday" (140.4pt, 204 largest-decile). CORRECTED it is 09:00, THE NY CASH OPEN — 144.0pt
+    and 225 largest-decile — decaying monotonically through the morning, with the TRUE lunch
+    lull at 12:00-13:00 carrying 76.5/72.0pt, roughly half the open. Peak hour is 09:00 in
+    all four grid cells (144.0/147.8/195.4/187.8pt). The episode set is IDENTICAL (7,490;
+    3,816 UP / 3,674 DOWN) — the clock was label-only.
+  - "size>=8 clusters start overwhelmingly at 11:00-13:00 EST (12:00=17, 13:00=11, 11:00=9)"
+    RELABELS TO THE NY CASH OPEN AND THE FIRST HOUR AFTER IT. The finding STRENGTHENS: deep
+    clusters form where the market's largest clean directional runs are, which is the open.
+    It was never a midday effect.
+  - Any session-concentration or hour-conditioned statement in discovery_redesign_spec.md,
+    DOT_new_data_reveal_2026-07-21.md or DOT_signal_discovery_mantra.md inherits this shift
+    and must be restated from the corrected data rather than carried forward.
+  - ATR-tercile and monthly-bucket findings are NOT hour-derived and are unaffected.
+
+F9 PARITY — WHY THE DATA WAS CORRECTED RATHER THAN F9 EXCLUDED. scanners/session_temporal.py
+gates on EST_Hour==8, EST_Hour==9 & EST_Minute==30, EST_Hour==10. On the broken export an F9
+signal labelled "IN-SESSION 16:00" fires at true 13:00 in backtest and at true 16:00 live.
+THAT IS AN EXPORT=LIVE PARITY BREAK, not a labelling nuisance. Excluding F9 from selection was
+proposed and REJECTED: selecting a book from a partial view of the search space is the exact
+failure that produced an incumbent reaching ~11% of the market's clean directional moves. All
+fourteen families must be scoreable, so the DATA is corrected.
