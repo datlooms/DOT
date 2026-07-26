@@ -25,13 +25,14 @@ _F3 = re.compile(r'^(.+?)\s+GATED-BY\s+(.+?)==(-?\d+)$')
 _F7 = re.compile(r'^FADE\s+(.+)$')
 _F9 = re.compile(r'^(.+?)\s+IN-SESSION\s+(\d{1,2}):(\d{2})$')
 
+_F6 = re.compile(r'^(.+?)\s+(up|down)-cross\(level=(hi|lo)\)\s+ROC=(\S+)$')
+_F8 = re.compile(r'^(.+?)\s+(>|<|!=)\s+(.+)$')
+_F11 = re.compile(r'^(.+?)<->(.+?)\s+N=(\d+)\s+(\S+)$')
+
 UNSCOREABLE_FAMILIES = {
-    'F4': 'divergence_nonconfirm — "A NOT-CONFIRMED-BY B" needs the scanner divergence window and '
-          'its non-confirmation state machine, which run_search holds internally and does not expose',
-    'F6': 'threshold_crossing — "X up-cross(level=hi) ROC=none" needs the scanner crossing detector '
-          'and its ROC variant selection',
-    'F8': 'cross_variable_structure — "A > B" needs the scanner relative-structure normalisation',
-    'F11': 'rolling_leadlag — "A<->B N=30 leadlag_pos" needs the scanner rolling correlation window',
+    'F4': 'divergence_nonconfirm has no mask builder: it exposes verify_live, apply_d2d, score_mask '
+          'and run_search, and the mask construction is inline inside run_search. Extracting it '
+          'would edit a ratified scanner, which is not a change to make before a multi-day run.',
 }
 
 
@@ -44,7 +45,45 @@ def _pool_mask(pool, label, fam, sig):
     return np.asarray(pool[label], dtype=bool)
 
 
-def family_mask(df, pool, fam, sig):
+def family_mask(df, pool, fam, sig, adaptive=None, structural=None):
+    if fam == 'F6':
+        m = _F6.match(sig)
+        if m:
+            import threshold_crossing as f6
+            import portfolio_simulation_engine as _eng
+            feat, level, roc = m.group(1).strip(), m.group(3), m.group(4)
+            if adaptive is None or structural is None:
+                raise SystemExit(
+                    f'ABORT [F6] "{sig}" needs the oracle thresholds to rebuild its crossing mask, '
+                    f'but build_book was called without adaptive/structural. Refusing to approximate.')
+            out = np.asarray(f6.crossing_mask(df, feat, level, adaptive, structural), dtype=bool)
+            if roc != 'none':
+                if ':' not in roc:
+                    raise SystemExit(f'ABORT [F6] unparseable ROC token "{roc}" in "{sig}".')
+                rf, rt = roc.rsplit(':', 1)
+                out = out & np.asarray(_eng.condition_mask(df, rf, rt, adaptive, structural),
+                                       dtype=bool)
+            return out
+    if fam == 'F8':
+        m = _F8.match(sig)
+        if m:
+            import cross_variable_structure as f8
+            a, op, b = m.group(1).strip(), m.group(2), m.group(3).strip()
+            kind = 'disagree' if op == '!=' else 'ineq'
+            for lbl, msk in f8.relation_masks(df, a, b, kind):
+                if lbl == sig.strip():
+                    return np.asarray(msk, dtype=bool)
+            raise SystemExit(
+                f'ABORT [F8] "{sig}" did not match any label relation_masks emitted for '
+                f'({a}, {b}, {kind}). Refusing to guess which relation was meant.')
+    if fam == 'F11':
+        m = _F11.match(sig)
+        if m:
+            import rolling_leadlag as f11
+            A, B = m.group(1).strip(), m.group(2).strip()
+            n, rel = int(m.group(3)), m.group(4).strip()
+            return np.asarray(f11.relation_mask(df, A, B, n, rel), dtype=bool)
+
     if fam == 'F5':
         return _pool_mask(pool, sig.strip(), fam, sig)
     if fam == 'F7':
@@ -60,15 +99,18 @@ def family_mask(df, pool, fam, sig):
                 raise SystemExit(f'ABORT [{fam}] gate column "{col}" absent from the frame for "{sig}".')
             return base & (df[col].values == val)
     if fam == 'F2':
+        import state_transition as f2
+        col = sig.split(':', 1)[0].strip()
+        if col not in df.columns:
+            raise SystemExit(f'ABORT [F2] state column "{col}" absent from the frame for "{sig}".')
+        vals = df[col].values
+        rest = sig.split(':', 1)[1].strip() if ':' in sig else ''
+        if rest == 'any':
+            return np.asarray(f2.any_change(vals), dtype=bool)
         m = _F2.match(sig)
         if m:
-            col, a_v, b_v = m.group(1).strip(), int(m.group(2)), int(m.group(3))
-            if col not in df.columns:
-                raise SystemExit(f'ABORT [{fam}] state column "{col}" absent from the frame for "{sig}".')
-            v = df[col].values
-            out = np.zeros(len(v), dtype=bool)
-            out[1:] = (v[:-1] == a_v) & (v[1:] == b_v)
-            return out
+            return np.asarray(f2.typed_transition(vals, int(m.group(2)), int(m.group(3))),
+                              dtype=bool)
     if fam == 'F9':
         m = _F9.match(sig)
         if m:
@@ -85,7 +127,7 @@ def family_mask(df, pool, fam, sig):
         f'not fall through to another family parser — that silent fall-through is what crashed S8.')
 
 
-def build_book(df, pool, anchor, book):
+def build_book(df, pool, anchor, book, adaptive=None, structural=None):
     rows = []
     fk = 0
     for _, b in book.iterrows():
@@ -111,7 +153,7 @@ def build_book(df, pool, anchor, book):
                     raise SystemExit(f'ABORT [F1] "{lbl}" is not in the condition pool for "{sig}".')
             df[col] = seq.pair_mask(pool[a], pool[bb], k, anchor).astype(int)
         else:
-            df[col] = family_mask(df, pool, fam, sig).astype(int)
+            df[col] = family_mask(df, pool, fam, sig, adaptive, structural).astype(int)
         rows.append({'feat_1': col, 'thresh_1': '==1', 'feat_2': col, 'thresh_2': '==1',
                      'feat_3': col, 'thresh_3': '==1', 'direction': b['direction']})
     return pd.DataFrame(rows)

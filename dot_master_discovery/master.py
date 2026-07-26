@@ -281,10 +281,11 @@ def s5_filter(out, input_sha):
             for fam, g in blocked.groupby('family'):
                 print(f'  filter: EXCLUDING {len(g)} {fam} candidate(s) — S8 cannot score this '
                       f'family: {score_g.UNSCOREABLE_FAMILIES[fam]}')
-            print(f'  THE POOL IS NOT THE FULL FOURTEEN: {sorted(unscoreable)} are discovered and '
-                  f'reported but cannot enter a selected book until build_book can reconstruct '
-                  f'their masks. Stated so the operator is never told a book spans families it '
-                  f'does not.')
+            _u = sorted(unscoreable)
+            _v = 'is' if len(_u) == 1 else 'are'
+            print(f'  THE POOL IS NOT THE FULL FOURTEEN: {_u} {_v} discovered and reported but '
+                  f'cannot enter a selected book. Stated so the operator is never told a book spans '
+                  f'families it does not.')
     keep.to_csv(os.path.join(results, 'candidates.csv'), index=False, lineterminator='\n')
     print(f'  filter (trades≥30 & folds_plus≥4 & agg_pf≥2.0): {len(keep)}/{len(r)} candidates '
           f'scoreable by S8')
@@ -448,7 +449,7 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
         fresh_path = os.path.join(committed, 'discovered_book.csv')
         book.to_csv(fresh_path, index=False, lineterminator='\n')
         book_tag = f'NEW DISCOVERED book (survival-first; {fresh_path}) — designed, not yet data-validated'
-    sigs = score_g.build_book(df, pool, anchor, book)
+    sigs = score_g.build_book(df, pool, anchor, book, adaptive=ad, structural=st)
     conv = C.build_conviction(df, True, True, True, d2d_conviction=True, d2d_gap=True)
     r, executed = _score(df, sigs, ad, st, w, conv, want_trades=True)
     lines = []
@@ -743,7 +744,7 @@ def s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha, 
     bk_path = book_file if book_file else os.path.join(_ENGINE, 'book50_signals.csv')
     book = pd.read_csv(bk_path)
     f1_rows = book.index[book['trigger'] == 'F1'].tolist()
-    sigs = score_g.build_book(df, pool, anchor, book)
+    sigs = score_g.build_book(df, pool, anchor, book, adaptive=ad, structural=st)
     conv = C.build_conviction(df, True, True, True, d2d_conviction=True, d2d_gap=True)
     n = len(df)
     U = cp.eligible_universe(df, w)
@@ -860,7 +861,7 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
     U = cp.eligible_universe(df, w)
     hyg, dead, canonical, live = sel.vocabulary_hygiene(pool, U, segment_label)
     bk_path = book_file if book_file else os.path.join(_ENGINE, 'book50_signals.csv')
-    sigs = score_g.build_book(df, pool, anchor, pd.read_csv(bk_path))
+    sigs = score_g.build_book(df, pool, anchor, pd.read_csv(bk_path), adaptive=ad, structural=st)
     conv = C.build_conviction(df, True, True, True, d2d_conviction=True, d2d_gap=True)
     full = engine.run_portfolio(df, sigs, adaptive=ad, structural=st, warmup=w, verbose=False,
                                conviction=conv)
@@ -1155,7 +1156,7 @@ def s5c_walk_forward(df, ad, st, w, pool, anchor, book_file, out, input_sha, att
     causal = wfs.assert_oracle_causal(df, ad, dt_compute(), splits[0]['train_last_bar'], struct_keys)
     U = cp.eligible_universe(df, w)
     bk_path = book_file if book_file else os.path.join(_ENGINE, 'book50_signals.csv')
-    sigs = score_g.build_book(df, pool, anchor, pd.read_csv(bk_path))
+    sigs = score_g.build_book(df, pool, anchor, pd.read_csv(bk_path), adaptive=ad, structural=st)
     conv = C.build_conviction(df, True, True, True, d2d_conviction=True, d2d_gap=True)
     full = engine.run_portfolio(df, sigs, adaptive=ad, structural=st, warmup=w, verbose=False, conviction=conv)
     bk = full[~full['signal_name'].isin(cp.GAP_NAMES)]
@@ -1378,7 +1379,7 @@ def s8b_cluster_profile(df, ad, st, w, pool, anchor, book_file, committed, out, 
     else:
         print('  S8B standalone: S8 output unavailable, rebuilding the committed trade list.')
         bk_path = book_file if book_file else os.path.join(_ENGINE, 'book50_signals.csv')
-        sigs = score_g.build_book(df, pool, anchor, pd.read_csv(bk_path))
+        sigs = score_g.build_book(df, pool, anchor, pd.read_csv(bk_path), adaptive=ad, structural=st)
         conv = C.build_conviction(df, True, True, True, d2d_conviction=True, d2d_gap=True)
         _r, executed = _score(df, sigs, ad, st, w, conv, want_trades=True)
     n = len(df)
