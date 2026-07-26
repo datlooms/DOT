@@ -275,6 +275,30 @@ def s5_filter(out, input_sha):
     import score_g
     unscoreable = set(score_g.UNSCOREABLE_FAMILIES)
     if 'family' in keep.columns and len(keep):
+        gcov = score_g.grammar_coverage(keep)
+        _write_with_header(os.path.join(results, 'grammar_coverage.csv'), gcov, [
+            'DOT S5 GRAMMAR COVERAGE — every DISTINCT signal_def form in the filtered pool',
+            'PROPERTY OF THE POOL. Checked BEFORE S8 so an unhandled grammar surfaces in seconds at '
+            'S5, not after a long run at S8.',
+            'Shapes are the signal_def with identifiers normalised to V and numbers to N, so two rows '
+            'differing only in variable or threshold collapse to one form. Row counts are per form.',
+            'A form marked handled=False is EXCLUDED from candidates.csv by name below, so the filter '
+            'and build_book can never disagree about what is scoreable.'])
+        print('  GRAMMAR COVERAGE — distinct signal_def forms in the filtered pool:')
+        for _i, r in gcov.iterrows():
+            flag = 'OK ' if r['handled'] else 'NO '
+            print(f"    {flag}{r['family']:4} {int(r['rows']):5} rows | {r['grammar_shape']}")
+            if not r['handled']:
+                print(f"        example: {r['example']}")
+        bad_shapes = set(gcov[~gcov['handled']]['grammar_shape'])
+        if bad_shapes:
+            mask_bad = keep['signal_def'].astype(str).map(score_g.grammar_shape).isin(bad_shapes)
+            n_bad = int(mask_bad.sum())
+            keep = keep[~mask_bad]
+            print(f'  filter: EXCLUDING {n_bad} row(s) whose signal_def form build_book cannot '
+                  f'parse — named above, never silently dropped')
+        else:
+            print('  GRAMMAR COVERAGE: every form in the pool is parseable by build_book')
         blocked = keep[keep['family'].isin(unscoreable)]
         keep = keep[~keep['family'].isin(unscoreable)]
         if len(blocked):

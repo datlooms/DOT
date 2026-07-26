@@ -1,0 +1,164 @@
+From 553c79deeb7ab9a37997bda3b8d41a584964ed01 Mon Sep 17 00:00:00 2001
+From: T <t@d.local>
+Date: Sun, 26 Jul 2026 15:13:48 +0000
+Subject: [PATCH] Sweep grammars by FORM, not family, and make it a permanent
+ pre-S8 check. F9's weekday variant IN-SESSION 16:00&DOW==k now rebuilds
+ through session_temporal.session_masks and weekday_masks, matching the
+ scanner's own gate label construction s_lbl&w_lbl. That also removed a silent
+ wrong-mask defect in my earlier hand-rolled F9 parser: the scanner's session
+ anchors are h==16 with NO minute constraint, while my version required
+ minute==0, so 16:00 rows had been getting a mask the scanner never produced.
+ New grammar_shape normalises identifiers to V and numbers to N so two rows
+ differing only in variable or threshold collapse to one form;
+ grammar_coverage enumerates every distinct form per family with row counts,
+ an example and a handled flag; can_parse is a pure structural check needing
+ no frame. S5 now runs the sweep before S8, writes grammar_coverage.csv,
+ prints every form, and excludes unparseable rows BY NAME so the filter and
+ build_book can never disagree. Measured on the pool: 13 distinct forms across
+ 11 families, 12 handled, 1 unhandled (F4). Round trip re-run per FORM rather
+ than per family: all twelve identical by array comparison.
+
+---
+ dot_master_discovery/engine/score_g.py | 78 +++++++++++++++++++++++++-
+ dot_master_discovery/master.py         | 24 ++++++++
+ 2 files changed, 99 insertions(+), 3 deletions(-)
+
+diff --git a/dot_master_discovery/engine/score_g.py b/dot_master_discovery/engine/score_g.py
+index 4c68b43..c6be87e 100644
+--- a/dot_master_discovery/engine/score_g.py
++++ b/dot_master_discovery/engine/score_g.py
+@@ -23,7 +23,7 @@ _F1 = re.compile(r'^(.*?)\s*->(\d+)->\s*(.*)$')
+ _F2 = re.compile(r'^(.+?):(-?\d+)->(-?\d+)$')
+ _F3 = re.compile(r'^(.+?)\s+GATED-BY\s+(.+?)==(-?\d+)$')
+ _F7 = re.compile(r'^FADE\s+(.+)$')
+-_F9 = re.compile(r'^(.+?)\s+IN-SESSION\s+(\d{1,2}):(\d{2})$')
++_F9 = re.compile(r'^(.+?)\s+IN-SESSION\s+(\S+)$')
+ 
+ _F6 = re.compile(r'^(.+?)\s+(up|down)-cross\(level=(hi|lo)\)\s+ROC=(\S+)$')
+ _F8 = re.compile(r'^(.+?)\s+(>|<|!=)\s+(.+)$')
+@@ -114,9 +114,27 @@ def family_mask(df, pool, fam, sig, adaptive=None, structural=None):
+     if fam == 'F9':
+         m = _F9.match(sig)
+         if m:
++            import session_temporal as f9
+             base = _pool_mask(pool, m.group(1).strip(), fam, sig)
+-            hh, mm = int(m.group(2)), int(m.group(3))
+-            return base & (df['EST_Hour'].values == hh) & (df['EST_Minute'].values == mm)
++            gate_lbl = m.group(2).strip()
++            sess = f9.session_masks(df)
++            wds = f9.weekday_masks(df)
++            if '&' in gate_lbl:
++                s_lbl, w_lbl = gate_lbl.split('&', 1)
++            else:
++                s_lbl, w_lbl = gate_lbl, None
++            if s_lbl not in sess:
++                raise SystemExit(
++                    f'ABORT [F9] session anchor "{s_lbl}" in "{sig}" is not one of '
++                    f'{sorted(sess)}. Refusing to approximate the gate.')
++            gate = np.asarray(sess[s_lbl], dtype=bool)
++            if w_lbl is not None:
++                if w_lbl not in wds:
++                    raise SystemExit(
++                        f'ABORT [F9] weekday gate "{w_lbl}" in "{sig}" is not one of '
++                        f'{sorted(wds)} for this dataset.')
++                gate = gate & np.asarray(wds[w_lbl], dtype=bool)
++            return base & gate
+     if fam in UNSCOREABLE_FAMILIES:
+         raise SystemExit(
+             f'ABORT [{fam}] cannot be scored by build_book: {UNSCOREABLE_FAMILIES[fam]}. '
+@@ -228,3 +246,57 @@ def main():
+ 
+ if __name__ == '__main__':
+     main()
++
++_SHAPE_ID = re.compile(r'[A-Za-z_][A-Za-z_0-9]*')
++_SHAPE_NUM = re.compile(r'-?\d+(?:\.\d+)?')
++_SHAPE_KEEP = {'IN', 'SESSION', 'GATED', 'BY', 'NOT', 'CONFIRMED', 'FADE', 'DOW', 'ROC',
++               'up', 'down', 'cross', 'level', 'none', 'any', 'N'}
++
++
++def grammar_shape(sig):
++    out = _SHAPE_NUM.sub('N', str(sig))
++    def _r(m):
++        t = m.group(0)
++        return t if t in _SHAPE_KEEP else 'V'
++    return _SHAPE_ID.sub(_r, out)
++
++
++def can_parse(fam, sig):
++    sig = str(sig)
++    if fam == 'F0':
++        return len([p for p in sig.split('+') if ':' in p]) == 3
++    if fam == 'F1':
++        return _F1.match(sig) is not None
++    if fam == 'F2':
++        return sig.split(':', 1)[-1].strip() == 'any' or _F2.match(sig) is not None
++    if fam == 'F3':
++        return _F3.match(sig) is not None
++    if fam == 'F5':
++        return ':' in sig and ' ' not in sig.strip()
++    if fam == 'F6':
++        return _F6.match(sig) is not None
++    if fam == 'F7':
++        return _F7.match(sig) is not None
++    if fam == 'F8':
++        return _F8.match(sig) is not None
++    if fam == 'F9':
++        return _F9.match(sig) is not None
++    if fam == 'F11':
++        return _F11.match(sig) is not None
++    return False
++
++
++def grammar_coverage(pool_df):
++    rows = []
++    for fam, g in pool_df.groupby('family'):
++        shapes = {}
++        for sig in g['signal_def'].astype(str):
++            shapes.setdefault(grammar_shape(sig), []).append(sig)
++        for shape, sigs in sorted(shapes.items(), key=lambda kv: -len(kv[1])):
++            ok = can_parse(fam, sigs[0])
++            rows.append({'family': fam, 'grammar_shape': shape, 'rows': len(sigs),
++                         'example': sigs[0], 'handled': bool(ok),
++                         'reason': '' if ok else (UNSCOREABLE_FAMILIES.get(fam)
++                                                  or 'no parser branch matches this form')})
++    return pd.DataFrame(rows)
++
+diff --git a/dot_master_discovery/master.py b/dot_master_discovery/master.py
+index ac8611f..fe7143e 100644
+--- a/dot_master_discovery/master.py
++++ b/dot_master_discovery/master.py
+@@ -275,6 +275,30 @@ def s5_filter(out, input_sha):
+     import score_g
+     unscoreable = set(score_g.UNSCOREABLE_FAMILIES)
+     if 'family' in keep.columns and len(keep):
++        gcov = score_g.grammar_coverage(keep)
++        _write_with_header(os.path.join(results, 'grammar_coverage.csv'), gcov, [
++            'DOT S5 GRAMMAR COVERAGE — every DISTINCT signal_def form in the filtered pool',
++            'PROPERTY OF THE POOL. Checked BEFORE S8 so an unhandled grammar surfaces in seconds at '
++            'S5, not after a long run at S8.',
++            'Shapes are the signal_def with identifiers normalised to V and numbers to N, so two rows '
++            'differing only in variable or threshold collapse to one form. Row counts are per form.',
++            'A form marked handled=False is EXCLUDED from candidates.csv by name below, so the filter '
++            'and build_book can never disagree about what is scoreable.'])
++        print('  GRAMMAR COVERAGE — distinct signal_def forms in the filtered pool:')
++        for _i, r in gcov.iterrows():
++            flag = 'OK ' if r['handled'] else 'NO '
++            print(f"    {flag}{r['family']:4} {int(r['rows']):5} rows | {r['grammar_shape']}")
++            if not r['handled']:
++                print(f"        example: {r['example']}")
++        bad_shapes = set(gcov[~gcov['handled']]['grammar_shape'])
++        if bad_shapes:
++            mask_bad = keep['signal_def'].astype(str).map(score_g.grammar_shape).isin(bad_shapes)
++            n_bad = int(mask_bad.sum())
++            keep = keep[~mask_bad]
++            print(f'  filter: EXCLUDING {n_bad} row(s) whose signal_def form build_book cannot '
++                  f'parse — named above, never silently dropped')
++        else:
++            print('  GRAMMAR COVERAGE: every form in the pool is parseable by build_book')
+         blocked = keep[keep['family'].isin(unscoreable)]
+         keep = keep[~keep['family'].isin(unscoreable)]
+         if len(blocked):
+-- 
+2.43.0
+

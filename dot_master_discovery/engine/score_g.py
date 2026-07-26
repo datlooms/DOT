@@ -23,7 +23,7 @@ _F1 = re.compile(r'^(.*?)\s*->(\d+)->\s*(.*)$')
 _F2 = re.compile(r'^(.+?):(-?\d+)->(-?\d+)$')
 _F3 = re.compile(r'^(.+?)\s+GATED-BY\s+(.+?)==(-?\d+)$')
 _F7 = re.compile(r'^FADE\s+(.+)$')
-_F9 = re.compile(r'^(.+?)\s+IN-SESSION\s+(\d{1,2}):(\d{2})$')
+_F9 = re.compile(r'^(.+?)\s+IN-SESSION\s+(\S+)$')
 
 _F6 = re.compile(r'^(.+?)\s+(up|down)-cross\(level=(hi|lo)\)\s+ROC=(\S+)$')
 _F8 = re.compile(r'^(.+?)\s+(>|<|!=)\s+(.+)$')
@@ -114,9 +114,27 @@ def family_mask(df, pool, fam, sig, adaptive=None, structural=None):
     if fam == 'F9':
         m = _F9.match(sig)
         if m:
+            import session_temporal as f9
             base = _pool_mask(pool, m.group(1).strip(), fam, sig)
-            hh, mm = int(m.group(2)), int(m.group(3))
-            return base & (df['EST_Hour'].values == hh) & (df['EST_Minute'].values == mm)
+            gate_lbl = m.group(2).strip()
+            sess = f9.session_masks(df)
+            wds = f9.weekday_masks(df)
+            if '&' in gate_lbl:
+                s_lbl, w_lbl = gate_lbl.split('&', 1)
+            else:
+                s_lbl, w_lbl = gate_lbl, None
+            if s_lbl not in sess:
+                raise SystemExit(
+                    f'ABORT [F9] session anchor "{s_lbl}" in "{sig}" is not one of '
+                    f'{sorted(sess)}. Refusing to approximate the gate.')
+            gate = np.asarray(sess[s_lbl], dtype=bool)
+            if w_lbl is not None:
+                if w_lbl not in wds:
+                    raise SystemExit(
+                        f'ABORT [F9] weekday gate "{w_lbl}" in "{sig}" is not one of '
+                        f'{sorted(wds)} for this dataset.')
+                gate = gate & np.asarray(wds[w_lbl], dtype=bool)
+            return base & gate
     if fam in UNSCOREABLE_FAMILIES:
         raise SystemExit(
             f'ABORT [{fam}] cannot be scored by build_book: {UNSCOREABLE_FAMILIES[fam]}. '
@@ -228,3 +246,57 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+_SHAPE_ID = re.compile(r'[A-Za-z_][A-Za-z_0-9]*')
+_SHAPE_NUM = re.compile(r'-?\d+(?:\.\d+)?')
+_SHAPE_KEEP = {'IN', 'SESSION', 'GATED', 'BY', 'NOT', 'CONFIRMED', 'FADE', 'DOW', 'ROC',
+               'up', 'down', 'cross', 'level', 'none', 'any', 'N'}
+
+
+def grammar_shape(sig):
+    out = _SHAPE_NUM.sub('N', str(sig))
+    def _r(m):
+        t = m.group(0)
+        return t if t in _SHAPE_KEEP else 'V'
+    return _SHAPE_ID.sub(_r, out)
+
+
+def can_parse(fam, sig):
+    sig = str(sig)
+    if fam == 'F0':
+        return len([p for p in sig.split('+') if ':' in p]) == 3
+    if fam == 'F1':
+        return _F1.match(sig) is not None
+    if fam == 'F2':
+        return sig.split(':', 1)[-1].strip() == 'any' or _F2.match(sig) is not None
+    if fam == 'F3':
+        return _F3.match(sig) is not None
+    if fam == 'F5':
+        return ':' in sig and ' ' not in sig.strip()
+    if fam == 'F6':
+        return _F6.match(sig) is not None
+    if fam == 'F7':
+        return _F7.match(sig) is not None
+    if fam == 'F8':
+        return _F8.match(sig) is not None
+    if fam == 'F9':
+        return _F9.match(sig) is not None
+    if fam == 'F11':
+        return _F11.match(sig) is not None
+    return False
+
+
+def grammar_coverage(pool_df):
+    rows = []
+    for fam, g in pool_df.groupby('family'):
+        shapes = {}
+        for sig in g['signal_def'].astype(str):
+            shapes.setdefault(grammar_shape(sig), []).append(sig)
+        for shape, sigs in sorted(shapes.items(), key=lambda kv: -len(kv[1])):
+            ok = can_parse(fam, sigs[0])
+            rows.append({'family': fam, 'grammar_shape': shape, 'rows': len(sigs),
+                         'example': sigs[0], 'handled': bool(ok),
+                         'reason': '' if ok else (UNSCOREABLE_FAMILIES.get(fam)
+                                                  or 'no parser branch matches this form')})
+    return pd.DataFrame(rows)
+
