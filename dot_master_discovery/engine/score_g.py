@@ -28,12 +28,9 @@ _F9 = re.compile(r'^(.+?)\s+IN-SESSION\s+(\S+)$')
 _F6 = re.compile(r'^(.+?)\s+(up|down)-cross\(level=(hi|lo)\)\s+ROC=(\S+)$')
 _F8 = re.compile(r'^(.+?)\s+(>|<|!=)\s+(.+)$')
 _F11 = re.compile(r'^(.+?)<->(.+?)\s+N=(\d+)\s+(\S+)$')
+_F4 = re.compile(r'^(.+?):(\S+)\s+NOT-CONFIRMED-BY\s+(.+?):(\S+)$')
 
-UNSCOREABLE_FAMILIES = {
-    'F4': 'divergence_nonconfirm has no mask builder: it exposes verify_live, apply_d2d, score_mask '
-          'and run_search, and the mask construction is inline inside run_search. Extracting it '
-          'would edit a ratified scanner, which is not a change to make before a multi-day run.',
-}
+UNSCOREABLE_FAMILIES = {}
 
 
 def _pool_mask(pool, label, fam, sig):
@@ -135,6 +132,17 @@ def family_mask(df, pool, fam, sig, adaptive=None, structural=None):
                         f'{sorted(wds)} for this dataset.')
                 gate = gate & np.asarray(wds[w_lbl], dtype=bool)
             return base & gate
+    if fam == 'F4':
+        m = _F4.match(sig)
+        if m:
+            import divergence_nonconfirm as f4
+            if adaptive is None or structural is None:
+                raise SystemExit(
+                    f'ABORT [F4] "{sig}" needs the oracle thresholds to rebuild its divergence '
+                    f'mask, but build_book was called without adaptive/structural.')
+            return np.asarray(f4.divergence_mask(df, m.group(1).strip(), m.group(2).strip(),
+                                                 m.group(3).strip(), m.group(4).strip(),
+                                                 adaptive, structural), dtype=bool)
     if fam in UNSCOREABLE_FAMILIES:
         raise SystemExit(
             f'ABORT [{fam}] cannot be scored by build_book: {UNSCOREABLE_FAMILIES[fam]}. '
@@ -283,6 +291,8 @@ def can_parse(fam, sig):
         return _F9.match(sig) is not None
     if fam == 'F11':
         return _F11.match(sig) is not None
+    if fam == 'F4':
+        return _F4.match(sig) is not None
     return False
 
 

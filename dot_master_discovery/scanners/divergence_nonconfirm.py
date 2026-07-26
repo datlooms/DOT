@@ -104,6 +104,12 @@ def score_mask(df, mask, direction, d2d_mode, orig, month, adaptive, structural,
     }
 
 
+def divergence_mask(df, pf, p_thr, ff, f_thr, adaptive, structural):
+    price_mask = engine.condition_mask(df, pf, p_thr, adaptive, structural)
+    flow_mask = engine.condition_mask(df, ff, f_thr, adaptive, structural)
+    return price_mask & flow_mask
+
+
 def run_search(df, price_feats, flow_feats, d2d_modes, orig, adaptive, structural, warmup):
     month = pd.Series(df['Time'].values).str[:7].values
     if SEQ_COL not in df.columns:
@@ -118,9 +124,7 @@ def run_search(df, price_feats, flow_feats, d2d_modes, orig, adaptive, structura
     for pf in price_feats:
         for ff in flow_feats:
             for p_thr, f_thr, direction in configs:
-                price_mask = engine.condition_mask(df, pf, p_thr, adaptive, structural)
-                flow_mask = engine.condition_mask(df, ff, f_thr, adaptive, structural)
-                mask = price_mask & flow_mask
+                mask = divergence_mask(df, pf, p_thr, ff, f_thr, adaptive, structural)
                 if mask.sum() < MIN_TRADES:
                     continue
                 for mode in d2d_modes:

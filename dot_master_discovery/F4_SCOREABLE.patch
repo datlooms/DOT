@@ -1,0 +1,98 @@
+From bddc116f1585f6f5864a453c9d7be2342aac5419 Mon Sep 17 00:00:00 2001
+From: T <t@d.local>
+Date: Sun, 26 Jul 2026 16:24:35 +0000
+Subject: [PATCH] F4 scoreable: extract divergence_mask and wire it. The inline
+ construction inside run_search was exactly three lines - two
+ engine.condition_mask calls and an AND - lifted verbatim into a module-level
+ divergence_mask(df, pf, p_thr, ff, f_thr, adaptive, structural) that
+ run_search now calls. Same code moved, no reimplementation and no tidy-up.
+ THE MASK DOES NOT DEPEND ON THE D2D MODE: it is built before the d2d_modes
+ loop and the mode only reaches score_mask, so no mode recovery is needed for
+ reconstruction and there is no route to a silent mode mismatch. Token
+ mapping: left of NOT-CONFIRMED-BY gives pf:p_thr, right gives ff:f_thr, with
+ no defaults beyond the oracle thresholds build_book already threads for F6.
+ UNSCOREABLE_FAMILIES is now empty and the S5 grammar table reports 13 of 13
+ forms OK, so all fourteen families can enter a selected book.
+
+---
+ dot_master_discovery/engine/score_g.py        | 20 ++++++++++++++-----
+ .../scanners/divergence_nonconfirm.py         | 10 +++++++---
+ 2 files changed, 22 insertions(+), 8 deletions(-)
+
+diff --git a/dot_master_discovery/engine/score_g.py b/dot_master_discovery/engine/score_g.py
+index c6be87e..6ac37c7 100644
+--- a/dot_master_discovery/engine/score_g.py
++++ b/dot_master_discovery/engine/score_g.py
+@@ -28,12 +28,9 @@ _F9 = re.compile(r'^(.+?)\s+IN-SESSION\s+(\S+)$')
+ _F6 = re.compile(r'^(.+?)\s+(up|down)-cross\(level=(hi|lo)\)\s+ROC=(\S+)$')
+ _F8 = re.compile(r'^(.+?)\s+(>|<|!=)\s+(.+)$')
+ _F11 = re.compile(r'^(.+?)<->(.+?)\s+N=(\d+)\s+(\S+)$')
++_F4 = re.compile(r'^(.+?):(\S+)\s+NOT-CONFIRMED-BY\s+(.+?):(\S+)$')
+ 
+-UNSCOREABLE_FAMILIES = {
+-    'F4': 'divergence_nonconfirm has no mask builder: it exposes verify_live, apply_d2d, score_mask '
+-          'and run_search, and the mask construction is inline inside run_search. Extracting it '
+-          'would edit a ratified scanner, which is not a change to make before a multi-day run.',
+-}
++UNSCOREABLE_FAMILIES = {}
+ 
+ 
+ def _pool_mask(pool, label, fam, sig):
+@@ -135,6 +132,17 @@ def family_mask(df, pool, fam, sig, adaptive=None, structural=None):
+                         f'{sorted(wds)} for this dataset.')
+                 gate = gate & np.asarray(wds[w_lbl], dtype=bool)
+             return base & gate
++    if fam == 'F4':
++        m = _F4.match(sig)
++        if m:
++            import divergence_nonconfirm as f4
++            if adaptive is None or structural is None:
++                raise SystemExit(
++                    f'ABORT [F4] "{sig}" needs the oracle thresholds to rebuild its divergence '
++                    f'mask, but build_book was called without adaptive/structural.')
++            return np.asarray(f4.divergence_mask(df, m.group(1).strip(), m.group(2).strip(),
++                                                 m.group(3).strip(), m.group(4).strip(),
++                                                 adaptive, structural), dtype=bool)
+     if fam in UNSCOREABLE_FAMILIES:
+         raise SystemExit(
+             f'ABORT [{fam}] cannot be scored by build_book: {UNSCOREABLE_FAMILIES[fam]}. '
+@@ -283,6 +291,8 @@ def can_parse(fam, sig):
+         return _F9.match(sig) is not None
+     if fam == 'F11':
+         return _F11.match(sig) is not None
++    if fam == 'F4':
++        return _F4.match(sig) is not None
+     return False
+ 
+ 
+diff --git a/dot_master_discovery/scanners/divergence_nonconfirm.py b/dot_master_discovery/scanners/divergence_nonconfirm.py
+index d892b9d..7a254dd 100644
+--- a/dot_master_discovery/scanners/divergence_nonconfirm.py
++++ b/dot_master_discovery/scanners/divergence_nonconfirm.py
+@@ -104,6 +104,12 @@ def score_mask(df, mask, direction, d2d_mode, orig, month, adaptive, structural,
+     }
+ 
+ 
++def divergence_mask(df, pf, p_thr, ff, f_thr, adaptive, structural):
++    price_mask = engine.condition_mask(df, pf, p_thr, adaptive, structural)
++    flow_mask = engine.condition_mask(df, ff, f_thr, adaptive, structural)
++    return price_mask & flow_mask
++
++
+ def run_search(df, price_feats, flow_feats, d2d_modes, orig, adaptive, structural, warmup):
+     month = pd.Series(df['Time'].values).str[:7].values
+     if SEQ_COL not in df.columns:
+@@ -118,9 +124,7 @@ def run_search(df, price_feats, flow_feats, d2d_modes, orig, adaptive, structura
+     for pf in price_feats:
+         for ff in flow_feats:
+             for p_thr, f_thr, direction in configs:
+-                price_mask = engine.condition_mask(df, pf, p_thr, adaptive, structural)
+-                flow_mask = engine.condition_mask(df, ff, f_thr, adaptive, structural)
+-                mask = price_mask & flow_mask
++                mask = divergence_mask(df, pf, p_thr, ff, f_thr, adaptive, structural)
+                 if mask.sum() < MIN_TRADES:
+                     continue
+                 for mode in d2d_modes:
+-- 
+2.43.0
+
