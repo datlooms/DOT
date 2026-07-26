@@ -1334,3 +1334,88 @@ not about tail dependence. Stated in the artifact header.
 The pipeline is consolidated into a single authoritative `dot_master_discovery/` (105 files) in the
 DOT repo, byte-reproducible from a pristine clone via `DISCOVERY_REDESIGN_consolidated.patch`. Sacred
 five intact. **The next action is the 1-2 day discovery scan**, which has never been run.
+
+---
+
+## 2026-07-26 — THE EXPORT-CLOCK DEFECT: `EST_Hour` IS NOT EST
+
+**Found by the operator rejecting a measurement on domain knowledge, confirmed from price, then located in EA source.** The EA's live clock is correct and must not be touched. `ExportDataForAnalysis()` alone is wrong.
+
+### 1. HOW IT SURFACED
+S2B's terrain map reported peak median displacement at **"12:00 midday" — 140.4pt with 204 largest-decile episodes** against roughly 25pt overnight. The operator identified this as impossible: 12:00–13:00 EST is the lunch lull, conventionally the flattest stretch of the NY session, while the 09:30 cash open is the highest-volume, highest-range window. The instrument is US30 on an FTMO feed and he trades it daily.
+
+Five candidate explanations were tested. Four were exonerated:
+- **ATR normaliser** — runs the OPPOSITE way. Median ATR_1M by true hour: 09:00 = 26.40, 10:00 = 28.87 versus 03:00 = 10.74, 16:00 = 8.16. ATR peaks *with* the move, so normalising *dampens* the open. Raw unfiltered median |forward-15-bar move| already peaks at the open (55.50pt at 09:00 vs 19.60 at 03:00). Re-run on raw absolute displacement with no ATR: 3,630 episodes, peak still at true 09:00.
+- **Efficiency filter** — median efficiency is FLAT by hour (0.21–0.25). The "the open is chop" hypothesis, offered by the Manager, is **not supported on this data**. Removing the filter leaves open/first-hour dominance intact.
+- **Episode bounding** — median duration 2 bars at every true hour; mean 3.28 at 09:00 vs 2.97 at 12:00, so the open chains slightly *more*. No fragmentation artifact.
+- **A handful of days** — the 225 largest-decile episodes at true 09:00 spread over 106 distinct days, heaviest single day 2.7%, top-5 days 11.6%. The stitch seam 2026-06-24/26 shows 171 episodes at median 63.0pt against a cell median of 48.1pt — mildly elevated, 2.3% of episodes, not driving anything.
+
+### 2. THE DEFECT, IN SOURCE
+    LIVE   DOT.cs L1770  GetEstTime() { return (datetime)(TimeGMT() + (datetime)GetUSEasternOffsetSeconds()); }
+    EXPORT DOT.cs L730   long estOffset = _GetEstOffsetForTime(Time[i]);
+           DOT.cs L731   datetime estBarTime = (datetime)(Time[i] + (datetime)estOffset);
+
+`_GetEstOffsetForTime(datetime gmtTime)` at L1761 **declares its parameter as `gmtTime`**. The live path feeds it `TimeGMT()`. The export feeds it `Time[i]` — the bar's **server** time.
+
+**TWO ERRORS STACKED:**
+1. the offset is **SELECTED** on the wrong instant, so `_IsUSDST()` evaluates on server time — matters only within a few hours of the US DST boundary;
+2. the offset is **APPLIED** to server time rather than GMT — the whole broker GMT offset, and the main error.
+
+**BLAST RADIUS: EXACTLY THREE COLUMNS.** `estOffset`/`estBarTime` appear only at L730–734; `estDt` reaches only `EST_Hour`, `EST_Minute`, `EST_DayOfWeek`. Every other exported column derives from the EA's own internal state and is correct. Verified by grep of all 11,673 lines.
+
+### 3. THE MEASURED ERROR — THREE REGIMES, NOT A CONSTANT SHIFT
+The two DST schedules do not switch together, so the error is variable and one column hour aggregates two different true hours — **it smears as well as shifts.**
+
+    US Eastern DST 2026  begins second Sunday of March  = 2026-03-08
+    Broker (EU) DST 2026 begins last Sunday of March    = 2026-03-29
+
+    2026-01-19 -> 2026-03-08   server GMT+2, US GMT-5   ->  -7h
+    2026-03-08 -> 2026-03-29   server GMT+2, US GMT-4   ->  -6h   (the three-week gap)
+    2026-03-29 -> 2026-07-21   server GMT+3, US GMT-4   ->  -7h
+
+The US switch does **not** change the error — it shifts intended and actual equally. Only the broker's does.
+
+### 4. THE PRICE EVIDENCE — SIX INDEPENDENT ANCHORS
+The opening bell is unmistakable and it is not at the claimed 09:30. Median Bar_Range in a single minute (MARKET, price/volume only, 132 calendar days):
+
+| regime | column time | median range | median volume |
+|---|---|---|---|
+| winter, Jan 19 – Mar 6 (offset 5) | 11:30 | 32.00 → 101.69 | 239 → 502 |
+| summer, Mar 9 – Jul 21 (offset 4) | 12:30 | 37.25 → 89.43 | 216 → 486 |
+
+Corroborating, all independent: column 19:00 is the cash close (volume 228 → 88, range 25.80 → 11.47); column 12:30 → 19:00 is exactly 6.5 hours, the US30 cash session; the sparse window at column 20:05–21:04 is the CME equity-index maintenance break at true 17:05–18:04; column 11:30 in summer is the 08:30 ET data-release step (range 14.00 → 27.50); column 06:00 is the 08:00 London open (×2.26); column 23:00 is the Asia open (×2.41). At the *claimed* 09:30 open, median volume moves 59 → 69 — a ×1.2 blip, which was the tell.
+
+### 5. THE CORRECTED TERRAIN — MARKET, W=15 / K=p85 / E=p75, same 7,490 episodes
+
+| TRUE EST | session | episodes | median disp | largest-decile |
+|---|---|---|---|---|
+| 08:00 | pre-market | 353 | 63.1 pt | 40 |
+| **09:00** | **NY CASH OPEN** | 383 | **144.0 pt** | **225** |
+| 10:00 | first full hour | 283 | 123.6 pt | 138 |
+| 11:00 | late morning | 275 | 89.0 pt | 63 |
+| 12:00 | LUNCH LULL | 287 | 76.5 pt | 42 |
+| 13:00 | LUNCH LULL | 295 | 72.0 pt | 38 |
+| 15:00 | pre-close | 299 | 73.0 pt | 42 |
+| 23:00 | overnight | 348 | 24.8 pt | 0 |
+
+Counts stay flat (275–394); **size** peaks at the open and decays monotonically, and the true lunch lull carries about half the open's displacement. The single largest episode in the dataset (1,334pt) sits at true 06:00 — pre-market, a gap event. **Peak median hour is true 09:00 in all four grid cells** (144.0 / 147.8 / 195.4 / 187.8pt), with the 09:00 share of the largest decile between 25.2% and 31.8%. Up/down holds at 49.5–51.2 / 48.8–50.5.
+
+**NOTE FOR SELECTION: episode counts are FLAT across every hour.** Only size concentrates. Gating on hour would discard 348 overnight episodes — the operator has ruled explicitly against time bias, and the terrain supports him. Asia, Australia and London sessions carry episodes; they carry smaller ones.
+
+### 6. THREE CONSEQUENCES
+**(a) THE FRIDAY GATE HAS BEEN BLOCKING THE WRONG WINDOW — AND IT IS IN THE SCORING PATH.** `portfolio_simulation_engine.py` L148 reads the export clock. On the broken clock it fires at **true 13:00**, blocking true 13:00–16:00 Friday — **3,835 bars, roughly the final three hours of every Friday cash session.** **FRIDAY AFTERNOON HAS NEVER BEEN TRADED IN ANY BACKTEST IN THIS PROJECT. Every figure in the record, including 3,057 trades / $98,205, was measured under that restriction.** It is a restriction, so it cost trades rather than inflating results. **That file is SACRED, byte-locked at bb498eb13ce3, and is NOT to be edited** — after the export fix it blocks the intended 16:45 window with no code change. The EA's live gate at L8781/L8935 uses the correct `GetEstTime()` and has always blocked the intended window, so **live and backtest have disagreed on Friday afternoons throughout the project.**
+
+**(b) F9 SESSION GATES WERE SCORED ON THE WRONG SESSION.** `session_temporal.py` anchors on `EST_Hour==8`, `EST_Hour==9 & Min==30`, `EST_Hour==10`. A signal labelled `IN-SESSION 16:00` fires at true 13:00 in backtest and true 16:00 live. Genuine export=live parity break. **Excluding F9 from selection was proposed as containment and REJECTED** — the doctrine forbids selecting a book from a partial view of the search space, which is the exact failure that produced an incumbent reaching ~11% of the market's clean directional moves. The data is corrected instead.
+
+**(c) EVERY HOUR-LABELLED FINDING RELABELS.** Including "size≥8 clusters concentrate at 11:00–13:00 EST", which moves to the **NY open** and **strengthens**. Restate rather than inherit.
+
+### 7. WHAT IS NOT AFFECTED — THE CONTAINMENT
+`dots_thresholds.py` L104 derives its day boundary from `str(times[i])[8:10]` — **the raw broker timestamp, not `EST_Hour`.** So mechanism D's thresholds are untouched. `EST_Hour` enters `terrain.py` only as a **label** (L70 reads it, L97 writes `est_hour_start` and `session`); the episode set is built from Close, ATR_1M and mechanism-D thresholds.
+
+**Therefore the coverage denominator is intact.** Episode counts, the 3,816 UP / 3,674 DOWN split, displacements, efficiencies, durations and the incumbent's measured REACH (1.389% UP / 0.735% DOWN) are all unaffected. **REACH is valid in absolute as well as relative terms** — this is not the weaker "wrong map used consistently" case. The 50/50 directional balance holds across the grid, so the no-quota argument survives intact. **Only conclusions about *when* were ever corrupt.**
+
+### 8. A SECOND DEFECT FOUND IN THE SAME PASS
+`terrain.py` L63/L108 label every emitted row `ADX_Value >= 15 & Volume > 50 & post-warmup`, while `cluster_profiler.thrust_events` L224 applies **post-warmup only**. **45.2% of episodes (3,385 of 7,490) start on bars outside the stamped mask.** Under the standing construction the filter is part of the finding, so the label misstates the population. Either apply `eligible_universe` or correct the label — the two give materially different terrains and the choice must be deliberate. `terrain.py` is not sacred.
+
+### 9. STATUS
+Execution steps **17r** (the EA fix, next EA window), **17s** (corrected data), **17t** (the three consequences) and **17u** (the terrain eligibility label) are open. The EA is FROZEN and was not edited. **The operator's domain knowledge caught a defect that six independent price anchors then confirmed — the fourth time this phase that his instinct preceded the measurement.**
