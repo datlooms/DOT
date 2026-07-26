@@ -126,6 +126,15 @@
   not summed):  DOT-alone (S.20, warm-up-guarded) $89,432 / -153.7  ->  +Role2 D2D-conviction +$1,015  ->
   +Role1 D2D-gap +$1,900  ->  CROWN JEWEL $92,347 / -104.4.
   (The modelled $92,567 is SUPERSEDED by the built $92,347 — ~$220 admission-timing displacement, immaterial.)
+!! 2026-07-27 EXPORT-CLOCK NOTE — THIS FIGURE WAS MEASURED WITH FRIDAY AFTERNOONS EXCLUDED.
+   DOT.cs L730-731 exported a clock 2-3h fast (server time fed into a gmtTime parameter), so
+   portfolio_simulation_engine.py L148's Friday gate fired from true 13:00 instead of 16:45 and
+   removed roughly the last three hours of every Friday cash session. On corrected data the same
+   sealed-baseline window scores 2,739 tr / WR 91.9% / PF 5.92 / net $91,506 (+41 tr, -$789);
+   the recorded $92,347 reproduces at $92,296 on the broken clock. THE FIGURES ABOVE STAND AS
+   THE HISTORICAL RECORD; they are not the corrected-clock numbers.
+   Law: S.22 non_negotiables_developer.txt. Detail: DOT_codebase_map.md section 5.
+   THE LIVE EA CLOCK WAS ALWAYS CORRECT — do not "fix" the live path or the sacred engine file.
   ISOLATION: change confined to portfolio_simulation_engine.py + conviction.py + score_g.py; oracle
   (dots_thresholds.py 518862bf), wf.py, core.py BYTE-IDENTICAL. Build contract: DOT_d2d_integration_blueprint.md.
 
@@ -169,6 +178,10 @@
   3. BE: profit≥1×step → SL=entry±step (printed only)
   4. TIERS: entry±N×step → TiersReached=N  5. LEAPFROG Tiers≥3 → SL=entry±(Tiers-lag)×step
      lag=3 if Micro_LogReturn×dir≥0.00012 else 2   6. FRIDAY 16:45 EST close ALL
+    !! 2026-07-27: the Friday 16:45 EST rule is CORRECT and unchanged in the live EA (L8781 /
+       L8935, driven by GetEstTime()). What was wrong is the EXPORTED clock the PYTHON harness
+       reads (DOT.cs L730-731, 2-3h fast), so the backtest gate fired from true 13:00. The gate
+       itself needs no change. See DOT_codebase_map.md section 5 and S.22.
   7. EXECUTION MODEL — PER-BAR SL REPOSITIONING (LAW; matches portfolio_simulation_engine.py):
      The EA REPOSITIONS the SL ONLY at a NEW BAR (bar close), computed off the CLOSED bar's
      High/Low. Arm / tier / trail detection uses the closed bar's extremes — NOT the live Bid

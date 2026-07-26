@@ -12,12 +12,12 @@ deconstruct second (see DOT_linear_development_schedule.txt).
 
 ```
 SECTION 1.0   [  102 –  536]  INITIALISATION (OnInit @195)
-SECTION 1.1   [  537 – 1120]  EXPORTDATAFORANALYSIS (ExportDataForAnalysis @564)
+SECTION 1.1   [  537 – 1120]  EXPORTDATAFORANALYSIS (ExportDataForAnalysis @564)   !! CARRIES THE EXPORT-CLOCK DEFECT at L730-731 — see §5
 SECTION 1.2   [ 1121 – 1413]  MAIN LOOP (OnTick @1123)              << change (e): gate Dots SL reposition to new-bar
 SECTION 1.3   [ 1414 – 1425]  TIDYING UP & HEALTH CHECKS
 SECTION 1.4   [ 1426 – 1511]  KAMA WARM-START PERSISTENCE            *** SACRED ***
 SECTION 2.0   [ 1512 – 1725]  USER SETTINGS (externs)
-SECTION 2.1   [ 1726 – 1780]  GLOBAL TIMING MODULE (EST / DST)
+SECTION 2.1   [ 1726 – 1780]  GLOBAL TIMING MODULE (EST / DST)      LIVE PATH IS CORRECT — DO NOT TOUCH (see §5)
 SECTION 3.0   [ 1781 – 2147]  GLOBAL VARIABLES & MEMORY              << F1 state + jar counter
 SECTION 4.0   [ 2148 – 2174]  TEMA-ATR CALCULATION
 SECTION 4.1   [ 2175 – 2220]  TRUE RANGE CAPPING
@@ -49,7 +49,7 @@ SECTION 8.0   [ 7624 – 8031]  TRADE EXECUTION & MANAGEMENT (D2D + OBVfriend)
 SECTION 8.1   [ 8032 – 8218]  ADVANCED TRADE MANAGEMENT              << momentum-runner + jar BE-free decrement
 SECTION 8.2   [ 8219 – 8555]  PARTIAL TP VISUALS & LOGIC
 SECTION 8.3   [ 8556 – 8613]  ORDER MANAGEMENT HELPERS
-SECTION 8.4   [ 8614 – 8683]  SESSION ENFORCEMENT LOGIC (Friday close)
+SECTION 8.4   [ 8614 – 8683]  SESSION ENFORCEMENT LOGIC (Friday close)   correct live (runs off GetEstTime); see §5
 SECTION 8.5   [ 8684 – 8770]  DATA CACHING HELPER & RE-PAINT
 SECTION 8.6   [ 8771 – 8852]  DOTS TRADE MANAGEMENT                  << lag entry + jar admission + momentum-conditional initial SL
 SECTION 8.7   [ 8853 – 8926]  DOTS HELPERS
@@ -206,7 +206,10 @@ memory chain, the threshold oracle, the KAMA persistence, or the export schema.
 
 ```
 OnInit                     @195     seeds buffers, KAMA warm-start, init tables
-ExportDataForAnalysis      @564     CSV export (parity path) — SACRED
+ExportDataForAnalysis      @564     CSV export (parity path) — SACRED, WITH ONE AUTHORISED
+                                    EXCEPTION: the L730-731 clock defect (§5). Sacred here means
+                                    schema/column-order/value-definition locked, NOT that the
+                                    defect is preserved. The clock fix is the only permitted edit.
 OnTick                     @1123    main loop
 ResizeAndSmartShift        @2441    sole shift authority — SACRED
 Calc_Microstructure_OnBar  @3406    Micro_LogReturn, Micro_OrderFlowDelta (F1/runner inputs)
@@ -231,3 +234,139 @@ ManageDotsPositions        @8929    << change (e): per-tick -> per-bar SL reposi
                                        when zero Dots open; assign lots=2.0 DIRECTLY (bypass conviction,
                                        no 4x); book LOCK_FRAC=1.0 (S.20 gaps keep GAP_LOCK=3). 14 gaps.
 ```
+
+
+---
+
+## 5. THE EXPORT CLOCK DEFECT (found 2026-07-27; EA FROZEN, fix PENDING)
+
+**READ THIS BEFORE EDITING SECTION 1.1. A developer following the rest of this map would
+rebuild the defect.** The law is S.22 in `non_negotiable_prompts/non_negotiables_developer.txt`;
+this section is the working detail at the point of use.
+
+### 5.1 The defect — two errors stacked, L730-731
+
+```
+L1761  long _GetEstOffsetForTime(datetime gmtTime) { ... }    <-- PARAMETER DECLARED gmtTime
+L1770  datetime GetEstTime() { return (datetime)(TimeGMT()+(datetime)GetUSEasternOffsetSeconds()); }   LIVE — CORRECT
+L730   long estOffset=_GetEstOffsetForTime(Time[i]);          <-- Time[i] is the bar's SERVER time
+L731   datetime estBarTime=(datetime)(Time[i]+(datetime)estOffset);
+```
+
+1. **SELECTED on the wrong instant** — `_IsUSDST` is evaluated on server time, not GMT.
+2. **APPLIED to the wrong base** — the US-Eastern offset is added to server time, not GMT.
+
+(2) is the whole error in practice. (1) is latent: on the Jan19-Jul21 span it misassigned
+**zero bars**, because both DST boundaries fall inside weekend gaps (2026-03-07/08 and
+2026-03-28/29 all carry 0 bars). It must still be fixed.
+
+### 5.2 THE LIVE PATH IS CORRECT AND IS NOT TO BE TOUCHED
+
+`GetEstTime()` at L1770 already feeds `TimeGMT()`. The chart visuals, the session containers,
+the DST transitions and the live Friday cutoff at **L8781 / L8935** all run off it and all
+behave correctly — observed by the operator over months of live use.
+
+**THE MOST LIKELY WRONG FIX IS TO "HARMONISE" THE TWO BY CHANGING THE LIVE PATH. DO NOT.
+Only `ExportDataForAnalysis()` changes.** One pre-existing imprecision is noted and is
+explicitly OUT OF SCOPE: `_IsUSDST` compares against the second Sunday of March at 02:00 in
+its argument's own clock, so even the live path flips ~5h early on that one day per year.
+
+### 5.3 The fix, as code
+
+```
+long serverToGmtSeconds=_GetServerToGmtOffsetSeconds();
+datetime gmtBarTime=(datetime)(Time[i]-(datetime)serverToGmtSeconds);
+long estOffset=_GetEstOffsetForTime(gmtBarTime);
+datetime estBarTime=(datetime)(gmtBarTime+(datetime)estOffset);
+```
+
+**RESIDUAL DESIGN DECISION — NOT PRE-DECIDED. How `_GetServerToGmtOffsetSeconds()` sources the
+offset for a HISTORICAL bar.** `TimeGMT()` and `TimeCurrent()` give only the CURRENT offset, and
+the broker's own DST schedule shifted mid-span. Three options; the choice is the human's:
+
+- **(a) `(long)(TimeCurrent()-TimeGMT())` captured once at export.** Correct for bars in the
+  same DST regime as the export run; wrong by an hour for bars in the other regime.
+- **(b) Schedule-derived: `_IsUSDST(gmtBarTime) ? 3*3600 : 2*3600`.** Self-adjusting across
+  regimes and valid because this broker switches on the US schedule — but it hardcodes two
+  broker constants and breaks silently on a broker change.
+- **(c) (a) as the anchor, stepped by the broker's own switch schedule.** Most correct, most code.
+
+**DO NOT SHIP (b) WITHOUT RECORDING THAT IT ENCODES A BROKER PROPERTY.**
+
+### 5.4 Measured facts — so the fix is verifiable, not asserted
+
+- **Server-to-true-EST is a CONSTANT -7h. The broker follows the US DST schedule, not the EU
+  one.** The opening bell sits at broker 16:30 in EVERY week of the span; under EU DST it would
+  sit at 15:30 during 2026-03-09..03-27, and it does not.
+- That falls out as **-2h on 46,425 bars** (to 2026-03-06) and **-3h on 130,826 bars** (from
+  2026-03-09). The change is the **US offset moving -5 -> -4**, not the broker moving.
+- **The EU/US divergence IS real** but surfaces in the London anchor: 2026-03-09..03-27 reads
+  London open at **04:00 EDT, not 03:00**. A calendar rule predicting a -6h server window was
+  refuted by measurement.
+- **Blast radius: three columns only** — `EST_Hour`, `EST_Minute`, `EST_DayOfWeek`, at CSV field
+  indices **6, 7, 8**. `estOffset`/`estBarTime` appear ONLY at L730/731/734; `estDt` ONLY at
+  L732-734 and L942-944. Verified by grep, not assumed.
+
+### 5.5 CONTAINMENT — do not re-derive the terrain
+
+`dots_thresholds.py` L104 takes its mechanism-D day boundary from the **raw broker timestamp**
+(`str(times[i])[8:10]`), NOT from `EST_Hour`. Therefore **mechanism D, every adaptive threshold,
+the episode set, episode counts, the 3,816 UP / 3,674 DOWN split and the incumbent's measured
+REACH are ALL UNTOUCHED.** The clock entered only as a label.
+
+**ONLY CONCLUSIONS ABOUT *WHEN* WERE EVER CORRUPT.** Nobody needs to rebuild the terrain.
+
+### 5.6 The relabelling list — restate, do not inherit
+
+- S2B terrain (W=15/K=p85/E=p75, MARKET) reported peak median displacement at "12:00 midday"
+  (140.4pt, 204 largest-decile). **CORRECTED it is 09:00, THE NY CASH OPEN — 144.0pt, 225
+  largest-decile** — decaying through the morning, with the TRUE lunch lull at 12:00-13:00
+  carrying 76.5/72.0pt, roughly half. Peak is 09:00 in all four grid cells.
+- **"size>=8 clusters concentrate at 11:00-13:00 EST" RELABELS TO THE NY OPEN AND STRENGTHENS.**
+  Deep clusters form where the market's largest clean directional runs are. It was never a
+  midday effect.
+- **ATR-tercile and monthly-bucket findings are NOT hour-derived and are unaffected.**
+
+### 5.7 SACRED FRIDAY GATE — `portfolio_simulation_engine.py` L148 — DO NOT TOUCH
+
+Byte-locked at `bb498eb13ce3`. It reads the export clock and **needs no change**. On the broken
+clock it blocked **3,835 bars from true 13:00**, removing roughly the last three hours of every
+Friday cash session. On the corrected data the **same unchanged line blocks 115 bars at true
+16:45-16:49** — exactly the intended window (this feed's Friday session ends 16:49; 5 bars x 23
+Fridays; 3 Fridays are early closes).
+
+**THE GATE WAS ALWAYS CORRECT — IT WAS READING A WRONG CLOCK. A developer who "fixes" that file
+will break it.**
+
+### 5.8 EVERY HISTORICAL FIGURE WAS MEASURED WITH FRIDAY AFTERNOONS EXCLUDED
+
+| dataset | broken clock | corrected clock |
+|---|---|---|
+| stitched 177,251 (Jan19-Jul21) | 3,057 tr / WR 90.9 / PF 5.07 / $98,205 | **3,101 / WR 90.6 / PF 4.81 / $97,675** |
+| sealed-baseline window 152,983 (Jan19-Jun25) | 2,698 tr / WR 92.3 / PF 6.40 / $92,296 | **2,739 / WR 91.9 / PF 5.92 / $91,506** |
+
+Newly scoreable Friday afternoon (true EST 13:00-16:59): 101 trades, net $240, **WR 74.3%** —
+materially worse than the book's 90.6%, which is a real session finding rather than noise.
+
+**EVERY FIGURE IN THE PROJECT RECORD BEFORE 2026-07-27, INCLUDING THE $92,347 CROWN-JEWEL
+CANARY, WAS MEASURED WITH FRIDAY AFTERNOONS EXCLUDED.** The recorded $92,347 reproduces at
+$92,296 on the broken clock (the ~$51 is seam displacement from scoring the full stitched frame
+and splitting). Corrected, the same window is **PF 5.92 / $91,506**.
+
+### 5.9 ACCEPTANCE GATE ON THE FIX — PARITY, NOT REVIEW
+
+After the EA fix, a fresh export must reproduce the corrected columns in
+`DOT_stitched172_TRUEEST_jan19_jul21_part01..10.csv` (manifest
+`DOT_stitched172_TRUEEST_manifest.csv`) **exactly**, on overlapping bars. That equality IS the
+test. Walk the checklist items in `DOT_post_update_checklist.txt` PHASE K.
+
+### 5.10 How it was found — the method matters more than the defect
+
+The terrain reported peak displacement at "12:00 midday", the flattest hour of the NY session.
+**The operator rejected it from domain knowledge.** Four candidate mechanisms — ATR normaliser,
+efficiency filter, episode bounding, day concentration — were each tested and each exonerated
+before the clock was implicated. The opening bell was then located **from price alone** (median
+range stepping 36.50 -> 93.00 and median volume 224 -> 490 in a single minute) and six
+independent anchors confirmed the conversion. A calendar-derived rule was **refuted by
+measurement**. That sequence — domain-knowledge challenge, mechanism elimination, price-anchored
+location, multi-anchor confirmation — is the standing method.

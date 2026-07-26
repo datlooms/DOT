@@ -16,6 +16,10 @@ momentum-runner). Entry requires ≥2 signals concurrent, OR a solo signal with
 Volume ≥ 300 ticks (unconfirmed solos are blocked). Eligibility: ADX ≥ 15 AND
 Volume > 50. Every signal is D2D-direction-gated. The only exits are: initial SL,
 BE-nudge SL, LeapFrog trailing SL, and Friday 16:45 EST forced close.
+    !! 2026-07-27: the Friday 16:45 EST rule is CORRECT and unchanged in the live EA (L8781 /
+       L8935, driven by GetEstTime()). What was wrong is the EXPORTED clock the PYTHON harness
+       reads (DOT.cs L730-731, 2-3h fast), so the backtest gate fired from true 13:00. The gate
+       itself needs no change. See DOT_codebase_map.md section 5 and S.22.
 
 SCALE: TRUE FTMO US30.cash $1 per point per 1.0 lot. One point = one dollar at
 one lot. (An earlier era used 100×; every figure here is the corrected 1×.)
@@ -221,6 +225,15 @@ one lot. (An earlier era used 100×; every figure here is the corrected 1×.)
        Roles INTERACT (shared jar + short conviction) -- verify the COMBINED number directly, not the
        sum. Build-guards: short_mult sizes shorts (book x2 210->249 with Role 2); D2D-gap all 2.0 lots,
        no 4x. The modelled $92,567 is superseded by the built $92,347 (admission-timing, immaterial).
+!! 2026-07-27 EXPORT-CLOCK NOTE — THIS FIGURE WAS MEASURED WITH FRIDAY AFTERNOONS EXCLUDED.
+   DOT.cs L730-731 exported a clock 2-3h fast (server time fed into a gmtTime parameter), so
+   portfolio_simulation_engine.py L148's Friday gate fired from true 13:00 instead of 16:45 and
+   removed roughly the last three hours of every Friday cash session. On corrected data the same
+   sealed-baseline window scores 2,739 tr / WR 91.9% / PF 5.92 / net $91,506 (+41 tr, -$789);
+   the recorded $92,347 reproduces at $92,296 on the broken clock. THE FIGURES ABOVE STAND AS
+   THE HISTORICAL RECORD; they are not the corrected-clock numbers.
+   Law: S.22 non_negotiables_developer.txt. Detail: DOT_codebase_map.md section 5.
+   THE LIVE EA CLOCK WAS ALWAYS CORRECT — do not "fix" the live path or the sacred engine file.
        ONLY — the multiplier IS the scaling; the 12-lot worst-case stack (-$1,800) is inside the
        -$2,500 gate at 1-lot base, but -$3,600 (over the gate) at 2-lot base.
 

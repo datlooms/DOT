@@ -326,6 +326,15 @@
        daily max-DD -145.9 | 6/6 folds (min fold PF 5.39) | OOS PF 6.96 / net $29,190. Option map:
        DOT-alone $89,432/-153.7 -> +Role2 +$1,015 -> +Role1 +$1,900 -> $92,347. (Modelled $92,567
        superseded by built $92,347 -- ~$220 admission-timing displacement, immaterial.)
+!! 2026-07-27 EXPORT-CLOCK NOTE — THIS FIGURE WAS MEASURED WITH FRIDAY AFTERNOONS EXCLUDED.
+   DOT.cs L730-731 exported a clock 2-3h fast (server time fed into a gmtTime parameter), so
+   portfolio_simulation_engine.py L148's Friday gate fired from true 13:00 instead of 16:45 and
+   removed roughly the last three hours of every Friday cash session. On corrected data the same
+   sealed-baseline window scores 2,739 tr / WR 91.9% / PF 5.92 / net $91,506 (+41 tr, -$789);
+   the recorded $92,347 reproduces at $92,296 on the broken clock. THE FIGURES ABOVE STAND AS
+   THE HISTORICAL RECORD; they are not the corrected-clock numbers.
+   Law: S.22 non_negotiables_developer.txt. Detail: DOT_codebase_map.md section 5.
+   THE LIVE EA CLOCK WAS ALWAYS CORRECT — do not "fix" the live path or the sacred engine file.
 
 ================================================================================
  PHASE 8 — VERIFICATION (before any deconstruction)

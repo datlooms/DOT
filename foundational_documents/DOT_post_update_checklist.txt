@@ -224,6 +224,51 @@
          changes; no retired mechanism returned.
 [ ] K.5  The complete system — not just the 6 edits — satisfies all standing
          directives. Any gap flagged and resolved before sign-off.
+[ ] K.6  EXPORT CLOCK — run PHASE L below if ExportDataForAnalysis was touched at all.
+
+
+═══════════════════════════════════════════════════════════════════════════
+ PHASE L: EXPORT CLOCK PARITY (run IF AND ONLY IF the L730-731 clock fix
+ was applied; law = S.22 non_negotiables_developer.txt, detail = codebase_map §5)
+═══════════════════════════════════════════════════════════════════════════
+[ ] L.1  ONLY ExportDataForAnalysis changed. GetEstTime() @1770,
+         GetUSEasternOffsetSeconds() @1767, _GetEstOffsetForTime() @1761 and
+         _IsUSDST() @1728 are BYTE-IDENTICAL. The live path was already correct;
+         "harmonising" it is the most likely wrong fix.
+[ ] L.2  The live Friday cutoff at L8781 / L8935 is unchanged and still fires at
+         16:45 EST on the chart.
+[ ] L.3  The bar time is converted to GMT BEFORE _GetEstOffsetForTime is called,
+         so the export satisfies the same gmtTime contract the live path does.
+[ ] L.4  The server-to-GMT sourcing option (a) / (b) / (c) per codebase_map §5.3
+         is RECORDED in the change note. If (b) was shipped, the note states
+         explicitly that it encodes a broker property.
+[ ] L.5  PARITY GATE — fresh export reproduces EST_Hour, EST_Minute and
+         EST_DayOfWeek EXACTLY against
+         DOT_stitched172_TRUEEST_jan19_jul21_part01..10.csv
+         (manifest DOT_stitched172_TRUEEST_manifest.csv) on every overlapping bar.
+         THIS EQUALITY IS THE TEST OF THE FIX AND IS NOT OPTIONAL. Any single-bar
+         disagreement on any of the three columns = the fix is wrong.
+[ ] L.6  The other 169 columns are unchanged by the fix (blast radius is three
+         columns at field indices 6, 7, 8 — verify, do not assume).
+[ ] L.7  ANCHOR A — opening bell at EST 09:30: median range steps 36.50 -> 93.00
+         and median volume 224 -> 490 in that single minute.
+[ ] L.8  ANCHOR B — last cash bar 15:59 (closing-auction volume peak there,
+         collapse at 16:00), so open-to-close = 16:00:00 − 09:30 = exactly 6.50h.
+[ ] L.9  ANCHOR C — CME maintenance break 17:05-18:04 EST.
+[ ] L.10 ANCHOR D — 08:30 ET release step lands at 08:30.
+[ ] L.11 ANCHOR E — London open 03:00 EST, and 04:00 EDT in the 2026-03-09..03-27
+         EU/US divergence window (04:00 there is CORRECT, not a failure).
+[ ] L.12 ANCHOR F — Asia open 20:00 EST.
+[ ] L.13 DAY-OF-WEEK INVARIANT: Sun + Fri = one full trading day under the CME
+         week (34,570 against a Mon-Thu mean of 35,670). Flat Mon-Fri is NOT the
+         invariant and must not be "fixed" toward.
+[ ] L.14 portfolio_simulation_engine.py is STILL bb498eb13ce3. Its L148 Friday gate
+         needs NO change: on corrected data it blocks 115 bars at true 16:45-16:49.
+         DO NOT TOUCH THAT FILE.
+[ ] L.15 Harness re-baselined and the new figures recorded: stitched 177,251 ->
+         3,101 tr / WR 90.6 / PF 4.81 / $97,675; sealed-baseline window 152,983 ->
+         2,739 tr / WR 91.9 / PF 5.92 / $91,506. Every pre-2026-07-27 figure,
+         including the $92,347 canary, was measured with Friday afternoons EXCLUDED.
 
 FINAL: all items PASS -> proceed to the FTMO demo (the true final test).
        Any FAIL -> stop, fix, re-run the affected phase.
