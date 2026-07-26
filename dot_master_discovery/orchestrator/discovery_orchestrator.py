@@ -528,20 +528,82 @@ def resume_family(fam, script):
     return frame[SCHEMA].to_dict('records')
 
 
-def run_family(fam, script, mod, fmt, kw_builder, df, adaptive, structural, warmup):
-    orig = df['D2D_Trend_Dir'].values.copy()
-    kw = kw_builder(df, adaptive, structural, warmup)
+FRAME_MUTATORS = {
+    'F1': '__F1SEQ', 'F2': '__F2TRANS', 'F3': '__F3COND', 'F4': '__F4DIV', 'F5': '__F5PERS',
+    'F6': '__F6CROSS', 'F7': '__F7REV', 'F8': '__F8REL', 'F9': '__F9SESS', 'F11': '__F11LL',
+    'F12': '__F12DEPTH',
+}
+GATE_MUTATORS = ('F4', 'F7', 'F12', 'F13')
+
+
+class FrameGuard:
+    """Restores the shared frame to the exact state a family received it in.
+
+    Eleven of the twelve pool/diagnostic families inject their own scratch column
+    (__F1SEQ, __F3COND, ...) into the SHARED frame, and four also overwrite
+    D2D_Trend_Dir. F0 is the only family that validates its input vocabulary, so
+    it is the one that detects the contamination: its EXCLUDE-complement
+    assertion correctly rejects any extra column. Restoring the gate column alone
+    was never enough; the column SET is the same class of hazard on a different
+    object. Both are restored here, on every path that can execute a family.
+    """
+
+    def __init__(self, df):
+        self.df = df
+        self.cols = list(df.columns)
+        self.gate = df['D2D_Trend_Dir'].values.copy()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        known = set(self.cols)
+        extra = [c for c in self.df.columns if c not in known]
+        if extra:
+            self.df.drop(columns=extra, inplace=True)
+        self.df['D2D_Trend_Dir'] = self.gate
+        return False
+
+
+def assert_frame_clean(df, baseline_cols, fam):
+    extra = [c for c in df.columns if c not in set(baseline_cols)]
+    if extra:
+        raise SystemExit(
+            f"ABORT [{fam}] the shared frame carries scratch columns from another family: {extra}. "
+            f"F0 validates its vocabulary and will reject these. FrameGuard should have removed them; "
+            f"a family injected a column outside a guarded region.")
+    return True
+
+
+def run_family(fam, script, mod, fmt, kw_builder, df, adaptive, structural, warmup, limit=0):
+    baseline_cols = list(df.columns)
+    assert_frame_clean(df, baseline_cols, fam)
     t0 = time.time()
-    try:
+    with FrameGuard(df):
+        kw = kw_builder(df, adaptive, structural, warmup)
+        bounds, n_units = _bounds_for(fam, kw)
+        if limit:
+            n_units = min(limit, n_units)
+        expected = None
         if fam == 'F0':
-            _b, n_units = _bounds_for(fam, kw)
+            expected = f0_combo_count(kw, 0, n_units)
             raw, _exp = run_f0_chunk(df, adaptive, structural, warmup, kw, 0, n_units)
             common = f0_rows_from_raw(df, adaptive, structural, warmup, raw)
+            actual = _exp
         else:
-            rows = mod.run_search(df, adaptive=adaptive, structural=structural, warmup=warmup, **kw)
+            sub = _slice_axis(kw, CHUNK_AXIS[fam], 0, n_units) if limit else dict(kw)
+            if fam == 'F1':
+                expected = n_units * len(kw['cond_labels']) * len(kw['directions'])
+            rows = mod.run_search(df, adaptive=adaptive, structural=structural, warmup=warmup, **sub)
             common = fmt(rows, script)
-    finally:
-        df['D2D_Trend_Dir'] = orig
+            actual = expected
+        if expected is not None and actual != expected:
+            raise SystemExit(
+                f"ABORT [{fam}] SEQUENTIAL-PATH CANDIDATE-COUNT INVARIANT FAILED: {actual} != "
+                f"{expected}. The bound applied to this path did not search what it promised.")
+        print(f"    [{fam}] sequential path bounded to {n_units} axis units"
+              + (f" | candidate invariant {actual} == {expected}" if expected is not None
+                 else " | no candidate expectation for this family"), flush=True)
     csv, done = _family_paths(fam, script)
     _write_atomic_csv(pd.DataFrame(common, columns=SCHEMA), csv)
     _mark_family_done(csv, done, len(common))
@@ -682,7 +744,9 @@ def _chunk_worker(payload):
         return (fam, idx, -1, 0.0, hi - lo)
     df, adaptive, structural, warmup, kw = orch._worker_context(scope, frame_path, fam)
     t0 = time.time()
-    common, expected = orch.run_chunk_rows(fam, script, df, adaptive, structural, warmup, kw, lo, hi)
+    with orch.FrameGuard(df):
+        common, expected = orch.run_chunk_rows(fam, script, df, adaptive, structural, warmup,
+                                               kw, lo, hi)
     if fam == 'F0':
         pk = orch._f0_chunk_pickle(script, idx)
         tmpp = pk + '.tmp'
@@ -1098,7 +1162,8 @@ def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=Non
             print(f"  [family {i} of {len(pending)}] {fam} ({script}) starting{eta}", flush=True)
             t0 = time.time()
             with _Heartbeat(f"{fam} ({script})"):
-                run_family(fam, script, mod, fmt, builders[fam], df, adaptive, structural, warmup)
+                run_family(fam, script, mod, fmt, builders[fam], df, adaptive, structural,
+                           warmup, limit=limit)
             durations.append(time.time() - t0)
             print(f"  [family {i} of {len(pending)}] {fam} done in {_hms(durations[-1])}", flush=True)
     all_rows = []
