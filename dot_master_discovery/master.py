@@ -253,7 +253,7 @@ def s4_schema(out, input_sha):
                 pass
         if frames:
             uni = pd.concat(frames, ignore_index=True)
-            uni.to_csv(master, index=False, lineterminator='\n')
+            uni.to_csv(master, index=False, lineterminator='\n', encoding='utf-8')
             print(f'  schema-unify: {len(uni)} rows → results/discovery_master.csv')
         else:
             print('  schema-unify: no discovery results present (discover-fresh not run) — NOT marking '
@@ -311,7 +311,8 @@ def s5_filter(out, input_sha):
             print(f'  THE POOL IS NOT THE FULL FOURTEEN: {_u} {_v} discovered and reported but '
                   f'cannot enter a selected book. Stated so the operator is never told a book spans '
                   f'families it does not.')
-    keep.to_csv(os.path.join(results, 'candidates.csv'), index=False, lineterminator='\n')
+    keep.to_csv(os.path.join(results, 'candidates.csv'), index=False, lineterminator='\n',
+                encoding='utf-8')
     print(f'  filter (trades≥30 & folds_plus≥4 & agg_pf≥2.0): {len(keep)}/{n_total} candidates '
           f'scoreable by S8')
     mark_done(out, 'S5', {'input_sha': input_sha, 'candidates': int(len(keep))})
@@ -431,7 +432,8 @@ def s7_contenders(df, ad, st, w, sigs, out, input_sha):
             'oos_rel_months', 'oos_rel_pf', 'oos_rel_net',
             'fold_count', 'fold_days_each', 'folds_evaluable', 'folds_status', 'folds_basis',
             'oos_prop_pf', 'oos_prop_net', 'oos_prop_window', 'oos_prop_days', 'oos_prop_evaluable']
-    pd.DataFrame(rows)[cols].to_csv(os.path.join(contenders, 'contenders.csv'), index=False, lineterminator='\n')
+    pd.DataFrame(rows)[cols].to_csv(os.path.join(contenders, 'contenders.csv'), index=False,
+                                        lineterminator='\n', encoding='utf-8')
     mark_done(out, 'S7', {'input_sha': input_sha})
     return rows
 
@@ -479,13 +481,13 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
                   'the objective, not an error, and there is nothing to score. NOT marking done.')
             return None
         fresh_path = os.path.join(committed, 'discovered_book.csv')
-        book.to_csv(fresh_path, index=False, lineterminator='\n')
+        book.to_csv(fresh_path, index=False, lineterminator='\n', encoding='utf-8')
         book_tag = (f'S5B-SELECTED book ({len(book)} signals; {fresh_path}) — chosen by the '
                     f'per-direction greedy/CELF search, NOT a top-N sort')
         base = _baseline_top50_sort(out)
         if base is not None:
             bpath = os.path.join(committed, 'baseline_top50_sort_book.csv')
-            base.to_csv(bpath, index=False, lineterminator='\n')
+            base.to_csv(bpath, index=False, lineterminator='\n', encoding='utf-8')
             print(f'  BASELINE CONTENDER written: {os.path.basename(bpath)} — the old '
                   f'top-50-by-worst-day sort, kept ONLY so the sort-vs-selection delta is visible. '
                   f'It is NOT what S8 scores as the discovered book.')
@@ -1650,7 +1652,8 @@ def s8b_cluster_profile(df, ad, st, w, pool, anchor, book_file, committed, out, 
         res.to_csv(f, index=False, lineterminator='\n')
     os.replace(tmp, path)
     sm = pd.DataFrame(summary)
-    sm.to_csv(os.path.join(out, 'cluster_basis_summary.csv'), index=False, lineterminator='\n')
+    sm.to_csv(os.path.join(out, 'cluster_basis_summary.csv'), index=False,
+                lineterminator='\n', encoding='utf-8')
     print(f'  wrote {len(res)} rows → {path}')
     mark_done(out, 'S8B', {'input_sha': input_sha, 'rows': int(len(res)), 'conditions': len(pool)})
     return {'rows': int(len(res)), 'conditions': len(pool), 'summary': sm, 'overlaps': overlaps,
@@ -1764,6 +1767,11 @@ def resolve_book(book):
 
 
 def main():
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
     ap = argparse.ArgumentParser(description='DOT master orchestrator (S0→S9).')
     ap.add_argument('--data', default='/data')
     ap.add_argument('--out', default=os.path.join(_HERE, 'discovery'))
