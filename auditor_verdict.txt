@@ -1,75 +1,68 @@
-AUDITOR — FOURTH PASS (SCOPED)
+AUDITOR — FIFTH PASS (SCOPED)
 STATE
 
-HEAD 48ad84f. DEV_CHECKLIST.md 237 lines / 9fb0e40253ef ✓ · DEVELOPER_BRIEF.md 123 lines / f68a75fbcdd5 ✓ · master.py 3d45bd3b7f74 and the sacred five unchanged ✓.
+HEAD e0eb79a. DEV_CHECKLIST.md 250 lines / 715a4f3499a9 ✓ · DEVELOPER_BRIEF.md 123 lines / b8c7102652a0 ✓ · master.py 3d45bd3b7f74 and the sacred five unchanged ✓.
 
-Delta confirmed confined by measurement, not assertion: an opcode-level diff against c85d3e4be524 shows changed regions only in **V2 SURVIVAL** and ## APPENDIX D. The brief's only change is the checklist sha reference. Everything else — 24 items, Appendices A and B, the UNEVALUABLE table, signal_id, the reason_code vocabulary, the determinism clause, item 5's pointer — unchanged, not re-verified.
 
 AMENDMENT 1 — V2's BASIS: APPLIED, UNAMBIGUOUS. One residual.
+AMENDMENTS 3 AND 4 — BOTH APPLIED CORRECTLY
 
-The new clause is exact and closes the defect: "worst_day(s,T) is the minimum over days in T of the daily P&L sum of signal s's OWN trades. Gap fillers are excluded — they fire only when the book is flat and are attributable to no candidate signal. T is the training segment; no full-span quantity enters." Plus "THE BOOK-LEVEL SURVIVAL TEST IS NOT THIS CLAUSE… V2 guards against a pathological single signal; item 16 guards the account. Do not merge them." Only one reading survives. Dropping the median rather than reconciling it was right — it did no work, and the retained claims (−$204.7; 0 of 50 at any sane margin) both reproduce on my construction.
+concurrence_profiler now has three rows: 239 the console depth distribution; 841 np.argsort(-J[iu])[:TOP_PAIRS_N], correctly described as a fixed top-N over a Jaccard matrix emitted to CSV, sanctioned on the ground that a fixed documented N is not a percentile; 1072 np.sort(v) in the circular-shift null, a null-statistic array. The INVALID row now reads "a single signal exceeds the daily ceiling on train" with the not-the-account-test note — the contradiction with V2's "item 16 guards the account. Do not merge them" is closed. ✓
 
-Residual contradiction, and it is in the section you asked me to check. The three-value return table still reads:
+POINT 5 — WRITTEN IN, ACCURATELY
 
-| INVALID | V2 breached — fails the account constraint on train |
+Both stages are now on the page, stage (i) is named as the unstable one, and cluster_profiler.py L132 is given as the exact ambiguous case with its classification stated. That is what I asked for and it is stated more precisely than I put it. ✓
 
-V2 now states in terms that V2 is not the account test — item 16 is. The INVALID row calls a V2 breach "fails the account constraint", which is the merge the new clause four lines above explicitly forbids. Operationally harmless — the test itself is now single-valued — but it is the sentence a future reader will quote, and it contradicts the fix. Amend to something like "a single signal exceeds the daily ceiling on train".
+THE FOUR CHALLENGES
+1. Is locking three modules sufficient? NO. There is a fourth, and it is the one with prior form.
 
-AMENDMENT 2 — APPENDIX D. Four attacks, as asked.
-1. Is the 34-site manifest complete? YES — verified independently, no misses.
+I ran my own constructor sweep — every definition of build_terrain, build_cluster_set, thrust_events, eligible_universe, atr_buckets, kmeans, *regime_labels, build_category_depth across dot_master_discovery/. It returns three files: terrain.py, cluster_profiler.py, and scanners/concurrence_profiler.py.
 
-I ran my own sweep of all six tokens across every .py under dot_master_discovery/, excluding comment lines: 34 sites, PQ = 15, SORT = 19. Every file and every line number matches the manifest exactly — cluster_profiler PQ 310/311/323 and SORT 125/132/146/565; selection PQ 190/348/349/422/423/466/711/725/740 and SORT 229/231/232/273/693/706/735/774; terrain 160/161/177; analysis_engine 221; family_evidence 261/314; master 804; concurrence_profiler 239/841/1072. You were wrong about a sweep once; you are not wrong about this one.
+concurrence_profiler.py defines market objects today:
 
-2. THE TOKEN LIST DOES NOT CATCH THE IDIOM THE ARGUMENT IS BUILT ON. This is the finding of the pass.
+compute_regime_labels (L1146) and causal_regime_labels (L1099) assign every bar a regime label — a stratum over market data — via kmeans (L347) / bic_kmeans (L393) over zscored market features. Not mechanism D. Not a percentile either, which is precisely why a token sweep never saw it and why the file-level guard is the right shape.
+causal_category_membership (L931) / build_category_depth (L963) define per-condition category membership; align_pool (L244) and depth_arrays (L261) partition the pool and build per-bar depth.
 
-Appendix D's load-bearing reason for extending the sweep is stated in its own words: "dots_thresholds._floor_pct (L54-63) is sorted_vals[int(floor(count*pct))], indexed off sorted(rings[col]) at L106. Mechanism D — the project's canonical, sacred, byte-locked threshold mechanism — IS a sorted-index percentile… a contributor writing a look-ahead threshold in that style would sail straight past the abort."
+It is F12's module, invoked by the pipeline, and its strata reach emitted artifacts. And it is the module that has already produced exactly this defect class once: a full-sample regime label gating entries, fixed by splitting lab_desc from lab_causal. It is the single most likely site of a recurrence and it sits outside the lock.
 
-I verified both lines. L54-63 is exactly that. And L106 is srt = {col: sorted(rings[col]) for col in roll_cols} — the Python builtin sorted, not np.sort.
+It is also free to lock: my independent grep of items 1-24 finds only master.py ×5, family_evidence.py ×2, selection.py ×1, score_book.py ×1. terrain.py, cluster_profiler.py, concurrence_profiler.py and analysis_engine.py appear in no build item — which independently confirms your grep for the two you did lock.
 
-sorted( is not in the check's token list (np.percentile, np.quantile, .quantile(, np.sort, np.argsort, searchsorted). So the appendix cites mechanism D as proof that the sweep must cover sorted-index idioms, and then ships a sweep that does not catch mechanism D's own idiom. A contributor writing srt = sorted(vals); cut = srt[int(len(srt) * 0.9)] — the exact house style the argument names — sails past the abort just as surely as before the extension. The extension closed np.sort and left open the one form the reasoning rests on.
+2. Is the residual still narrower than the truth? Yes — in its premise, not its structure.
 
-This is not a manufactured concern; it is the section's own stated rationale failing against its own example.
+The carve-outs are right: a new module escapes, and so does a definition written into master.py / selection.py / family_evidence.py, which cannot be locked because this build edits them. You widened that correctly and the "not mechanical closure over the whole codebase" statement is honest.
 
-And the obvious fix is worse than the defect. Adding sorted( to the token list yields 74 additional sites across 24 files, nearly all plainly ordering-for-iteration (sorted(glob.glob(...)), sorted(set(...)), sorted(os.listdir(...))). The manifest would go from 34 to 108 and the signal would drown. Two workable routes instead:
+But the residual rests on the claim that file-locking "secures the market-object surface that exists today, in three named modules". The surface that exists today is four modules. So the residual understates the gap not by omitting a category but by mis-enumerating the one category it claims to have closed. You were right to suspect the width — it is still short, and this time on the enumeration rather than the edited-files dimension.
 
-Narrow on the indexing, not the sorting. The dangerous construct is a sorted array subscripted by a computed fraction of its own length. That is greppable with far better precision than sorted( alone — flag a subscript whose index expression contains len(, count, .size or .shape applied to the same array.
-Or move to file-level locking, which is the project's own precedent. Byte-lock the modules that may legitimately define market objects — terrain.py, cluster_profiler.py, and dots_thresholds.py (already locked) — with sha manifests, exactly as the sacred five are locked. Any change to a market-object-defining file then requires re-blessing regardless of idiom, and there is no false-positive problem at all.
-3. Does abort-on-drift produce false aborts? Yes — and the first one is certain, not hypothetical.
+3. Is sha-drift the same guard as the sacred five, or only in form? Only in form, as written.
 
-The manifest is keyed on (file, line, matched-token). Line numbers move whenever anything is inserted or deleted above a site. 20 of the 34 sites sit in master.py, selection.py and family_evidence.py — the three files the checklist mandates editing. Item 3 alone deletes split_tree() at master.py L111-122; I confirmed it is still there, and master.py's manifest site at L804 sits below it, so that one deletion shifts it to ~L792 and trips the abort. Items 1, 2, 13, 14, 15, 17 and 19 all edit the same three files.
+The sacred five carry their shas in the document — 518862bf19fb, 793e6e5f8d9a, and so on. Anyone can detect drift against a pre-agreed constant, and the Developer cannot move the baseline.
 
-So the abort fires on the Developer's first mandated commit, on a change the checklist itself orders. A guard that cries wolf on its first legitimate use is a guard that gets disabled — which is precisely the failure mode the mechanism exists to prevent. Fix: key the manifest on (file, enclosing-function, matched-token) or on a hash of the site's line content rather than the absolute line number; or state explicitly that re-blessing the manifest is part of items 1-3 and not treated as drift.
+terrain.py and cluster_profiler.py say "(record sha at build time)". The baseline then becomes whatever the Developer's working tree contains at the moment of recording. If either file were edited before recording — deliberately, or by an IDE reformat, or by a stray line-ending change — the lock certifies the edited file and reports "no drift" for the rest of the project's life. That is self-certification. It has the form of the sacred-five guard and not its substance, and the failure is silent, which is the property this whole appendix exists to eliminate.
 
-4. Does anything deserve MARKET-OBJECT? No — but two labels are wrong.
+The fix is one line each, and I have computed the values from HEAD so it is actionable immediately:
 
-I inspected every market-touching sorted-index site. cluster_profiler L125/L146/L565 and master.py L804 are np.sort over entry-bar or event arrays — ordering, no cut. L132 is np.searchsorted(ev, seg, 'right'), a per-bar depth lookup against an event array with no data-derived threshold. selection.py L229 sorts eigenvalues for effective dimension — book statistics. terrain.py has zero sorted-index sites, which is the right answer for the one module that builds episodes. terrain.py L177 remains the only correctly-flagged MARKET-OBJECT.
+engine/terrain.py                dcaecaf7e8e1
+engine/cluster_profiler.py       070bb2aa7aaa
+scanners/concurrence_profiler.py 554019e93069
+4. Does removing the line-keyed manifest lose coverage that mattered? A little, and it is recoverable for free.
 
-But the manifest lumps concurrence_profiler.py 239, 841, 1072 under one label: "DESCRIPTIVE — console depth distribution, feeds no mask, level or entry." That is accurate for 239 and wrong for the other two:
+Accounting: the manifest held 34 sites across 8 files. File-locking now covers 10 — terrain.py 3, cluster_profiler.py 7 — plus dots_thresholds.py, whose own idiom (builtin sorted) the sweep never caught, which is itself the argument for the file-level form. 24 sites are unguarded.
 
-L841 is order = np.argsort(-J[iu])[:TOP_PAIRS_N] — a top-N cut over a Jaccard matrix, written to an emitted CSV, not a console depth distribution. Its status is right (a fixed documented N is not a percentile, and the objects are condition pairs), but the stated rationale does not describe it.
-L1072 is sv = np.sort(v) inside the circular-shift null over agg_pf/WR/folds_plus/worst_day_usd — a null-statistic array, book statistics. Again sanctioned, again not a console depth distribution.
+Of those, 20 sit in selection.py, master.py and family_evidence.py — edited by the build, unlockable, correctly covered by your residual. The remaining 4 sit in analysis_engine.py (1) and concurrence_profiler.py (3), neither of which any build item touches. So the loss is real but small, and it is fully recoverable at zero cost on the module that matters. analysis_engine.py's single site is stable exit-bar ordering over a book-statistics module — locking it is optional and I would not press for it.
 
-This matters because the rationale is what a future auditor re-applies. Give each its own row.
-
-5. Is the classification test stable? For percentile cuts yes; for the sorted-index class it moves the judgement rather than removing it.
-
-The stated test — "does the cut partition MARKET DATA, or summarise the P&L/statistics of an already-chosen set?" — presupposes there is a cut. But most of the 19 sorted-index sites are not cuts at all, and the manifest's own labels say so: "ordering / null-stat array", "event-array ordering and depth lookup", "stable ordering", "event-bar sort". Those are not-a-cut findings, not which-kind-of-cut findings.
-
-So the manifest applies two tests while the page states one: (i) is this a cut at all? (ii) if so, does it partition market data? Stage (ii) is stable — two auditors will agree. Stage (i) is the unstated one, and it is where they can differ: searchsorted used to assign bars to buckets is a cut, searchsorted used to look up a position is not, and they are textually identical. cluster_profiler L132 is exactly that case, and it sits in the module that builds episodes. I agree with your call there — it is a lookup — but a second auditor with no more information than the page provides could reasonably classify it the other way. State both stages.
+Removing the line-keyed manifest was right. It was going to fire on the first mandated commit — I verified split_tree() is still at master.py L111-122 and that 20 of 34 sites sit in the three files the checklist orders edited. Trading a guard that self-destructs for one that is idiom-blind is the correct trade, and taking file-locking over index-narrowing was the better of the two routes I offered: index-narrowing would still have been a pattern match on idiom, which had just failed twice.
 
 VERDICT: RATIFY WITH AMENDMENTS
 
-I audited this cold and did not carry my expectation forward, and it is as well: the manifest is complete and correct, and the classifications are sound — but the mechanism has a hole in exactly the place its own argument points, and it will misfire on the Developer's first commit.
+Two amendments. Neither blocks the build — Appendix D is a pre-run guard, and the build path is unaffected by both.
 
-Four amendments. None blocks the build — Appendix D is a guard, and a guard with a hole is not worse than the no-guard state it replaces. But two of them should land before the Developer starts, because they bite immediately.
+Add scanners/concurrence_profiler.py to the byte-locked market-object modules, and correct the residual's enumeration from three modules to four. It defines regime strata over market data by k-means, it is invoked by the pipeline, no build item edits it, and it has already produced a look-ahead-by-stratum defect once. Locking it costs nothing and closes the one gap in the surface the appendix claims to have secured.
+Record the lock shas in the document now rather than "at build time". terrain.py dcaecaf7e8e1, cluster_profiler.py 070bb2aa7aaa, concurrence_profiler.py 554019e93069 — all computed from HEAD e0eb79a. A baseline the Developer records himself is self-certification; a baseline stated in the document is the same guard the sacred five actually are.
 
-The token list does not catch sorted(, which is mechanism D's own idiom and the appendix's stated proof. Do not simply add it — that yields 74 more sites across 24 files and drowns the manifest. Either narrow on the indexing (a sorted array subscripted by a computed fraction of its own length) or byte-lock the market-object-defining modules the way the sacred five are locked. Land before the build: it is the difference between a guard and the appearance of one.
-Re-key the manifest off absolute line numbers. 20 of 34 sites sit in the three files the checklist orders edited, and item 3's deletion of split_tree alone will shift master.py L804 and trip the abort on the first mandated commit. Key on (file, enclosing-function, token) or a line-content hash — or state that re-blessing is part of items 1-3 and not drift. Land before the build.
-Split concurrence_profiler 239 / 841 / 1072 into separate rows with correct rationales. 841 is a top-N argsort over a Jaccard matrix emitted to CSV; 1072 is a null-statistic sort. Both sanctioned, neither a "console depth distribution".
-Fix the INVALID row in Appendix C — "fails the account constraint on train" contradicts V2's new "item 16 guards the account. Do not merge them."
+Both are single-line changes and both are verifiable on sight.
 
-Amendment 1 is the one that matters. You extended rather than stated, and extending was the right call — the reasoning that drove it is correct, and stating the residual would indeed have left a guard that looks correct while missing the production idiom. The extension just stopped one token short of the idiom it was built to catch.
+The mechanism is otherwise sound and the reasoning behind it is right. File-locking closes by construction what enumeration kept failing to close, the two-stage test is now stated where it is applied, the classification record is correctly demoted from enforcement to documentation, and the residual — once its enumeration is fixed — is the honest statement of what is and is not mechanically closed. Everything else in both documents remains as ratified.
 
-Everything else in both documents remains as ratified. I am not forming an expectation about the next pass.
+I formed no expectation about this pass and I am forming none about the next.
 
 Reporting and holding.
