@@ -184,7 +184,7 @@ Measured, BOOK, corrected frame: the worst single signal's worst day is -$204.7,
 |---|---|
 | `VALID` | measurable and survives; enters the catalogue |
 | `UNEVALUABLE` | **V1, V3 or V4 unmet**; ENTERS THE CATALOGUE flagged, statistics blank, with `reason_code`. V1 failure is the highest-volume rejection path on a large pool and MUST route here, not fall through undefined. |
-| `INVALID` | V2 breached — fails the account constraint on train |
+| `INVALID` | V2 breached — a single signal exceeds the daily ceiling on train. **Not the account test**: item 16 guards the account, per V2 above. |
 
 `reason_code` vocabulary, fixed and 1:1 with the failure paths: `insufficient_trades` (V1), `pf_undefined` (V3a), `insufficient_active_days` (V3b), `insufficient_buckets_direction` (V4). **Report the INVALID count per family** even though those rows do not enter the catalogue — without it, "this family had no candidates" and "every candidate breached survival" are indistinguishable, which is the same rule-5 failure the UNEVALUABLE retention exists to prevent. UNEVALUABLE rows are never dropped — dropping them makes "this family catalogues nothing" and "this family could not be measured" look identical, which is the rule-5 failure.
 
@@ -200,15 +200,26 @@ Measured, BOOK, corrected frame: the worst single signal's worst day is -$204.7,
 
 **It does NOT apply to book-statistic estimators whose quantile parameter is specified in this document.** `TailDep`'s `tau = 0.20`, `C_max`'s p10 and the null critical values are estimators over an already-defined population, not definitions of one. Without this scope the abort would fire on the very estimators APPENDIX B mandates by name.
 
-**Mechanical form: a SITE MANIFEST with abort-on-drift, not a pattern list.** "Defines" versus "reports" is semantic and ungreppable, so the check is over SITES, not idioms.
+**Two-stage classification test, both stages stated because the manifest applies both.** Stage (i): **is this a cut at all?** Ordering for iteration, a stable sort for output order, or a position lookup is not a cut. Stage (ii): **if it is a cut, does it partition MARKET DATA** (bars, episodes, strata) **or summarise the P&L/statistics of an already-chosen set?** Market data is prohibited outside `dots_thresholds`; book statistics are mandated by Appendix B and sanctioned. Stage (ii) is stable between auditors; **stage (i) is where they can differ** — `searchsorted` assigning bars to buckets is a cut, `searchsorted` looking up a position is not, and the two are textually identical. `cluster_profiler.py L132` is exactly that case and is classified a lookup.
 
-**Why the pattern form is insufficient — and this is the load-bearing reason.** `dots_thresholds._floor_pct` (L54-63) is `sorted_vals[int(floor(count*pct))]`, indexed off `sorted(rings[col])` at L106. **Mechanism D — the project's canonical, sacred, byte-locked threshold mechanism — IS a sorted-index percentile.** A percentile-only sweep is therefore blind to the exact idiom this codebase uses as its house style, and a contributor writing a look-ahead threshold in that style would sail straight past the abort. Two live sorted-index cuts already exist: `concurrence_profiler._depth_quantiles` (L234-240, whose own comment advertises that it contains no percentile call) and `selection.py L229-232` (`np.sort` + `cumsum` + `searchsorted` at 0.90/0.95).
+**MECHANISM: BYTE-LOCK THE MARKET-OBJECT MODULES. NOT A LINE-KEYED SITE MANIFEST.**
 
-**The check.** Sweep every `.py` under `dot_master_discovery/` for `np.percentile`, `np.quantile`, `.quantile(`, `np.sort`, `np.argsort`, `searchsorted`. Compare the resulting `(file, line, matched-token)` set against the manifest below. **ABORT if any site appears that is not in the manifest, and abort on any site classified MARKET-OBJECT.** This triggers on the site being new rather than on the idiom being recognised, so it catches a sorted-index percentile regardless of form. It requires re-blessing the manifest when code legitimately changes — the intended cost, and the same mechanism the sacred five already use.
+A token sweep was the first design and it failed twice on its own terms. It missed `sorted(` — the Python builtin used by `dots_thresholds._floor_pct` (L54-63, `sorted_vals[int(floor(count*pct))]`, indexed off `sorted(rings[col])` at L106). **Mechanism D, the canonical sacred mechanism, IS a sorted-index percentile, so the sweep cited it as proof and then did not catch its idiom.** Adding `sorted(` yields ~74 further sites across 24 files, nearly all `sorted(glob.glob(...))` ordering, which drowns the signal. And keying on absolute line numbers self-destructs: 20 of 34 sites sit in the three files this checklist orders edited, and item 3's deletion of `split_tree()` alone shifts `master.py L804` and trips the abort on the Developer's first mandated commit.
 
-**Classification test, applied per site:** does the cut partition MARKET DATA (bars, episodes, strata), or does it summarise the P&L/statistics of an already-chosen set? The first is a market object and is prohibited outside `dots_thresholds`. The second is a book-statistic estimator, is mandated by Appendix B, and is sanctioned.
+**Therefore the guard is at FILE level, which is idiom-blind and is the project's own precedent:**
 
-Verified by full sweep at `master.py 3d45bd3b7f74`: 15 percentile/quantile sites and 19 sorted-index sites.
+    BYTE-LOCKED MARKET-OBJECT MODULES — abort on sha drift
+      engine/dots_thresholds.py   518862bf19fb   (already sacred)
+      engine/terrain.py           (record sha at build time)
+      engine/cluster_profiler.py  (record sha at build time)
+
+These are the three modules that may legitimately define episodes, clusters or strata. Any change to one requires explicit re-blessing **regardless of how the cut is written** — `np.percentile`, `np.sort`, `sorted(`, `searchsorted` or a form nobody has thought of. **No build item edits `terrain.py` or `cluster_profiler.py`** (verified against items 1-24), so locking them costs nothing and produces no false abort. The edited files — `master.py`, `selection.py`, `family_evidence.py` — are not locked and are not line-keyed, so there is no drift problem.
+
+**Residual, stated rather than papered over — and stated at its true width.** File-locking secures the market-object surface **that exists today, in three named modules**. It does NOT mechanically catch a market-object definition written anywhere else: not in a new module, and not in `master.py`, `selection.py` or `family_evidence.py`, which are edited by this build and therefore cannot be locked. Those are caught by the review that would add the module to the lock manifest — a documented process, not an automated one. **This is not mechanical closure over the whole codebase**, and claiming mechanical closure is exactly what produced this amendment. The narrower claim that is true: any change to the three modules that may legitimately define episodes, clusters or strata aborts the run regardless of idiom.
+
+Item 5's in-run assertion that episode thresholds route through mechanism D is RETAINED and is complementary: the lock is pre-run, the assertion is in-run.
+
+**The table below is a CLASSIFICATION RECORD, not the enforcement mechanism.** It documents why each existing site is sanctioned so a future auditor re-applies the same reasoning. Verified by full sweep at `master.py 3d45bd3b7f74`: 15 percentile/quantile sites and 19 sorted-index sites, independently reproduced site-for-site by the Auditor.
 
 | site | role | status |
 |---|---|---|
@@ -232,6 +243,8 @@ Verified by full sweep at `master.py 3d45bd3b7f74`: 15 percentile/quantile sites
 | `analysis_engine.py` | 221 | stable exit-bar ordering |
 | `family_evidence.py` | 261, 314 | stable ordering |
 | `master.py` | 804 | event-bar sort |
-| `concurrence_profiler.py` | 239, 841, 1072 | DESCRIPTIVE — console depth distribution, feeds no mask, level or entry |
+| `concurrence_profiler.py` | 239 | DESCRIPTIVE — console depth distribution, feeds no mask, level or entry |
+| `concurrence_profiler.py` | 841 | `np.argsort(-J[iu])[:TOP_PAIRS_N]` — fixed top-N over a Jaccard matrix, emitted to CSV. A fixed documented N is not a percentile and the objects are condition pairs, not market data |
+| `concurrence_profiler.py` | 1072 | `np.sort(v)` inside the circular-shift null over agg_pf / WR / folds_plus / worst_day_usd — a null-statistic array, book statistics |
 
 An episode-threshold-only check would not have caught `terrain.py L177`, because episodes are already built by the time it runs. Any new site in either sweep must be added to the manifest with a stated classification, or the run aborts.
