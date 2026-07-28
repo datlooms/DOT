@@ -5,7 +5,7 @@ DOT master discovery corrections.
     git clone https://github.com/datlooms/DOT.git
 
 **READ FIRST, IN FULL:**
-`DEV_CHECKLIST.md` (repo root, 273 lines, sha256[:12] `9fffadec5120`, 24 items + Appendices A, B, C and D)
+`DEV_CHECKLIST.md` (repo root, 273 lines, sha256[:12] `fe7da2abf099`, 24 items + Appendices A, B, C and D)
 
 That file is the DO list. Build items 1-24 IN ORDER. This brief does not repeat it — it tells you what the checklist does not say. If the two disagree the checklist wins, EXCEPT where this brief marks an item **DECIDED — AUTHORISED DEVIATION**.
 

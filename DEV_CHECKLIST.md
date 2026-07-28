@@ -254,7 +254,7 @@ Item 5's in-run assertion that episode thresholds route through mechanism D is R
 | `terrain.py L160-161` | descriptive quartile columns, define nothing | SANCTIONED |
 | `cluster_profiler.py L310, L311` | `timing_q1` / `timing_q3` output columns, define nothing | SANCTIONED |
 | `cluster_profiler.py L323` | `depth_at_fire_p90` output column, defines nothing | SANCTIONED |
-| `terrain.py L177` | `np.percentile` on `abs_displacement_pts` defining the biggest-decile STRATUM, emitted with `population: 'MARKET'` | **NOT SANCTIONED — this is the live defect the abort exists to catch** |
+| `terrain.py L177` | `np.percentile` on `abs_displacement_pts` defining the biggest-decile STRATUM inside `hour_profile()`, emitted with `population: 'MARKET'` | **NOT SANCTIONED — a KNOWN LIVE LOOK-AHEAD STRATUM, and nothing enforces against it.** The file lock catches CHANGES to `terrain.py`, not this existing site; item 5's in-run assertion is scoped to EPISODE thresholds and L177 runs after episodes are built, so it is not reached. Blast radius traced: the only consumers are `render_hour_profile` L202-210, a console bar chart. **It gates no mask, level, entry or catalogue column.** Its `biggest_decile_episodes` and `biggest_decile_share_pct` fields MUST NOT be read as a MARKET property despite their `population` label. Remediation requires un-locking `terrain.py` and is OUT OF SCOPE for this build — do not attempt it. |
 
 **Sorted-index sites, all currently sanctioned or descriptive:**
 
