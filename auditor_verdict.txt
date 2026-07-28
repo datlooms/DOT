@@ -1,74 +1,75 @@
-AUDITOR — THIRD PASS (SCOPED)
+AUDITOR — FOURTH PASS (SCOPED)
 STATE
 
-HEAD 3143f5f. DEV_CHECKLIST.md 210 lines / c85d3e4be524 ✓ · DEVELOPER_BRIEF.md 123 lines / e29a28ea1441 ✓. master.py 3d45bd3b7f74 and the sacred five unchanged ✓. Delta against what I audited: +27/−6 and +3/−3 — consistent with the five scoped items and nothing else.
+HEAD 48ad84f. DEV_CHECKLIST.md 237 lines / 9fb0e40253ef ✓ · DEVELOPER_BRIEF.md 123 lines / f68a75fbcdd5 ✓ · master.py 3d45bd3b7f74 and the sacred five unchanged ✓.
 
-Out of scope, unchanged, not re-verified: all 24 items' line numbers and function names, the indivisible block, item 15's branch, Appendix A and B fidelity, every load-bearing figure, the ladder, the F0-vs-MIXED penalty, A5's reasoning. I confirmed the delta touches none of them.
+Delta confirmed confined by measurement, not assertion: an opcode-level diff against c85d3e4be524 shows changed regions only in **V2 SURVIVAL** and ## APPENDIX D. The brief's only change is the checklist sha reference. Everything else — 24 items, Appendices A and B, the UNEVALUABLE table, signal_id, the reason_code vocabulary, the determinism clause, item 5's pointer — unchanged, not re-verified.
 
-1. APPENDIX C, POST-FIX — both blockers closed; one new defect
+AMENDMENT 1 — V2's BASIS: APPLIED, UNAMBIGUOUS. One residual.
 
-B1 applied exactly as specified. UNEVALUABLE := **V1, V3 or V4 unmet**, with V1 named as the highest-volume rejection path that "MUST route here, not fall through undefined". The reason_code line is now annotated 1:1 with its clauses — insufficient_trades (V1), pf_undefined (V3a), insufficient_active_days (V3b), insufficient_buckets_direction (V4) — which is better than I asked for: the mapping is now auditable on the page rather than reconstructable. INVALID count per family added with the argument stated. ✓
+The new clause is exact and closes the defect: "worst_day(s,T) is the minimum over days in T of the daily P&L sum of signal s's OWN trades. Gap fillers are excluded — they fire only when the book is flat and are attributable to no candidate signal. T is the training segment; no full-span quantity enters." Plus "THE BOOK-LEVEL SURVIVAL TEST IS NOT THIS CLAUSE… V2 guards against a pathological single signal; item 16 guards the account. Do not merge them." Only one reading survives. Dropping the median rather than reconciling it was right — it did no work, and the retained claims (−$204.7; 0 of 50 at any sane margin) both reproduce on my construction.
 
-B6 applied and verified in code. signal_id is family|signal_definition|direction, pipe-delimited. I checked the parser: master.py L1194 is fam, sig, dr = key.split('|', 2) — exactly three parts in exactly that order. ✓
+Residual contradiction, and it is in the section you asked me to check. The three-value return table still reads:
 
-NEW DEFECT — V2's evaluation basis is ambiguous, and V2 is the only clause that drops rows.
+| INVALID | V2 breached — fails the account constraint on train |
 
-V2 now reads: "worst_day(s,T) >= -FTMO_DAILY_CEILING… Evaluated on the FULL population including gap fillers, because the ceiling does not distinguish sources."
+V2 now states in terms that V2 is not the account test — item 16 is. The INVALID row calls a V2 breach "fails the account constraint", which is the merge the new clause four lines above explicitly forbids. Operationally harmless — the test itself is now single-valued — but it is the sentence a future reader will quote, and it contradicts the fix. Amend to something like "a single signal exceeds the daily ceiling on train".
 
-worst_day(s,T) is a per-signal quantity — s is the subject of the predicate. But "FULL population including gap fillers" is book-level wording, and it is inherited verbatim from Appendix B's absolute-survival row ("worst modelled day against the FTMO ceiling, FULL population"), which I verified in pass one as faithful to spec §6.2. Gap fillers are GAP_HURST / GAP_FB / GAP_D2D — synthetic entries attributable to no book signal (verified). A per-signal worst day therefore cannot include them.
+AMENDMENT 2 — APPENDIX D. Four attacks, as asked.
+1. Is the 34-site manifest complete? YES — verified independently, no misses.
 
-Two readings, two different tests: (a) per-signal, min over days of that signal's own trades — which is what your measurement computed; (b) book-level, min over days of all trades — identical for every s, so V2 admits all or none. The clause supports both. Since V2 is the sole route to INVALID, and INVALID rows leave the catalogue entirely, an ambiguous basis on a drop rule is worth closing. It cannot bite on this data (both bases sit far inside −2500), so this is a specification defect, not a run risk.
+I ran my own sweep of all six tokens across every .py under dot_master_discovery/, excluding comment lines: 34 sites, PQ = 15, SORT = 19. Every file and every line number matches the manifest exactly — cluster_profiler PQ 310/311/323 and SORT 125/132/146/565; selection PQ 190/348/349/422/423/466/711/725/740 and SORT 229/231/232/273/693/706/735/774; terrain 160/161/177; analysis_engine 221; family_evidence 261/314; master 804; concurrence_profiler 239/841/1072. You were wrong about a sweep once; you are not wrong about this one.
 
-2. APPENDIX D — sweep verified complete; the mechanical form is evadable
+2. THE TOKEN LIST DOES NOT CATCH THE IDIOM THE ARGUMENT IS BUILT ON. This is the finding of the pass.
 
-The sweep is complete. I ran my own, independently, across every .py in dot_master_discovery/. 16 occurrences of np.percentile / np.quantile / .quantile(: 1 comment (concurrence_profiler.py L237 — confirmed a comment, exactly as you say), 14 SANCTIONED, 1 FLAGGED (terrain.py L177). Zero sites outside the allowlist. Every line number in the appendix table is correct, including the three cluster_profiler sites you had missed. No further misses.
+Appendix D's load-bearing reason for extending the sweep is stated in its own words: "dots_thresholds._floor_pct (L54-63) is sorted_vals[int(floor(count*pct))], indexed off sorted(rings[col]) at L106. Mechanism D — the project's canonical, sacred, byte-locked threshold mechanism — IS a sorted-index percentile… a contributor writing a look-ahead threshold in that style would sail straight past the abort."
 
-But the mechanical form is evadable, and the codebase already contains the evasion. You asked whether the allowlist makes it mechanical or only appears to. It is mechanical for the two named function forms and blind to everything else:
+I verified both lines. L54-63 is exactly that. And L106 is srt = {col: sorted(rings[col]) for col in roll_cols} — the Python builtin sorted, not np.sort.
 
-concurrence_profiler._depth_quantiles computes a percentile by np.sort(v) plus an index. Its own comment states the position outright: "Sorted-index, not np.percentile, so the file contains no percentile call anywhere." A grep-based allowlist on those two names cannot see it.
-selection.py L229-232 does the same shape: np.sort(ev)[::-1] then np.searchsorted(cum, 0.90) / 0.95 — a 90/95% cumulative cut computed without either function name.
+sorted( is not in the check's token list (np.percentile, np.quantile, .quantile(, np.sort, np.argsort, searchsorted). So the appendix cites mechanism D as proof that the sweep must cover sorted-index idioms, and then ships a sweep that does not catch mechanism D's own idiom. A contributor writing srt = sorted(vals); cut = srt[int(len(srt) * 0.9)] — the exact house style the argument names — sails past the abort just as surely as before the extension. The extension closed np.sort and left open the one form the reasoning rests on.
 
-Both are harmless today (console and descriptive respectively). But they prove the hole: a Developer defining a market stratum by sorted index would never trip the abort, which is precisely the failure the appendix exists to prevent — and the one instance you did catch, terrain.py L177, only tripped because it happened to use np.percentile.
+This is not a manufactured concern; it is the section's own stated rationale failing against its own example.
 
-The scoping rule itself holds up. "Market-object definition, not book-statistic estimator" is stable enough to apply consistently, because it reduces to an operational test a Developer can run: does the percentile partition market data — bars, episodes, strata — or does it summarise the P&L of an already-chosen set? terrain L177 partitions episodes → market object. selection L348's τ over a signal's own daily P&L summarises a chosen signal's outcomes → book statistic. That test resolves every site in the table.
+And the obvious fix is worse than the defect. Adding sorted( to the token list yields 74 additional sites across 24 files, nearly all plainly ordering-for-iteration (sorted(glob.glob(...)), sorted(set(...)), sorted(os.listdir(...))). The manifest would go from 34 to 108 and the signal would drown. Two workable routes instead:
 
-One case is genuinely hard, and it is the one shape the prohibition targets: selection.py L725, keep = obs >= np.quantile(obs, drop_quantile) — a quantile that defines a kept set. It is correctly sanctioned (it sits in the P3-parked stability-selection machinery and partitions statistics, not market data), but it is lumped into a single row with L711 and L740 under "null critical value, kept-set quantile". Three sites, two descriptions, and the hardest call left implicit. Give L725 its own line and its own one-clause rationale, or a later reader will re-litigate it.
+Narrow on the indexing, not the sorting. The dangerous construct is a sorted array subscripted by a computed fraction of its own length. That is greppable with far better precision than sorted( alone — flag a subscript whose index expression contains len(, count, .size or .shape applied to the same array.
+Or move to file-level locking, which is the project's own precedent. Byte-lock the modules that may legitimately define market objects — terrain.py, cluster_profiler.py, and dots_thresholds.py (already locked) — with sha manifests, exactly as the sacred five are locked. Any change to a market-object-defining file then requires re-blessing regardless of idiom, and there is no false-positive problem at all.
+3. Does abort-on-drift produce false aborts? Yes — and the first one is certain, not hypothetical.
 
-3. V2 / B2 — MEASUREMENT VERIFIED. CLOSING THE ITEM. DELETION WAS RIGHT.
+The manifest is keyed on (file, line, matched-token). Line numbers move whenever anything is inserted or deleted above a site. 20 of the 34 sites sit in master.py, selection.py and family_evidence.py — the three files the checklist mandates editing. Item 3 alone deletes split_tree() at master.py L111-122; I confirmed it is still there, and master.py's manifest site at L804 sits below it, so that one deletion shifts it to ~L792 and trips the abort. Items 1, 2, 13, 14, 15, 17 and 19 all edit the same three files.
 
-I reproduced it independently on the corrected frame:
+So the abort fires on the Developer's first mandated commit, on a change the checklist itself orders. A guard that cries wolf on its first legitimate use is a guard that gets disabled — which is precisely the failure mode the mechanism exists to prevent. Fix: key the manifest on (file, enclosing-function, matched-token) or on a hash of the site's line content rather than the absolute line number; or state explicitly that re-blessing the manifest is part of items 1-3 and not treated as drift.
 
-quantity	your figure	mine
-worst single signal's worst day	−$204.7	−$204.7 ✓
-signals failing V2 at MARGIN 0.0 / 0.1 / 0.2 / 0.5	0 / 0 / 0 / 0	0 / 0 / 0 / 0 ✓
-median signal worst day	−$142.6	−$145.0
-book-level worst day	−$639.1	−$639.1 on the BOOK-only basis; −$565.3 full-population
+4. Does anything deserve MARKET-OBJECT? No — but two labels are wrong.
 
-The load-bearing claim — V2 is inert as a per-signal test at every margin in a sane range — reproduces exactly. The segment argument is sound: a segment's day set is a subset of the full span's, so its minimum cannot be lower; passing on the full span implies passing on every split. V2 cannot bind inside a walk-forward split.
+I inspected every market-touching sorted-index site. cluster_profiler L125/L146/L565 and master.py L804 are np.sort over entry-bar or event arrays — ordering, no cut. L132 is np.searchsorted(ev, seg, 'right'), a per-bar depth lookup against an event array with no data-derived threshold. selection.py L229 sorts eigenvalues for effective dimension — book statistics. terrain.py has zero sorted-index sites, which is the right answer for the one module that builds episodes. terrain.py L177 remains the only correctly-flagged MARKET-OBJECT.
 
-The decision is correct and I endorse it over my own amendment. My objection was that an undefined parameter makes V2 unimplementable — deletion resolves that as completely as defining would. And deletion is the better resolution on doctrine: with every value in the sane range behaviourally identical, any chosen MARGIN would be an arbitrary constant with no measured basis sitting inside the admission predicate — a tunable knob, which rule 3 exists to keep out. "Lower the ceiling — one number, not two" is the right principle. Retaining V2 as a guard against a pathological single signal, with the binding survival test at book level in item 16, is the correct division. Item closed.
+But the manifest lumps concurrence_profiler.py 239, 841, 1072 under one label: "DESCRIPTIVE — console depth distribution, feeds no mask, level or entry." That is accurate for 239 and wrong for the other two:
 
-Two figure notes, neither load-bearing. My median is −$145.0 (per-signal worst day = min over exit-days of that signal's daily P&L sum; median of 50; sorted 25th/26th are −146.4 / −143.7). The −$142.6 in the document must come from a slightly different construction — a $2.4 difference on a descriptive figure inside a justification whose conclusion reproduces exactly. And −$639.1 is the non-gap BOOK-only basis; the full-population basis V2 itself names gives −$565.3. That figure is not quoted in the document, so it is not a document defect — but if it ever migrates in, it must carry its basis, which is the same standing construction that produced amendment A4.
+L841 is order = np.argsort(-J[iu])[:TOP_PAIRS_N] — a top-N cut over a Jaccard matrix, written to an emitted CSV, not a console depth distribution. Its status is right (a fixed documented N is not a percentile, and the objects are condition pairs), but the stated rationale does not describe it.
+L1072 is sv = np.sort(v) inside the circular-shift null over agg_pf/WR/folds_plus/worst_day_usd — a null-statistic array, book statistics. Again sanctioned, again not a console depth distribution.
 
-4. ITEM 5'S POINTER — PASS
+This matters because the rationale is what a future auditor re-applies. Give each its own row.
 
-"the local-percentile ABORT is defined in APPENDIX D — it is scoped to MARKET-OBJECT DEFINITION and must not fire on the book-statistic estimators this document itself mandates." Resolves the item-5/Appendix-B contradiction I raised, points correctly, and states the scope inline so a reader who never opens Appendix D still cannot mis-apply it. ✓
+5. Is the classification test stable? For percentile cuts yes; for the sorted-index class it moves the judgement rather than removing it.
 
-5. DETERMINISM SYMMETRY — PASS
+The stated test — "does the cut partition MARKET DATA, or summarise the P&L/statistics of an already-chosen set?" — presupposes there is a cut. But most of the 19 sorted-index sites are not cuts at all, and the manifest's own labels say so: "ordering / null-stat array", "event-array ordering and depth lookup", "stable ordering", "event-bar sort". Those are not-a-cut findings, not which-kind-of-cut findings.
 
-"EVERY artifact except the two named below is byte-identical across runs and worker counts and contains no wall-clock — CSV, markdown or otherwise. The run log and book_scored.jsonl are ATTESTATION RECORDS, not artifacts: both are exempt, and both are REQUIRED to carry wall-clock. Nothing else is exempt in either direction."
-
-Both asymmetries closed — the obligation now covers non-CSV outputs explicitly, and "in either direction" forecloses the reverse reading. ✓
+So the manifest applies two tests while the page states one: (i) is this a cut at all? (ii) if so, does it partition market data? Stage (ii) is stable — two auditors will agree. Stage (i) is the unstated one, and it is where they can differ: searchsorted used to assign bars to buckets is a cut, searchsorted used to look up a position is not, and they are textually identical. cluster_profiler L132 is exactly that case, and it sits in the module that builds episodes. I agree with your call there — it is a lookup — but a second auditor with no more information than the page provides could reasonably classify it the other way. State both stages.
 
 VERDICT: RATIFY WITH AMENDMENTS
 
-Two amendments, both precise, neither blocking. The build can start on these documents; both amendments improve a guard or close an ambiguity that cannot bite on the current data.
+I audited this cold and did not carry my expectation forward, and it is as well: the manifest is complete and correct, and the classifications are sound — but the mechanism has a hole in exactly the place its own argument points, and it will misfire on the Developer's first commit.
 
-Name V2's basis. State that worst_day(s,T) is per-signal, computed on that signal's own trades, and that the book-level full-population survival test is item 16's. The "FULL population including gap fillers" phrase is Appendix B's book-level wording sitting in a per-signal predicate, and gap fillers belong to no signal. V2 is the only clause that drops rows, so its basis should not be inferable two ways.
-State Appendix D's residual, or close it. The allowlist is mechanical for np.percentile / np.quantile / .quantile( and blind to sorted-index percentiles — and the codebase contains two live sorted-index cuts (concurrence_profiler._depth_quantiles, whose comment advertises the blind spot; selection.py L229-232). Either extend the sweep pattern to np.sort(...)[, argsort and searchsorted, or state plainly that the abort covers the two named forms and that sorted-index cuts are caught by review, not by the check. Also give selection.py L725 its own row and rationale — it is the one sanctioned site whose shape ("defines a kept set") is the shape the prohibition targets.
+Four amendments. None blocks the build — Appendix D is a guard, and a guard with a hole is not worse than the no-guard state it replaces. But two of them should land before the Developer starts, because they bite immediately.
 
-On the two things you flagged as most likely wrong: the sweep is now complete — I verified it independently and found nothing you missed. The UNEVALUABLE table, which you have edited twice, is correct: V1/V3/V4 route there, V2 routes to INVALID, the four codes map 1:1 onto V1/V3a/V3b/V4 with none missing and none unreachable, and the INVALID count closes the visibility gap. The scoping rule is sound; it is the mechanism enforcing it that has the hole, not the rule.
+The token list does not catch sorted(, which is mechanism D's own idiom and the appendix's stated proof. Do not simply add it — that yields 74 more sites across 24 files and drowns the manifest. Either narrow on the indexing (a sorted array subscripted by a computed fraction of its own length) or byte-lock the market-object-defining modules the way the sacred five are locked. Land before the build: it is the difference between a guard and the appearance of one.
+Re-key the manifest off absolute line numbers. 20 of 34 sites sit in the three files the checklist orders edited, and item 3's deletion of split_tree alone will shift master.py L804 and trip the abort on the first mandated commit. Key on (file, enclosing-function, token) or a line-content hash — or state that re-blessing is part of items 1-3 and not drift. Land before the build.
+Split concurrence_profiler 239 / 841 / 1072 into separate rows with correct rationales. 841 is a top-N argsort over a Jaccard matrix emitted to CSV; 1072 is a null-statistic sort. Both sanctioned, neither a "console depth distribution".
+Fix the INVALID row in Appendix C — "fails the account constraint on train" contradicts V2's new "item 16 guards the account. Do not merge them."
 
-You decided B2 on measurement against my amendment, and the measurement was right. That was the correct call and the reasoning is now better than what I specified.
+Amendment 1 is the one that matters. You extended rather than stated, and extending was the right call — the reasoning that drove it is correct, and stating the residual would indeed have left a guard that looks correct while missing the production idiom. The extension just stopped one token short of the idiom it was built to catch.
+
+Everything else in both documents remains as ratified. I am not forming an expectation about the next pass.
 
 Reporting and holding.
