@@ -55,9 +55,24 @@ Not used: `DepthYield`, coverage/REACH, `FailConc`, `TailDep`, `mCVaR`, the abso
 
 **So the PF 3.13 result says nothing about the selection layer.** It is the score of a top-50-by-worst-day sort. The comparison against BOOK-50 is not a comparison of methods.
 
-**FIX.** S8's discover-fresh path must consume S5B's selected book. If S5B does not currently emit a book artifact, it must. `_assemble_fresh_book` is either deleted or demoted to an explicitly-labelled baseline contender in S7 — never the thing S8 scores as "the discovered book".
+**AND IT IS WORSE THAN "S8 IGNORED S5B'S OUTPUT". THERE IS NO SEARCH AT ALL.** Every S5B artifact from this run is explicitly scored against the INCUMBENT book, not the pool:
 
-**VERIFY.** Book size must NOT be 50 unless the objective independently stops there. The book must span families in proportion to the objective's judgement, not the pool's composition.
+```
+selection_depthyield_grid.csv   signals_LONG=37, signals_SHORT=13     <- BOOK-50, not the 30/20 discovered book
+selection_coverage.csv          scored_for = "INCUMBENT BOOK"          <- stated in the data column
+selection_constraints.csv       F_max = "incumbent FailConc on ACTIVE SEGMENT"
+                                TailDep = "incumbent"
+                                C_max  = "p10 of incumbent mCVaR"
+selection_fixture_..._greedy.csv  argmax names are L_27_/L_18_/S_39_/S_41_  <- BOOK-50 naming
+```
+
+The constraint references being incumbent-derived is CORRECT per spec §C.2 — that is what the bounds are supposed to be. The defect is that **nothing then applies them to search the pool.** S5B computes the references, profiles the incumbent, writes both to CSV, and stops. Then S8 sorts.
+
+**So the selection layer has been built, audited across nine passes, ratified, and never once run against a candidate pool.**
+
+**FIX.** S5B must run the per-direction greedy/CELF search over the pool, subject to the constraint references it already computes correctly, and emit a SELECTED BOOK artifact. S8's discover-fresh path consumes that artifact. `_assemble_fresh_book` is deleted, or demoted to an explicitly-labelled baseline contender in S7 so the sort-vs-selection delta is visible — never the thing S8 scores as "the discovered book".
+
+**VERIFY.** Book size must NOT be 50 unless the objective independently stops there. `signals_LONG`/`signals_SHORT` in the DepthYield grid must reflect the CANDIDATE SET under evaluation, not 37/13. `scored_for` in coverage must say SELECTED, not INCUMBENT.
 
 ---
 
@@ -116,9 +131,26 @@ The null arm ran correctly and landed at 23.6-25.9%, consistent with the recorde
 
 **This is the single deliverable the entire redesign exists for.** The committed book degraded PF 6.40 -> 2.19 on first contact with unseen data because the SELECTION PROCESS was never validated. After a 24-hour scan it is still not validated.
 
-**Almost certainly downstream of D0** — the book arm needs the funnel re-run per split, and if the funnel isn't being used to build the book at all, there is nothing to re-run.
+**NOT downstream of D0. IT IS HARDCODED.** `master.py` L1320-1326:
+```python
+meta_checks = {'funnel_rerun': False, 'null_per_split': True,
+               ...
+               'funnel_detail': 'S3 discovery has never run, so no candidate pool exists and the funnel cannot '
+                                'be re-run per split; the mechanics are built and the criterion is unexercisable'}
+```
+**`funnel_rerun` is the literal `False` and the explanation is a hardcoded string.** S5C never checks whether a pool exists. It was written when S3 genuinely had never run — and nobody made it read the world afterwards.
 
-**FIX.** After D0, the book arm must execute per split. If it still cannot, name the specific blocker in one line. **A run that completes without a pass-criterion number has not answered the question it was built to answer.**
+The emitted artifact therefore asserts, in a run that had just collated 483,753 candidates:
+```
+VERDICT UNEVALUABLE: ... requires a candidate pool. S3 discovery has never run.
+book_arm: "UNEVALUABLE - ... requires a candidate pool S3 has never produced"
+```
+
+**So fixing D0 alone would leave the walk-forward still returning UNEVALUABLE.** These are two independent defects and both must be fixed for the criterion to produce a number.
+
+**FIX.** `funnel_rerun` must be DERIVED — the pool exists, has rows, and carries the current `input_sha`. The `funnel_detail` string must be generated from that check, never asserted. Then the book arm must actually re-run the selection funnel inside each training segment, per §I.2, and produce `book_persistence(s)` for the ratio.
+
+**A run that completes without a pass-criterion number has not answered the question it was built to answer** — and a stage that reports "S3 has never run" immediately after S3 ran is worse than silence, because it is confidently wrong in an artifact.
 
 ---
 
@@ -195,7 +227,24 @@ pandas.errors.ParserError: Expected 3 fields in line 13, saw 18     (master.py L
 
 `families reviewed: 14 | SELECTABLE 2 | INSUFFICIENT-EVIDENCE 10` — printed AFTER all fourteen families produced output in this very run. F0 gave 19,757 rows, F1 439,061, and the ten "insufficient-evidence" families produced 5,178 between them.
 
-**FIX.** S3B must read the current run's family outputs. A verdict of INSUFFICIENT-EVIDENCE against a family that just produced thousands of rows is worse than no verdict.
+**AND THE MECHANISM IS NOW KNOWN: S3B READS THE WRONG DIRECTORY.** `family_evidence.csv` from this run:
+```
+family  rows_emitted  candidates_passing_S5  book_signals  verdict
+F0            19,777                    NaN          48.0  SELECTABLE
+F1                 0                    NaN           2.0  SELECTABLE
+F2-F12             0                    NaN           0.0  INSUFFICIENT-EVIDENCE
+F13            5,142                   89.0           0.0  DIAGNOSTIC
+```
+**The only two non-zero families are the only two with output in the LEGACY `discovery_results\` folder** — F13 writes there by its own convention and F0's `dots_results\deduped_survivors.csv` sits alongside. Note F0 reads **19,777** where collation reported **19,757**: a different file, not the run's.
+
+**Everything else reads 0 because it is in `discovery\full\results\` and S3B is not looking there.** F1 reads 0 against 439,061 rows. F3 reads 0 against 3,674. F9 reads 0 against 1,224.
+
+So `INSUFFICIENT-EVIDENCE 10` is not stale text carried forward — **it is a live verdict computed from a wrong read.** And `book_signals` reads 48 F0 / 2 F1: the incumbent split again.
+
+**It reaches the operator-facing report.** `master_report.md` §5 states, ten times:
+> "F2: INSUFFICIENT-EVIDENCE — no results file exists on any window; **S3 discovery has not been run for this family on this dataset**"
+
+**FIX.** S3B reads the current run's `--out` tree. `candidates_passing_S5` must populate. A verdict of INSUFFICIENT-EVIDENCE against a family that just produced 439,061 rows is worse than no verdict — it is confidently wrong in a persisted artifact and in the report the operator reads.
 
 ---
 
@@ -223,6 +272,105 @@ F1 chunk 1 produced no marker and the queue ran 3,584 further chunks without sur
 
 ---
 
+# F1 — DEPTH AND THRUST ARE LARGELY DISJOINT  *(FINDING, NOT A DEFECT — and it is the one that decides the terrain strategy)*
+
+`master_report.md` §6, S8B basis-3 overlap of the terrain against the book's size>=5 cluster spans:
+```
+W=15 K=p85 E=p75 N=5    151 / 4,744 episodes intersect = 3.2%
+                        thrust bars inside deep clusters   3.4%
+                        deep-cluster bars that are thrust 12.5%
+W=15 K=p85 E=p75 N=10   142 / 4,154 = 3.4%  |  3.5%  |  14.5%
+W=30 K=p85 E=p75 N=10   104 / 2,679 = 3.9%  |  3.3%  |  13.8%
+```
+Stable across all eight grid cells: **roughly 3% of thrust episodes touch a deep cluster, and only 12-15% of deep-cluster bars are thrust bars.**
+
+**The book's deepest clusters and the market's cleanest directional runs are two different populations happening in different places.** Depth is not currently finding thrust.
+
+**This is the gap "terrain-targeted thrust access" has to close**, and it is not closable by the current objective — coverage sits at step 5 in the lexicographic order, below DepthYield, so nothing is pushing depth toward thrust. It also means the operator's same-bar triple population (WR 98.0% / PF 53.70) is earning its return from something OTHER than the terrain's clean runs.
+
+**No action this turn.** Record it, re-measure after D0, and treat it as the primary question once selection actually runs: does a depth-maximising search naturally land on thrust, or do the two objectives pull apart? If they pull apart, the lexicographic ordering is the lever and that is a spec decision, not a build one.
+
+---
+
+# F2 — THE DISCOVERED BOOK'S DIRECTION SPLIT IS BETTER THAN THE INCUMBENT'S  *(POSITIVE FINDING)*
+
+```
+                LONG   SHORT   ratio
+BOOK-50           37      13   74/26
+discovered        30      20   60/40      <- from a naive worst-day sort, no directional logic
+terrain (MARKET) 3816    3674   50/50
+```
+The sorted book is materially closer to the terrain's measured symmetry than the incumbent, **and it got there with no quota, no floor and no directional term of any kind.** That suggests the F0/F1 pool simply contains more viable shorts than the old decorrelation funnel ever surfaced — which is consistent with the operator's long-standing position that the short side was suppressed by the selection process rather than absent from the market.
+
+**Re-measure after D0.** If a real search does worse than 60/40, that is a finding about the objective.
+
+---
+
+# F3 — F1 IS UNDER-WEIGHTED IN THE BOOK RELATIVE TO ITS POOL SHARE  *(softens D2)*
+
+```
+                pool share    book share
+F1                  90.6%          52%   (26 of 50)
+F0                   8.9%          42%   (21 of 50)
+F9                   0.3%           6%   (3 of 50)
+```
+Even a naive worst-day sort **under-weights F1 by 38 points and over-weights F0 by 33.** F0 candidates are individually stronger on worst-day, so the sort favours them despite F1's 10:1 numerical advantage.
+
+**This materially softens D2.** The pool imbalance is real, but it does not automatically translate into book dominance — and a real objective ranking on DepthYield rather than worst-day may discriminate further. **Do not remedy D2 until the selected book's family mix has been measured.**
+
+**And F9 placed 3 signals on merit** — a family that had never been run on this data before, entering a book through a blind sort.
+
+---
+
+# F4 — THE SHORT SIDE NEEDS A WIDER TOLERANCE TO FORM CLUSTERS AT ALL  *(supports the D5 grid widening)*
+
+`selection_depthyield_grid.csv`, S=3:
+```
+        LONG clusters   SHORT clusters   raw ratio
+N=5           233              61          3.82
+N=10          223              82          2.72
+```
+**Longs LOSE clusters as tolerance widens (233 -> 223) because clusters merge. Shorts GAIN them (61 -> 82)** — short signals are too scattered to reach size 3 within 5 bars, and at 10 bars they merge into clusters that qualify.
+
+So capping the grid at N=10 does not merely miss the operator's hour-long runs. **It systematically under-measures the short side**, and the raw long:short ratio falls from 3.82 to 2.72 for that reason alone. The measured 9.42:1 disparity that motivated the per-direction search is itself partly a tolerance artifact.
+
+**This is independent evidence for `(1, 5, 10, 15, 20, 25, 30)`.** Watch the short-side cluster count specifically as N widens — if it keeps climbing past N=10, the short side has structure the grid has never been able to see.
+
+---
+
+# F5 — WHEN THE BOOK DOES TOUCH AN EPISODE, IT ARRIVES EARLY  *(mitigates the coverage caveat)*
+
+`selection_coverage.csv`: `entry_pos_median` **UP 0.343, DOWN 0.400.**
+
+The standing caveat is that coverage counts PRESENCE, not CAPTURE — a signal firing at bar 55 of a 60-bar episode counts as covering it while earning almost nothing. **Measured, the book enters at 34-40% of the way through.** It is arriving in the first half, not at the end. The caveat remains true in principle and is materially less severe than feared.
+
+---
+
+# F6 — WHAT IS ALREADY WORKING, AND MUST NOT BE BROKEN BY THE REMEDIATION
+
+Verified from this run's artifacts:
+```
+wf_splits.csv          3 splits derived from the floor (>=60d, >=3 buckets), train 60/83/105,
+                       test 21/20/20, embargo 1440 bars stated as a bar count, anchored,
+                       under_powered False on all three, no row deleted
+wf_null_arm_summary    all three splits EVALUABLE at the 80-qualifier target (89/80/81),
+                       rates 0.236/0.2375/0.2593 with CIs, seeded per split, batch-invariant,
+                       denominator controlled on QUALIFIERS not generated count
+canary                 LONG 86.12%, SHORT 100.0%, no plateau regression, and honest about its
+                       own limit: enumeration covers sizes 1..2 + all-signals, so the LONG
+                       figure is an UPPER bound (a hill-climb reaches 0.027664 at size 24,
+                       putting the honest figure at <= 80%)
+constraints            retention 66.2% at the corrected tau=0.2/MIN_SHARED=10 point,
+                       exclusion bias recorded ANTI-CONSERVATIVE, H.2 pool 127 post-warmup
+                       trading days (the market, not the incumbent's 123), absolute survival PASS
+report §7              submodularity NOT established, (1-1/e) bound NOT claimed;
+                       NO DIRECTIONAL TARGET anywhere in selection.py
+S6                     stale artifacts NOT inherited, regenerated fresh
+```
+**The walk-forward machinery is sound end to end except the book arm. Splits, embargo, guard, attestation and null all work and produce real numbers.** Only the numerator is missing, and only because `funnel_rerun` is a hardcoded `False`.
+
+---
+
 # REMEDIATION CHECKLIST — ORDERED
 
 **PHASE 1 — make the selection layer actually select.** Nothing else matters until this is done; every result above is the score of a sort.
@@ -230,7 +378,9 @@ F1 chunk 1 produced no marker and the queue ran 3,584 further chunks without sur
 [ ] D0   S8 consumes S5B's selected book. Delete or demote _assemble_fresh_book.
 [ ] D1   Stop double-counting F0. Assert per-family count == collated count.
 [ ] D5   tolerances=(1, 5, 10, 15, 20, 25, 30). Report N across all seven; choose from evidence.
-[ ] D3   Book arm runs per split so the pass criterion produces a number.
+[ ] D3   Derive `funnel_rerun` from the pool (exists, non-empty, current input_sha) — it is
+         currently the hardcoded literal `False`. Then the book arm runs per split so the
+         pass criterion produces a NUMBER. Independent of D0; both must be fixed.
 ```
 **PHASE 1 requires NO re-scan.** S3's 483,753 candidates are on disk with valid markers. S4 -> S9 is under an hour.
 
@@ -257,6 +407,16 @@ F1 chunk 1 produced no marker and the queue ran 3,584 further chunks without sur
 [ ] Compare like-for-like against BOOK-50 on the SAME corrected data:
        3,101 tr | WR 90.6% | PF 4.81 | net $97,675 | wd -$565.3 | OOS PF 2.95
 [ ] D2   Only then decide whether F1's 10:1 pool dominance needs an explicit remedy.
+         NOTE F3: a naive sort already under-weights F1 by 38 points relative to its pool
+         share, so the imbalance may not survive a real objective. Measure before remedying.
+[ ] F1   Re-measure depth-vs-thrust overlap. Currently ~3% of episodes touch a deep cluster
+         and only 12-15% of deep-cluster bars are thrust. If a depth-maximising search does
+         not close that, the lexicographic ordering is the lever — and that is a SPEC decision.
+[ ] F2   Re-measure the direction split. The sort gave 60/40 against the incumbent's 74/26 on
+         a 50/50 terrain. If real selection does WORSE than a sort, that is a finding.
+[ ] F4   Watch the SHORT cluster count as N widens past 10. It rose 61 -> 82 from N=5 to N=10
+         while LONG fell 233 -> 223. If it keeps climbing, the short side has structure the
+         grid has never been able to see.
 ```
 
 **PHASE 5 — the operator's gating scheme, measured but not built.**
