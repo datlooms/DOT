@@ -27,26 +27,27 @@ BASELINE CORRECTION — apply wherever it appears: same-bar 3+ is 512 trades / P
 ## SELECTION — stop it choosing
 
 13. Remove `/n_signals_d` from any objective (`selection.py L290`). Keep it as a reported column that never gates inclusion.
-14. Delete the `_sel_con` stub (`master.py L1174-1175` — a `def`, not a lambda). Constraint machinery moves to item 15.
-15. `score_book.py --book <csv> --data <frame> --out <dir>` — scores an operator-assembled book on FailConc, TailDep, mCVaR, survival, union coverage, same-bar ladder, L/S split, plus a set-level chance figure = sum of `pf_null_exceedance_pct` over the picked rows. Non-zero exit on breach, append-only `book_scored.jsonl`, and every catalogue header states a book is UNSCORED until it has been run.
+14. Delete the `_sel_con` stub (`master.py L1174-1175` — a `def`, not a lambda). Constraint machinery moves to item 16.
+15. The catalogue is emitted from VALID, never from an argmax: `sel.greedy_direction` must not produce any catalogue. Retain the greedy machinery ONLY as item 12's dilution-curve admission loop, and write any book it still selects as `legacy_greedy_book.csv` labelled DIAGNOSTIC ONLY, consumed by nothing downstream.
+16. `score_book.py --book <csv> --data <frame> --out <dir>` — scores an operator-assembled book on FailConc, TailDep, mCVaR, survival, union coverage, same-bar ladder, L/S split, plus a set-level chance figure = sum of `pf_null_exceedance_pct` over the picked rows. Non-zero exit on breach, append-only `book_scored.jsonl`, and every catalogue header states a book is UNSCORED until it has been run.
 
 ## EVIDENCE — the deliverable the redesign exists for
 
-16. S5C walk-forward must emit a number, not nan (`master.py L1460-1463`) — per split apply VALID on the training segment, score members on test, ratio against the seeded null (89/80/81 qualifiers, rates 0.236/0.2375/0.2593). It certifies the catalogue's INCLUSION RULE, not any book; re-scoring a hand-assembled book per split is prohibited.
-17. S5C arms must agree — the `persist` definition and the `n_traded` denominator identical in book and null arms, asserted at run time with abort on mismatch. Verify by opening the artifact, not by reading a diff: this was reported fixed once while the artifact stayed byte-identical.
+17. S5C walk-forward must emit a number, not nan (`master.py L1460-1463`) — per split apply VALID on the training segment, score members on test, ratio against the seeded null (89/80/81 qualifiers, rates 0.236/0.2375/0.2593). It certifies the catalogue's INCLUSION RULE, not any book; re-scoring a hand-assembled book per split is prohibited.
+18. S5C arms must agree — the `persist` definition and the `n_traded` denominator identical in book and null arms, asserted at run time with abort on mismatch. Verify by opening the artifact, not by reading a diff: this was reported fixed once while the artifact stayed byte-identical.
 
 ## SPEED
 
-18. Parallelise every stage; `workers` currently reaches 2 of 15. Dedup stays serial in ascending chunk order with a mandatory parity proof, and greedy is sequential BETWEEN admission steps but parallel WITHIN a step — score all marginal gains concurrently, then admit one.
-19. Profile all fifteen stages on the real pool and report the timing table BEFORE parallelising. Progress line, heartbeat and ETA on every long stage.
-20. Auto-write the run log into the output tree; clean output in console, pipe and redirect; warnings to the log, errors only on stderr.
+19. Parallelise every stage; `workers` currently reaches 2 of 15. Dedup stays serial in ascending chunk order with a mandatory parity proof, and greedy is sequential BETWEEN admission steps but parallel WITHIN a step — score all marginal gains concurrently, then admit one.
+20. Profile all fifteen stages on the real pool and report the timing table BEFORE parallelising. Progress line, heartbeat and ETA on every long stage.
+21. Auto-write the run log into the output tree; clean output in console, pipe and redirect; warnings to the log, errors only on stderr.
 
 ## RUN
 
-21. Full run from an empty tree — fourteen per-family books, every valid signal, no pruning. UNEVALUABLE rows stay in the catalogue with a `reason_code`.
-22. Deliver one `.zip` of the complete `dot_master_discovery/` directory plus a sha256[:12] manifest. Windows: `.zip`, not `.tar.gz`.
+22. Full run from an empty tree — fourteen per-family books, every valid signal, no pruning. UNEVALUABLE rows stay in the catalogue with a `reason_code`.
+23. Deliver one `.zip` of the complete `dot_master_discovery/` directory plus a sha256[:12] manifest. Windows: `.zip`, not `.tar.gz`.
 
-23. Edit the spec, do not merely flag it: §D.0's '89.8% of missed episodes had no qualifying signal' is a gate artifact and must be restated as a gate decomposition or deleted. Give §D.2 strata, §C.3 step-5 tolerance, §12 and mantra §2 their reachable counterparts in the same pass.
+24. Edit the spec, do not merely flag it: §D.0's '89.8% of missed episodes had no qualifying signal' is a gate artifact and must be restated as a gate decomposition or deleted. Give §D.2 strata, §C.3 step-5 tolerance, §12 and mantra §2 their reachable counterparts in the same pass.
 
 ## PARKED — do not re-propose
 
@@ -86,7 +87,8 @@ P3. Stability selection, PBO/CSCV, White's Reality Check, Hansen SPA and Romano-
 
 13. See the whole reachable map, not occupy it. You decide what is worth trading; the tool measures and does not choose.
 14. Keep solos, doubles and triples all firing, gated by conviction rather than thrown away. That gating lives in the EA; this build gives you the measurements to set it.
-15. Stop the short side being an afterthought. It was never weak, it just never had enough signals to stack.
+15. The catalogue is emitted from VALID, never from an argmax: `sel.greedy_direction` must not produce any catalogue. Retain the greedy machinery ONLY as item 12's dilution-curve admission loop, and write any book it still selects as `legacy_greedy_book.csv` labelled DIAGNOSTIC ONLY, consumed by nothing downstream.
+16. Stop the short side being an afterthought. It was never weak, it just never had enough signals to stack.
 
 ### What you will see when it finishes
 
