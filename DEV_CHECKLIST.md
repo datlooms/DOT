@@ -162,7 +162,13 @@ For signal `s`, training segment `T`, direction `d = dir(s)`. **No component rea
 
 **V1 SUFFICIENCY** — `trades(s,T) >= MIN_TRADES`, `MIN_TRADES = 30`. A sample-size floor, not a fitted quality bar. Report `trades(s,T)` in the catalogue regardless so marginal cases are visible.
 
-**V2 SURVIVAL** — `worst_day(s,T) >= -FTMO_DAILY_CEILING`, `FTMO_DAILY_CEILING = 2500`. **There is no `MARGIN` parameter.** Measured on the corrected frame, the worst single signal's worst day is -$204.7 and the median is -$142.6, so V2 admits all 50 at every margin from 0.0 to 0.5 — and it cannot bind inside a split either, since a segment's worst day is >= the full-span worst day by construction. The 2,500 figure is already the operator's self-imposed hard stop, tighter than FTMO's actual daily limit, so a margin on it double-counts; an undefined free parameter inside a survival predicate is worse than no parameter. If a buffer is wanted, LOWER THE CEILING — one number, not two. V2 is retained as a guard against a pathological single signal; the binding survival test is book-level and lives in item 16.
+**V2 SURVIVAL** — `worst_day(s,T) >= -FTMO_DAILY_CEILING`, `FTMO_DAILY_CEILING = 2500`. **There is no `MARGIN` parameter.**
+
+**PER-SIGNAL BASIS, STATED EXPLICITLY:** `worst_day(s,T)` is the minimum over days in `T` of the daily P&L sum of signal `s`'s OWN trades. **Gap fillers are excluded** — they fire only when the book is flat and are attributable to no candidate signal. `T` is the training segment; no full-span quantity enters.
+
+**THE BOOK-LEVEL SURVIVAL TEST IS NOT THIS CLAUSE.** Absolute survival on the FULL population, gap fillers included, is item 16's (Appendix B), computed on the operator's assembled book. V2 guards against a pathological single signal; item 16 guards the account. Do not merge them.
+
+Measured, BOOK, corrected frame: the worst single signal's worst day is -$204.7, and 0 of 50 fail V2 at any margin in a sane range. V2 is near-inert as a per-signal test and is retained as a guard, not a filter — it cannot bind inside a split either, since a segment's day set is a subset of the full span's and its minimum cannot be lower. The 2,500 figure is already the operator's self-imposed hard stop, tighter than FTMO's actual daily limit, so a margin on it double-counts; an undefined free parameter inside an admission predicate is what rule 3 exists to keep out. If a buffer is wanted, LOWER THE CEILING — one number, not two.
 
 **V3 MEASURABILITY** — headline statistics computable and finite on `T`: at least one losing trade (else PF is undefined — report `PF = inf` with a `pf_undefined` flag, never a number that ranks first), and `>= MIN_ACTIVE_DAYS = 10` distinct entry-basis trading days.
 
@@ -194,17 +200,38 @@ For signal `s`, training segment `T`, direction `d = dir(s)`. **No component rea
 
 **It does NOT apply to book-statistic estimators whose quantile parameter is specified in this document.** `TailDep`'s `tau = 0.20`, `C_max`'s p10 and the null critical values are estimators over an already-defined population, not definitions of one. Without this scope the abort would fire on the very estimators APPENDIX B mandates by name.
 
-**Mechanical form, because "defines" is semantic and not greppable.** Maintain an ALLOWLIST of sanctioned percentile/quantile call sites and ABORT on any occurrence outside it. Verified by a FULL SWEEP of every `np.percentile` / `np.quantile` / `.quantile(` site in `dot_master_discovery/` at `master.py 3d45bd3b7f74`. The list below is complete as of that sweep; `concurrence_profiler.py L237` is a comment recording deliberate sorted-index compliance, not a call site.
+**Mechanical form: a SITE MANIFEST with abort-on-drift, not a pattern list.** "Defines" versus "reports" is semantic and ungreppable, so the check is over SITES, not idioms.
+
+**Why the pattern form is insufficient — and this is the load-bearing reason.** `dots_thresholds._floor_pct` (L54-63) is `sorted_vals[int(floor(count*pct))]`, indexed off `sorted(rings[col])` at L106. **Mechanism D — the project's canonical, sacred, byte-locked threshold mechanism — IS a sorted-index percentile.** A percentile-only sweep is therefore blind to the exact idiom this codebase uses as its house style, and a contributor writing a look-ahead threshold in that style would sail straight past the abort. Two live sorted-index cuts already exist: `concurrence_profiler._depth_quantiles` (L234-240, whose own comment advertises that it contains no percentile call) and `selection.py L229-232` (`np.sort` + `cumsum` + `searchsorted` at 0.90/0.95).
+
+**The check.** Sweep every `.py` under `dot_master_discovery/` for `np.percentile`, `np.quantile`, `.quantile(`, `np.sort`, `np.argsort`, `searchsorted`. Compare the resulting `(file, line, matched-token)` set against the manifest below. **ABORT if any site appears that is not in the manifest, and abort on any site classified MARKET-OBJECT.** This triggers on the site being new rather than on the idiom being recognised, so it catches a sorted-index percentile regardless of form. It requires re-blessing the manifest when code legitimately changes — the intended cost, and the same mechanism the sacred five already use.
+
+**Classification test, applied per site:** does the cut partition MARKET DATA (bars, episodes, strata), or does it summarise the P&L/statistics of an already-chosen set? The first is a market object and is prohibited outside `dots_thresholds`. The second is a book-statistic estimator, is mandated by Appendix B, and is sanctioned.
+
+Verified by full sweep at `master.py 3d45bd3b7f74`: 15 percentile/quantile sites and 19 sorted-index sites.
 
 | site | role | status |
 |---|---|---|
 | `selection.py L348, L349, L422, L423` | `np.quantile(x, tau)` — TailDep tail-event set, `tau` mandated in Appendix B | SANCTIONED |
 | `selection.py L466` | `np.percentile(v, 10)` — `C_max` from incumbent | SANCTIONED |
-| `selection.py L711, L725, L740` | null critical value, kept-set quantile | SANCTIONED |
+| `selection.py L711, L740` | null critical value | SANCTIONED |
+| `selection.py L725` | `keep = obs >= np.quantile(obs, drop_quantile)` — **the one sanctioned site whose shape is the shape the prohibition targets: a quantile defining a kept set.** Sanctioned because the set it partitions is observed test statistics inside Hansen's SPA, not market data — no bar, episode or stratum is defined by it, and the machinery is P3-parked. Listed separately so the hardest call is explicit rather than lumped. | SANCTIONED |
 | `selection.py L190` | `p90_abs_r` / `p99_abs_r` — descriptive output, defines nothing | SANCTIONED |
 | `terrain.py L160-161` | descriptive quartile columns, define nothing | SANCTIONED |
 | `cluster_profiler.py L310, L311` | `timing_q1` / `timing_q3` output columns, define nothing | SANCTIONED |
 | `cluster_profiler.py L323` | `depth_at_fire_p90` output column, defines nothing | SANCTIONED |
 | `terrain.py L177` | `np.percentile` on `abs_displacement_pts` defining the biggest-decile STRATUM, emitted with `population: 'MARKET'` | **NOT SANCTIONED — this is the live defect the abort exists to catch** |
 
-An episode-threshold-only check would not have caught `terrain.py L177`, because episodes are already built by the time it runs. Any new percentile site must be added to the allowlist with a stated role, or the run aborts.
+**Sorted-index sites, all currently sanctioned or descriptive:**
+
+| file | lines | classification |
+|---|---|---|
+| `selection.py` | 273, 693, 706, 735, 774 | ordering / null-stat array — book statistic |
+| `selection.py` | 229-232 | DESCRIPTIVE — effective-dimension 90/95 cumulative cut, reports only |
+| `cluster_profiler.py` | 125, 132, 146, 565 | event-array ordering and depth lookup |
+| `analysis_engine.py` | 221 | stable exit-bar ordering |
+| `family_evidence.py` | 261, 314 | stable ordering |
+| `master.py` | 804 | event-bar sort |
+| `concurrence_profiler.py` | 239, 841, 1072 | DESCRIPTIVE — console depth distribution, feeds no mask, level or entry |
+
+An episode-threshold-only check would not have caught `terrain.py L177`, because episodes are already built by the time it runs. Any new site in either sweep must be added to the manifest with a stated classification, or the run aborts.
