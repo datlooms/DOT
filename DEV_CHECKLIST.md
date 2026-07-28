@@ -62,3 +62,44 @@ P3. Stability selection, PBO/CSCV, White's Reality Check, Hansen SPA and Romano-
 - RECORD CORRECTION: spec §D.0's '89.8% of missed episodes had no qualifying signal' was computed against raw terrain and is a GATE artifact, not signal absence. Restate as a gate decomposition or delete; §D.2 strata, §C.3 step-5 tolerance, §12 and mantra §2 reach figures all need reachable counterparts alongside the raw ones.
 - Same-signal re-fire at N=30 is unreconciled between seats (26.1% vs 27.6%); N=1 and N=5 agree exactly.
 - Every change exercised on the real path at real scale before it is called done. Verifying that a function computes is not verifying that anything consumes it.
+
+---
+
+## PLAIN-ENGLISH SUMMARY — tick all before running master
+
+### What this build fixes
+
+- [ ] 1. The pipeline was reading old files from a leftover folder, data from a different dataset entirely. It now reads only from the run it just did.
+- [ ] 2. A convenience feature chopped the pipeline's own output files into pieces, and the next step then read those broken pieces as if they were real. That feature is gone.
+- [ ] 3. When counting how many signals agreed at once, the same signal firing repeatedly was counted as several. On the same bar it was exactly zero error; it grows to about 15% at a five-bar window and 26% at thirty.
+- [ ] 4. The part meant to pick signals never actually ran, and it is not being repaired. It is being deleted: nothing chooses signals any more, you do.
+- [ ] 5. A safety check on assembled books was wired permanently to "pass". It is removed, and those checks move into a separate tool you run against whatever book you build.
+- [ ] 6. The test that proves the method works, not just that one book worked, never produced a number. It now does.
+- [ ] 7. Only two of fifteen stages used more than one processor core. All stages get parallelised.
+- [ ] 8. One exception: the step that strips near-duplicate signals stays sequential, or duplicates slip through. It ships with a proof that the parallel result matches the sequential one exactly.
+- [ ] 9. Stages are timed first and parallelised second, so the speed-up is measured rather than guessed.
+- [ ] 10. Every long stage prints progress, a heartbeat and an estimated finish time. You have twice had to guess whether a healthy run was stuck.
+- [ ] 11. The run writes its own log into the output folder, and the console stays readable whether you watch it, pipe it or redirect it.
+
+### What you are trying to achieve
+
+12. See the whole reachable map, not occupy it. You decide what is worth trading; the tool measures and does not choose.
+13. Keep solos, doubles and triples all firing, gated by conviction rather than thrown away. That gating lives in the EA; this build gives you the measurements to set it.
+14. Stop the short side being an afterthought. It was never weak, it just never had enough signals to stack.
+
+### What you will see when it finishes
+
+- [ ] 15. Fourteen books, one per family, every valid signal kept. Thousands per family and tens of thousands for the largest: last run 41,148 candidates cleared the filter, over 37,000 of them from a single family.
+- [ ] 16. Every signal scored both ungated and gated, so you can see per signal whether the conviction filter helps it, rather than assuming it book-wide.
+- [ ] 17. Every row carries a price: how many rows that good come up by chance alone. At fifty rows you can eyeball, at thirty-seven thousand you cannot.
+- [ ] 18. Coverage against what is actually reachable. You hold 82 of 2,298 episodes today, 4.7% on the long side and 2.4% on the short.
+- [ ] 19. The unclaimed list: 2,216 episodes you could legitimately trade and do not, each marked whether nothing searched there or nothing could express it.
+- [ ] 20. A walk-forward number saying whether your inclusion rule beats chance.
+- [ ] 21. A dilution curve in two versions, ranked two different ways, showing what happens to the triple edge as weaker signals join. The gap between the two curves is the overfit estimate.
+- [ ] 22. Reach stops near 30% of the terrain, the market's clean directional moves, which is already a filtered set. That ceiling is the dead-bar filter plus the alternating bias, a trade you chose rather than a fault.
+- [ ] 23. The other thirteen families add depth, timing and diversity inside that ceiling. They do not add reach.
+
+### Hold onto this
+
+- 2,216 unclaimed is what is visible, not what is tradable. Reachable only means the bar was eligible and the direction agreed, not that a signal exists there which survives the statistical bars. The count of valid triples per episode splits it, and the real number will land well below 2,216.
+- Whether the same-bar edge survives as weaker signals join is unknown until the dilution curve exists. That number decides whether the 4x target is real.
