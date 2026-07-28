@@ -304,7 +304,7 @@ def depth_yield_pair(entries_by_dir, signals_by_dir, traded_day_count, S=S_DEFAU
             'signals_LONG': signals_by_dir.get(1, 0), 'signals_SHORT': signals_by_dir.get(-1, 0)}
 
 
-def depth_yield_grid(entries_by_dir, signals_by_dir, traded_day_count, s_grid=S_GRID, tolerances=(5, 10)):
+def depth_yield_grid(entries_by_dir, signals_by_dir, traded_day_count, s_grid=S_GRID, tolerances=(1, 5, 10, 15, 20, 25, 30)):
     rows = []
     for n_tol in tolerances:
         for S in s_grid:

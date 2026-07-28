@@ -1137,6 +1137,43 @@ def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=Non
                   flush=True)
             print("  sequentially in this process. If this recurs, lower --workers.", flush=True)
             print("", flush=True)
+        print('  PER-FAMILY CHUNK COMPLETENESS (before collation is attempted):', flush=True)
+        incomplete = {}
+        for fam, script, _n, bounds in plan:
+            missing = [i for i in range(len(bounds)) if not chunk_is_complete(fam, script, i)]
+            state = 'complete' if not missing else f'MISSING {missing[:20]}'
+            if missing and len(missing) > 20:
+                state += f' ... and {len(missing) - 20} more'
+            print(f'    {fam:4} {len(bounds) - len(missing)}/{len(bounds)} {state}', flush=True)
+            if missing:
+                incomplete[fam] = missing
+        if incomplete:
+            print('  RE-QUEUEING ONLY THE MISSING CHUNKS — never a sequential re-search of a '
+                  'chunked family. One missing F1 chunk once triggered a full 1,713,630-candidate '
+                  'single-process re-search (~17 days at the measured rate); the resume path did '
+                  'the same work in 5m23s.', flush=True)
+            requeue = []
+            for fam, script, _n, bounds in plan:
+                for i in incomplete.get(fam, []):
+                    lo, hi = bounds[i]
+                    requeue.append((fam, script, scope, RESULTS_DIR, frame_path, i, lo, hi))
+            if requeue and frame_path is not None:
+                from concurrent.futures import ProcessPoolExecutor as _PPE
+                import multiprocessing as _mp3
+                nw2 = min(workers, len(requeue))
+                with _PPE(max_workers=nw2, mp_context=_mp3.get_context('spawn')) as ex2:
+                    for _r in ex2.map(_chunk_worker, requeue):
+                        pass
+            script_of = {p0: p1 for p0, p1, _a, _b in plan}
+            still = {}
+            for f, ix in incomplete.items():
+                left = [i for i in ix if not chunk_is_complete(f, script_of[f], i)]
+                if left:
+                    still[f] = left
+            if still:
+                raise SystemExit(
+                    f'ABORT — chunks still missing after re-queue: {still}. Named by index so the '
+                    f'operator does not have to derive them with a set-difference.')
         for fam, script, _n, bounds in plan:
             if fam == 'F0':
                 ok, n_rows = collate_f0(script, len(bounds), df, adaptive, structural, warmup,
@@ -1180,7 +1217,15 @@ def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=Non
         all_rows.extend(rows)
     if f1_csv_present:
         all_rows.extend(ingest_f1())
-    all_rows.extend(ingest_f0())
+    f0_collated = family_is_complete('F0', 'triple_convergence_and_d2ddir')[0]
+    if f0_collated:
+        print('  [F0] chunked path already collated F0 into the pool — SKIPPING ingest_f0(). '
+              'collate_f0 writes the same filename F0_CSV that ingest_f0 reads, so running both '
+              'double-counted F0 (19,757 -> 39,514) and inflated the trial count that spec H.1 '
+              'uses for the empirical null and Benjamini-Yekutieli, making the multiple-testing '
+              'bar harder than the search warranted.', flush=True)
+    else:
+        all_rows.extend(ingest_f0())
     master = pd.DataFrame(all_rows, columns=SCHEMA)
     master_path = os.path.join(RESULTS_DIR, "discovery_master.csv")
     _write_atomic_csv(sort_master(master), master_path)
@@ -1188,6 +1233,17 @@ def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=Non
     print(f"\nCollated {len(master)} candidates -> {master_path} "
           f"(sorted: folds_plus, min_fold_pf, worst_day_usd, agg_pf, WR; no rows dropped)", flush=True)
     by_fam = master.groupby('family').size().to_dict()
+    for fam, script, _mod, _fmt in FAMILIES:
+        ok, meta = family_is_complete(fam, script)
+        if not ok or meta is None:
+            continue
+        got = int(by_fam.get(fam, 0))
+        want = int(meta.get('rows', got))
+        if got != want:
+            raise SystemExit(
+                f'ABORT [{fam}] per-family pool count {got} != collated row count {want}. A family '
+                f'is being counted more than once (or lost) between collation and the pool; the '
+                f'trial count that feeds spec H.1 would be wrong.')
     print(f"Per-family counts: {by_fam}", flush=True)
 
 

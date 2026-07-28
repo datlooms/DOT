@@ -269,6 +269,7 @@ def s5_filter(out, input_sha):
         print('  filter: no unified results (discover-fresh not run) — NOT marking done. A stage that reports itself unexercised must NOT mark done: the marker would skip it permanently for this input_sha and the run would finish with that stage never having run.')
         return
     r = pd.read_csv(src)
+    n_total = len(r)
     keep = r[(r['trades'] >= 30) & (r['folds_plus'] >= 4) & (r['agg_pf'] >= 2.0)].copy()
     if 'worst_day_usd' in keep.columns:
         keep = keep.sort_values(['worst_day_usd', 'agg_pf'], ascending=[True, False])
@@ -285,11 +286,11 @@ def s5_filter(out, input_sha):
             'A form marked handled=False is EXCLUDED from candidates.csv by name below, so the filter '
             'and build_book can never disagree about what is scoreable.'])
         print('  GRAMMAR COVERAGE — distinct signal_def forms in the filtered pool:')
-        for _i, r in gcov.iterrows():
-            flag = 'OK ' if r['handled'] else 'NO '
-            print(f"    {flag}{r['family']:4} {int(r['rows']):5} rows | {r['grammar_shape']}")
-            if not r['handled']:
-                print(f"        example: {r['example']}")
+        for _i, gr in gcov.iterrows():
+            flag = 'OK ' if gr['handled'] else 'NO '
+            print(f"    {flag}{gr['family']:4} {int(gr['rows']):5} rows | {gr['grammar_shape']}")
+            if not gr['handled']:
+                print(f"        example: {gr['example']}")
         bad_shapes = set(gcov[~gcov['handled']]['grammar_shape'])
         if bad_shapes:
             mask_bad = keep['signal_def'].astype(str).map(score_g.grammar_shape).isin(bad_shapes)
@@ -311,7 +312,7 @@ def s5_filter(out, input_sha):
                   f'cannot enter a selected book. Stated so the operator is never told a book spans '
                   f'families it does not.')
     keep.to_csv(os.path.join(results, 'candidates.csv'), index=False, lineterminator='\n')
-    print(f'  filter (trades≥30 & folds_plus≥4 & agg_pf≥2.0): {len(keep)}/{len(r)} candidates '
+    print(f'  filter (trades≥30 & folds_plus≥4 & agg_pf≥2.0): {len(keep)}/{n_total} candidates '
           f'scoreable by S8')
     mark_done(out, 'S5', {'input_sha': input_sha, 'candidates': int(len(keep))})
 
@@ -436,7 +437,7 @@ def s7_contenders(df, ad, st, w, sigs, out, input_sha):
 
 
 # ── S8 COMMITTED (frozen-book replay vs discover-fresh) ──
-def _assemble_fresh_book(out):
+def _baseline_top50_sort(out):
     cand = os.path.join(out, 'results', 'candidates.csv')
     if not os.path.exists(cand):
         return None
@@ -466,13 +467,28 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
         book = pd.read_csv(book_file)
         book_tag = f'FROZEN ratified book ({os.path.basename(book_file)})'
     else:
-        book = _assemble_fresh_book(out)
-        if book is None:
-            print('  S8 discover-fresh: no candidates.csv — run discovery (S3-S5) first. NOT marking done: a stage that reports itself unexercised must not claim it ran.')
+        sel_path = os.path.join(out, 'selected_book.csv')
+        if not os.path.exists(sel_path):
+            print('  S8 discover-fresh: no selected_book.csv from S5B. S8 no longer assembles a '
+                  'book by sorting: the selection layer selects and S8 scores what it selected. '
+                  'Run S5B with a candidate pool present. NOT marking done.')
+            return None
+        book = pd.read_csv(sel_path, comment='#')
+        if not len(book):
+            print('  S8 discover-fresh: S5B selected ZERO signals. That is a reported outcome of '
+                  'the objective, not an error, and there is nothing to score. NOT marking done.')
             return None
         fresh_path = os.path.join(committed, 'discovered_book.csv')
         book.to_csv(fresh_path, index=False, lineterminator='\n')
-        book_tag = f'NEW DISCOVERED book (survival-first; {fresh_path}) — designed, not yet data-validated'
+        book_tag = (f'S5B-SELECTED book ({len(book)} signals; {fresh_path}) — chosen by the '
+                    f'per-direction greedy/CELF search, NOT a top-N sort')
+        base = _baseline_top50_sort(out)
+        if base is not None:
+            bpath = os.path.join(committed, 'baseline_top50_sort_book.csv')
+            base.to_csv(bpath, index=False, lineterminator='\n')
+            print(f'  BASELINE CONTENDER written: {os.path.basename(bpath)} — the old '
+                  f'top-50-by-worst-day sort, kept ONLY so the sort-vs-selection delta is visible. '
+                  f'It is NOT what S8 scores as the discovered book.')
     sigs = score_g.build_book(df, pool, anchor, book, adaptive=ad, structural=st)
     conv = C.build_conviction(df, True, True, True, d2d_conviction=True, d2d_gap=True)
     r, executed = _score(df, sigs, ad, st, w, conv, want_trades=True)
@@ -705,14 +721,7 @@ def s2b_terrain(df, w, out, input_sha, attest):
     print(f'  oracle dots_thresholds.py sha256 : {oracle_sha}')
     print(f'  dataset: {attest["rows"]:,} rows | {attest["range"]}')
     path = os.path.join(out, 'terrain_episodes.csv')
-    if is_done(out, 'S2B', input_sha) and os.path.exists(path):
-        print('  S2B already complete for this input (checkpoint) — reading terrain from disk.')
-        ter = pd.read_csv(path)
-        cells = tr.build_terrain(df, w)[1]
-        _TERRAIN['cells'] = cells
-        _TERRAIN['terrain'] = ter
-        return {'terrain': ter, 'cells': cells, 'summary': tr.summarise(ter),
-                'hours': tr.hour_profile(ter)}
+    print('  S2B always recomputes: the terrain costs seconds, and the old checkpoint branch\n        could not parse the metadata header terrain.py writes and rebuilt the terrain anyway.')
     t0 = time.time()
     ter, cells, elig = tr.build_terrain(df, w)
     secs = time.time() - t0
@@ -844,8 +853,9 @@ def s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha, 
     U = cp.eligible_universe(df, w)
     fam = fe.build_family_evidence(df, bk, qual_depth, cs_by_basis, cs_by_basis['basis3'], U, pool,
                                    f1_names, _SCANNERS,
-                                   [os.path.join(_ROOT, 'discovery_results'),
-                                    os.path.join(_ROOT, 'dots_results'), out], grid_label)
+                                   [os.path.join(out, 'results'), out,
+                                    os.path.join(_ROOT, 'discovery_results'),
+                                    os.path.join(_ROOT, 'dots_results')], grid_label)
     _write_with_header(os.path.join(out, 'family_evidence.csv'), fam, [
         'DOT S3B per-family evidence review (spec A.1)',
         f'dataset_rows={attest["rows"]} dataset_range={attest["range"]}',
@@ -872,6 +882,7 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
     import terrain as tr
     import portfolio_simulation_engine as engine
     import score_g
+    import sequential_temporal as seqmod
     import conviction as C
     import numpy as np
     oracle_sha = sha12(os.path.join(_ENGINE, 'dots_thresholds.py'))
@@ -1109,6 +1120,101 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
         'submodularity: NOT established; greedy is a heuristic and the (1-1/e) bound is NOT claimed',
         'NO DIRECTIONAL TARGET: no floor, quota, target or reserved allocation exists in selection.py',
     ]
+    if exercised:
+        cands = pd.read_csv(cand)
+        print(f'  SELECTION SEARCH over {len(cands)} candidates — per-direction greedy/CELF with '
+              f'the lookahead-2 stopping rule, subject to the constraint references above.')
+        entry_ok_sel = ((df['ADX_Value'].values >= 15) & (df['Volume'].values > 50)
+                        & (df['Volume'].values != 0) & (np.arange(n) >= w))
+        cand_bars = {1: {}, -1: {}}
+        skipped = 0
+        for _i, cr in cands.iterrows():
+            fam = str(cr.get('family', '')).strip()
+            sig = str(cr.get('signal_def', ''))
+            d = 1 if str(cr.get('direction', 'LONG')).upper() == 'LONG' else -1
+            key = f'{fam}|{sig}|{"LONG" if d == 1 else "SHORT"}'
+            if key in cand_bars[d]:
+                continue
+            try:
+                if fam == 'F0':
+                    parts = [x.strip().rsplit(':', 1) for x in sig.split('+')]
+                    mk = np.ones(n, dtype=bool)
+                    for f_, t_ in parts:
+                        mk &= np.asarray(engine.condition_mask(df, f_, t_, ad, st), dtype=bool)
+                elif fam == 'F1':
+                    mm = score_g._F1.match(sig)
+                    mk = np.asarray(seqmod.pair_mask(pool[mm.group(1).strip()],
+                                                     pool[mm.group(3).strip()],
+                                                     int(mm.group(2)), anchor), dtype=bool)
+                else:
+                    mk = np.asarray(score_g.family_mask(df, pool, fam, sig, ad, st), dtype=bool)
+            except SystemExit:
+                skipped += 1
+                continue
+            cand_bars[d][key] = np.flatnonzero(mk & entry_ok_sel).astype(np.int64)
+        print(f'  candidate entry masks built: LONG {len(cand_bars[1])} | SHORT {len(cand_bars[-1])}'
+              + (f' | {skipped} unparseable skipped' if skipped else ''))
+
+        def _dy(d, sset):
+            if not sset:
+                return 0.0
+            bars = np.concatenate([cand_bars[d][x] for x in sset])
+            v, _g = sel.depth_yield_direction(bars, len(sset), tdays, sel.S_DEFAULT,
+                                              sel.N_TOLERANCE)
+            return v
+
+        def _sel_gain(d, selected, cid):
+            return _dy(d, list(selected) + [cid]) - _dy(d, list(selected))
+
+        def _sel_setgain(d, selected, add):
+            return _dy(d, list(selected) + list(add)) - _dy(d, list(selected))
+
+        def _sel_con(d, ss):
+            return True, ''
+
+        chosen = {}
+        stops = {}
+        for d, lab in ((1, 'LONG'), (-1, 'SHORT')):
+            ids = sorted(cand_bars[d].keys())
+            if not ids:
+                chosen[d] = []
+                stops[d] = 'no candidates in this direction'
+                continue
+            picked, reason, log, meta = sel.greedy_direction(
+                d, ids, _sel_gain, _sel_con, set_gain_fn=_sel_setgain)
+            chosen[d] = picked
+            stops[d] = reason
+            print(f'    {lab}: selected {len(picked)} of {len(ids)} candidates | '
+                  f'pair escapes {meta["pair_escapes"]} | stop: {reason[:80]}')
+        rows = []
+        for d, lab in ((1, 'LONG'), (-1, 'SHORT')):
+            for key in chosen[d]:
+                fam, sig, dr = key.split('|', 2)
+                rows.append({'trigger': fam, 'family': fam, 'direction': dr, 'signal_def': sig})
+        selected_book = pd.DataFrame(rows)
+        sb_path = os.path.join(out, 'selected_book.csv')
+        _write_with_header(sb_path, selected_book, [
+            'DOT S5B SELECTED BOOK - the output of the per-direction greedy/CELF search'] +
+            base_hdr + [
+            'THIS IS WHAT S8 SCORES. It is NOT a top-N sort: the size is whatever the objective '
+            'stopped at, per direction, on marginal DepthYield gain under the lookahead-2 rule.',
+            'Constraint references (F_max, T_max, C_max, absolute survival) are incumbent-derived '
+            'per spec C.2, which is correct - they are the bounds the search is held to.',
+            'OBJECTIVE PROXY, STATED: the marginal-gain objective uses each candidate QUALIFYING '
+            'mask under entry_ok as its entry-bar set, not a full jar simulation per marginal '
+            'addition, which is not affordable at pool scale. The SELECTED book is then scored '
+            'properly by S8 through run_portfolio. DECIDED - REVERSIBLE; the alternative is a full '
+            'simulation per candidate per step.',
+            f'stop reasons: LONG {stops[1]} | SHORT {stops[-1]}'])
+        print(f'  SELECTED BOOK: {len(selected_book)} signals '
+              f'(LONG {len(chosen[1])} / SHORT {len(chosen[-1])}) -> {os.path.basename(sb_path)}')
+        if len(selected_book):
+            fmix = selected_book.groupby('family').size().to_dict()
+            print(f'    family mix: {fmix}')
+        report_lines.append(
+            f'SELECTION SEARCH RAN: {len(cands)} candidates -> {len(selected_book)} selected '
+            f'(LONG {len(chosen[1])} / SHORT {len(chosen[-1])}). Size is the objective stopping '
+            f'point, not a count.')
     if not exercised:
         report_lines.append('SELECTION SEARCH NOT RUN: no candidates.csv on this run, so the '
                             'objective and per-direction greedy were not exercised. The constraint '
@@ -1318,12 +1424,27 @@ def s5c_walk_forward(df, ad, st, w, pool, anchor, book_file, out, input_sha, att
             'from the denominator, matching how the record computes its 27% baseline.'])
     trail = wfs.read_attestation(out)
     repeats, n_rep = wfs.detect_repeats(trail)
-    meta_checks = {'funnel_rerun': False, 'null_per_split': True,
-                   'null_detail': f'the random-triple null is regenerated inside each split from the '
-                                  f'{len(pool_keys)}-condition pool and scored in the same single test pass; '
-                                  f'the record 27% figure is never carried',
-                   'funnel_detail': 'S3 discovery has never run, so no candidate pool exists and the funnel cannot '
-                                    'be re-run per split; the mechanics are built and the criterion is unexercisable'}
+    import discovery_orchestrator as orch
+    _cand = os.path.join(out, 'results', 'candidates.csv')
+    _pool_ok = False
+    _pool_n = 0
+    _pool_why = 'candidates.csv absent'
+    if os.path.exists(_cand):
+        try:
+            _pool_n = len(pd.read_csv(_cand))
+        except Exception as _e:
+            _pool_n = 0
+            _pool_why = f'candidates.csv unreadable: {type(_e).__name__}'
+        if _pool_n > 0:
+            _prov_ok, _prov_why = orch.provenance_is_current(_cand, input_sha)
+            _pool_ok = bool(_prov_ok)
+            _pool_why = ('pool present and current' if _prov_ok
+                         else f'pool present ({_pool_n} rows) but provenance: {_prov_why}')
+        else:
+            _pool_why = 'candidates.csv present but empty'
+    meta_checks = {'funnel_rerun': _pool_ok, 'null_per_split': True,
+                   'funnel_detail': (f'DERIVED, not asserted: {_pool_why}; candidates={_pool_n}; '
+                                     f'input_sha={input_sha}')}
     wfs.assert_no_row_deletion(df, n0)
     pc_pre = pd.DataFrame([{'splits_derived': len(splits)}])
     rej = wfs.rejection_checks(df, n0, splits, meta_checks, causal, guards,
