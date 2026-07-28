@@ -1,75 +1,62 @@
-AUDITOR — SIXTH PASS (SCOPED)
+AUDITOR — SEVENTH PASS (SCOPED)
 STATE
 
-HEAD e5118e5. DEV_CHECKLIST.md 259 lines / d787d586627b ✓ · DEVELOPER_BRIEF.md 123 lines / 51cb8edde58d ✓ · master.py 3d45bd3b7f74 and the sacred five unchanged ✓.
+HEAD 30093d6. DEV_CHECKLIST.md 265 lines / 1f9d770f3b2c ✓ · DEVELOPER_BRIEF.md 123 lines / 178c77f52d18 ✓ · master.py and the sacred five unchanged ✓. All three lock shas still current — terrain.py dcaecaf7e8e1, cluster_profiler.py 070bb2aa7aaa, concurrence_profiler.py 554019e93069 — verified against this clone, not carried from your report.
 
-Delta confined — verified, not accepted. Opcode-level region diff against 715a4f3499a9 returns exactly one changed section: ## APPENDIX D. I additionally byte-compared Appendices A, B and C as whole blocks: all three byte-identical, which covers V2 SURVIVAL and the UNEVALUABLE table without inference. 24 items, the two-stage test, the classification record, determinism, item 5's pointer — unchanged, not re-verified.
+Delta confined — measured. Region diff against d787d586627b returns one changed section, ## APPENDIX D; Appendices A, B and C byte-identical as whole blocks, which covers V2, the UNEVALUABLE table and the two-stage test without inference. Items 1-24, lock table, classification record — unchanged, not re-verified.
 
-CHALLENGE 2 — THE THREE SHAS: ALL CORRECT
+CHALLENGE 3 — DID THE TERRAIN EVIDENCE DEFEAT MY WORDING? Yes. You read it correctly and I was wrong.
 
-Computed against this clone's HEAD:
+Verified in source: GRID_W = (15, 30) is a forward-window length consumed per bar at thrust_thresholds(df, W, …) (L107-108); CONTIGUOUS_TOLERANCE = 1 groups events within one bar at build_cluster_set (L114). Neither requires knowing the population to place an element. My wording — documented constants over market data should still be prohibited — would have forbidden the ratified terrain construction outright. Substituting a measured discriminator for my formulation was the right call, and this is the second time you have overruled me on measurement and been right.
 
-module	document	mine	
-engine/terrain.py	dcaecaf7e8e1	dcaecaf7e8e1	MATCH
-engine/cluster_profiler.py	070bb2aa7aaa	070bb2aa7aaa	MATCH
-scanners/concurrence_profiler.py	554019e93069	554019e93069	MATCH
-engine/dots_thresholds.py	518862bf19fb	518862bf19fb	MATCH
+Note in passing that the new rule handles TOP_EPISODE_FRACTION = 0.10 (L57) correctly: it is population-dependent, and it is already the flagged terrain.py L177 defect. The rule is self-consistent there.
 
-The lock certifies the right bytes. And the framing is now correct in substance, not only form: "The Developer VERIFIES against them; he does not record his own baseline… a baseline computed by the person who can change the file is a checksum of his own work." That was the category point and it has landed as one.
+CHALLENGE 4 — BOTH RE-BASED SANCTIONS HOLD
 
-A1 — FOURTH MODULE LOCKED: verified independently
+concurrence_profiler L841: population-dependent (the ranking needs every pair), so the fixed-N defence correctly does not survive — and it is sanctioned on stage (ii) alone because the objects partitioned are condition pairs, not bars, episodes or strata. family_evidence L280: each size maps to a literal band independently of every other row, so not population-dependent, and cluster size is a book quantity — holds on both stages. Re-basing them rather than leaving the old ground in place was necessary, and it was done.
 
-concurrence_profiler.py L1146 compute_regime_labels does k-means over z-scored market features and labels every bar — confirmed in source. 0 mentions across items 1-24 for all four locked modules (my own grep, not yours). Locking is free and produces no false abort. The entry carries its evidence rather than an assertion.
+CHALLENGE 2 — N / total = p IS IMPRECISE, BUT THE CONCLUSION IS RIGHT
 
-CHALLENGE 1 — IS FOUR COMPLETE? Yes, and I used three methods independent of the one that found the fourth.
+For a fixed N and a varying total, N / total is not a fixed p — the identity holds only for a given total, so "a fixed top-N is a percentile with the parameter written as a count" is not strictly true. It doesn't open a gap, because the operative reason is the one you also give: to take the top 100 you must first rank all of them. Rest the prohibition on the ranking requirement and the arithmetic claim becomes unnecessary.
 
-Constructor-sweeping found the fourth last pass, so I did not repeat it as the primary test.
+And there is a top-N over market data that is genuinely not a percentile: a prefix — "the first N bars". Placing element i needs only i. Not population-dependent, correctly permitted. A suffix — "the last N bars" — needs the total, and is correctly prohibited. That asymmetry is handled cleanly by dependence and would have been ambiguous under "is it a percentile?", which is a point in the new rule's favour.
 
-Method A — MARKET-population claims. Only terrain.py emits a literal population: 'MARKET'. Weak as a completeness test (it finds one of four), so not relied on.
+CHALLENGE 1 — DOES POPULATION DEPENDENCE DRAW THE LINE IN THE RIGHT PLACE?
 
-Method B — the third idiom class. pd.cut / pd.qcut / np.digitize across the package: exactly one live site, family_evidence.py L280, pd.cut(cl['size'], [0,1,2,4,7,12,10**6], …) — hardcoded literal bins on cluster size. pd.qcut appears nowhere. The Quant's claim verifies exactly.
+It is the right axis, and it over-catches in exactly the symmetric way mine did. Two findings.
 
-Method C — name-based sweep for every function implying a partition, then clearing each candidate on the data-derived question. Everything outside the four resolves:
+(a) The rule, read literally, prohibits the ratified walk-forward and fold construction. Verified in source:
 
-wf_selection.py (segment_is_valid, segment_month_buckets, h3_segment_rule) partitions market days — but I swept it for every cut idiom including pd.cut/digitize and it has none. Segments are fixed day-count floors plus calendar months. Not a data-derived cut.
-selection.py (clusters_from_entries, h3_buckets, segment_months) clusters entry bars — book events — and calendar months. Book side.
-analysis_engine.py _bucket buckets trades by calendar keys. Book side.
-family_evidence.py L280 bins a book quantity by literal bins.
-core.py capped_poc genuinely partitions price into buckets to build the PoC — a market object. It is already byte-locked as one of the sacred five (6530e2508b17, stated at the top of this same document), so it is covered.
-All scanners are frozen by the standing "No scanner edits" constraint, and the one scanner that defines strata is now locked explicitly.
+master.py L337-339: n_oos = int(round(n * OOS_TAIL_FRACTION)), train_days = days[:n - n_oos], oos_days = days[n - n_oos:], and base = m // FOLD_COUNT at L341. Placing a trading day into train versus OOS, or into fold i, requires knowing n — the total post-warmup trading days.
+wf_selection.py L131-140: remaining = total_days - first_valid, base = remaining // n, extra = remaining % n — the split derivation, same shape.
 
-No fifth module defines a market object by a data-derived cut and lacks a lock. One note for the record rather than an amendment: core.py is a market-object definer covered incidentally by the sacred-five lock rather than by Appendix D's enumeration. The protection is real today; it would silently lapse if core.py were ever un-sacred'd. Worth one clause in the residual, not a change to the lock table.
+Both are partitions of market data (trading days), both are population-dependent, both sit outside dots_thresholds, and both are ratified design — I ratified the proportional folds and the split derivation in earlier passes. By the scope sentence's own words — "an episode, cluster, stratum or any other partition of market data" — they are in scope and prohibited. That is the mirror of the GRID_W problem you used to defeat my wording.
 
-CHALLENGE 3 — DOES THE pd.cut PARAGRAPH CLARIFY OR BLUR? It clarifies.
+The fix is small and preserves everything the rule was built to catch: narrow "the rest of the population" to "the distribution of a market quantity across the population." A fold split depends only on the cardinality and ordering of the time axis — no market value is ranked or thresholded. TOP_EPISODE_FRACTION, top-N by displacement, and every percentile still bite, because they depend on the distribution of a market quantity. GRID_W and CONTIGUOUS_TOLERANCE remain permitted. The fold and split constructions become permitted, correctly.
 
-The failure this appendix corrected twice was claiming coverage that did not exist. Naming an idiom while explicitly disclaiming enforcement is the inverse of that failure — it states a gap instead of papering one. Three things make the framing right: it sits inside the residual, the section about what is not closed; it says outright "NOT added to any enforcement sweep" with the reason ("that would repeat the sorted( volume mistake for no gain"); and it closes with "a concrete instance of the residual class above, not an exception to it." The chosen instance is well selected — family_evidence.py is edited, therefore unlockable, therefore a genuine evasion path, and pd.qcut(episode_disp, 10) is exactly the shape that evades both the token form and the file lock.
+(b) One contamination class the new rule cannot see, and my rule could. A constant whose value was derived from this span offline and then hardcoded — someone computes p90 of displacement, gets 42.7, writes disp > 42.7. At runtime each element is classified independently, so it is not population-dependent and the rule permits it. But it encodes the full-span distribution, which is precisely the look-ahead contamination the scope sentence names. My over-broad wording caught this; the new one does not. Neither is clean, because this is not detectable from form at all — it needs provenance, not shape. The appendix has a residual section, and this belongs in it: a constant applied to market data should state where its value came from — a design choice, or a number read off this data. Nothing in the document currently distinguishes TOP_EPISODE_FRACTION = 0.10 chosen by design from the same figure chosen because it split this span nicely.
 
-One refinement. The paragraph asserts a point-in-time fact — one live site, pd.qcut nowhere — with no expiry and no re-check owner. The locked modules are re-verified every run; this claim is verified once and never again. Date it ("verified at HEAD e0eb79a", as the sha block already does) or fold it into the review that adds modules to the lock manifest.
+THE pd.cut STAMP AND OWNERSHIP — CORRECT
 
-CHALLENGE 4 — DOES THE DELTA CONTRADICT THE TWO-STAGE TEST OR V2?
+Re-run rather than re-cited, stamped at HEAD 39fbd4d, and — the better half — assigned: "re-running this sweep is part of the lock-manifest review, and that review owns it." You were right that dating alone tells a reader the claim is stale without telling anyone to act. That is the stronger form of what I asked for.
 
-V2: no. Byte-identical, verified by block comparison.
+THE core.py CLAUSE — STRONG ENOUGH, WITH ONE GAP IN PLACEMENT
 
-The two-stage test: not contradicted, but the delta uses a ground the test does not state. Two sanctions now rest on a third criterion:
+It names the trigger (EA fix and re-export, live), the consequence (the enumeration silently reads four while five exist), and the action (it joins the lock table). Bolded and headed "Dependency, not a footnote." That survives a reader who is not looking for it.
 
-concurrence_profiler L841 — "a fixed documented N is not a percentile and the objects are condition pairs, not market data"
-family_evidence L280 — "the bins are not data-derived and cluster size is a book quantity"
-
-Both cite (a) the cut is by a documented constant rather than derived from the data, and (b) the object is not market data. Only (b) is in the stated test. For these two sites it doesn't matter — both are book quantities, so stage (ii) alone reaches the same verdict.
-
-But the two grounds diverge for a case the document does not cover: a cut by a documented constant over market data — say "the top 100 episodes by displacement". The scope sentence prohibits defining a market object "by a percentile taken over the loaded span", and a fixed top-N is not a percentile, so the scope sentence permits it. Stage (ii) says market-data partitions are prohibited outside dots_thresholds, so stage (ii) forbids it. The document does not say which governs. This is the same shape as my point 5 last pass — the manifest applying more grounds than the page states — and it is worth closing while the section is open, because the answer is not obvious: a fixed top-N over episodes is not look-ahead in the percentile sense, but it is a market-object partition defined outside mechanism D.
+The gap is where it lives. Anyone removing core.py from sacred status will edit the sacred-five line at the top of this document — line 3 — and has no reason to open Appendix D. Put a one-clause pointer on the sacred-five line itself: that core.py and dots_thresholds.py are also Appendix D market-object definers and cannot be un-sacred'd without joining that lock table. Then the trigger is stated where the change is actually made.
 
 VERDICT: RATIFY WITH AMENDMENTS
 
-Two amendments. Neither blocks the build. Appendix D is a pre-run guard, both amendments are single clauses, and nothing in either touches the build path, the catalogue, or any figure the operator will act on. On my reading this clears the bar to start.
+None of the amendments blocks. The build may start; the brief may go to the Developer tonight. Every finding below is in a review criterion inside Appendix D, not in the build path: the enforcement mechanism is the four-module file lock, and neither master.py nor wf_selection.py is locked, so the over-catch I found misleads a future reviewer rather than aborting a run. Nothing here touches the catalogue, any figure, or any item the Developer builds from.
 
-State which ground governs a cut by a documented constant over market data. The scope sentence (percentile-only) permits it; stage (ii) (market-data partitions prohibited) forbids it. Two sanctions in the delta lean on the "documented constant" ground, so it is load-bearing and unstated. One clause settles it either way — my own reading is that a documented constant over market data should still be prohibited outside dots_thresholds, because look-ahead is not the only contamination and a hand-chosen N over episodes is exactly the kind of choice the catalogue design exists to remove.
-Date the pd.cut / pd.qcut / np.digitize claim, or assign its re-check. "One live site, pd.qcut nowhere" is verified today and never again; every other claim in the mechanism section is re-verified each run by sha. Add "verified at HEAD e0eb79a" or fold the re-check into the lock-manifest review.
+Narrow the discriminator to the distribution of a market quantity. As written it prohibits the ratified proportional fold/OOS split (master.py L337-341) and the walk-forward split derivation (wf_selection.py L131-140), both population-dependent partitions of trading days. Depending on the cardinality of the time axis is not depending on the distribution of a market quantity, and only the latter is contamination.
+Add the fitted-constant class to the residual. Population dependence is a runtime-form test and cannot see a constant whose value was read off this span. Require constants applied to market data to state their provenance — this is a review obligation, not a mechanical one, which is where the residual already puts such things.
+Rest the top-N prohibition on the ranking requirement, not on N / total = p, which holds only for a fixed total.
+Move the core.py trigger to the sacred-five line (or cross-reference it there), because that is the line someone edits when un-sacreding it.
 
-Optional, one clause: note in the residual that core.py is a fifth market-object definer covered by the sacred-five lock rather than by this enumeration, so the coverage does not silently lapse if its status ever changes.
+On your stated worry — whether population dependence is the complete axis: it is the right axis and it is not complete, but the class it misses is one no form-based rule can catch, and the answer is provenance rather than a third discriminator. That is a boundary of the method, not a fault in your formulation. You have now substituted your own reasoning for mine twice and been right both times; this pass I am refining your rule rather than replacing it, which is the correct direction of travel.
 
-On the completeness of FOUR — which you named as your likeliest error: it holds. I tested it three ways, none of them the constructor sweep that found the fourth, and cleared every candidate outside the lock on the data-derived question. The Quant's pd.cut sweep reproduces exactly: one site, hardcoded bins, book quantity, and no pd.qcut anywhere.
-
-The mechanism is sound, the shas are right, the residual is now stated at its true width, and the one thing I found is a precision gap in a test rather than a hole in a guard. I formed no expectation coming into this pass and I am forming none about what follows.
+I formed no expectation coming in. The work is sound and the guard does what it claims.
 
 Reporting and holding.
