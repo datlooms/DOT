@@ -194,7 +194,7 @@ For signal `s`, training segment `T`, direction `d = dir(s)`. **No component rea
 
 **It does NOT apply to book-statistic estimators whose quantile parameter is specified in this document.** `TailDep`'s `tau = 0.20`, `C_max`'s p10 and the null critical values are estimators over an already-defined population, not definitions of one. Without this scope the abort would fire on the very estimators APPENDIX B mandates by name.
 
-**Mechanical form, because "defines" is semantic and not greppable.** Maintain an ALLOWLIST of sanctioned percentile/quantile call sites and ABORT on any occurrence outside it. Verified sites at `master.py 3d45bd3b7f74`:
+**Mechanical form, because "defines" is semantic and not greppable.** Maintain an ALLOWLIST of sanctioned percentile/quantile call sites and ABORT on any occurrence outside it. Verified by a FULL SWEEP of every `np.percentile` / `np.quantile` / `.quantile(` site in `dot_master_discovery/` at `master.py 3d45bd3b7f74`. The list below is complete as of that sweep; `concurrence_profiler.py L237` is a comment recording deliberate sorted-index compliance, not a call site.
 
 | site | role | status |
 |---|---|---|
@@ -203,6 +203,8 @@ For signal `s`, training segment `T`, direction `d = dir(s)`. **No component rea
 | `selection.py L711, L725, L740` | null critical value, kept-set quantile | SANCTIONED |
 | `selection.py L190` | `p90_abs_r` / `p99_abs_r` — descriptive output, defines nothing | SANCTIONED |
 | `terrain.py L160-161` | descriptive quartile columns, define nothing | SANCTIONED |
+| `cluster_profiler.py L310, L311` | `timing_q1` / `timing_q3` output columns, define nothing | SANCTIONED |
+| `cluster_profiler.py L323` | `depth_at_fire_p90` output column, defines nothing | SANCTIONED |
 | `terrain.py L177` | `np.percentile` on `abs_displacement_pts` defining the biggest-decile STRATUM, emitted with `population: 'MARKET'` | **NOT SANCTIONED — this is the live defect the abort exists to catch** |
 
 An episode-threshold-only check would not have caught `terrain.py L177`, because episodes are already built by the time it runs. Any new percentile site must be added to the allowlist with a stated role, or the run aborts.
