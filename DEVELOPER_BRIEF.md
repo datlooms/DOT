@@ -5,11 +5,13 @@ DOT master discovery corrections.
     git clone https://github.com/datlooms/DOT.git
 
 **READ FIRST, IN FULL:**
-`DEV_CHECKLIST.md` (repo root, 108 lines, sha256[:12] `75f8ba2fafe2`, 24 items)
+`DEV_CHECKLIST.md` (repo root, 151 lines, sha256[:12] `0d76790b14db`, 24 items + Appendices A and B)
 
 That file is the DO list. Build items 1-24 IN ORDER. This brief does not repeat it — it tells you what the checklist does not say. If the two disagree the checklist wins, EXCEPT where this brief marks an item **DECIDED — AUTHORISED DEVIATION**.
 
-Supporting, for reasoning only: `CORRECTION_CHECKLIST.md`, `CATALOGUE_MEASUREMENT_SPEC.md`, `POST_SCAN_DEFECTS.md` (in `dot_master_discovery/`), `DOT_signal_discovery_mantra.md`.
+**The checklist is self-contained** — Appendix A defines item 8's pricing columns and Appendix B defines what item 16 computes. You do not need any other document to build.
+
+Background reading only, never required: `CORRECTION_CHECKLIST.md`, `CATALOGUE_MEASUREMENT_SPEC.md`, `POST_SCAN_DEFECTS.md` (in `dot_master_discovery/`), `DOT_signal_discovery_mantra.md`.
 
 ---
 

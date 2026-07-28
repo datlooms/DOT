@@ -2,7 +2,7 @@
 
 Sacred five byte-locked: 518862bf19fb / 793e6e5f8d9a / 6530e2508b17 / bb498eb13ce3 / 27af7acee824.
 No scanner edits. No objective, no argmax, no quota, no floor. Operator picks N from the grid.
-Sources: CORRECTION_CHECKLIST.md + CATALOGUE_MEASUREMENT_SPEC.md. This file supersedes both as the DO list.
+This file is SELF-CONTAINED. Everything needed to build is here, including the definitions appended at the end. CORRECTION_CHECKLIST.md and CATALOGUE_MEASUREMENT_SPEC.md are reference-only reasoning, not required reading.
 
 BASELINE CORRECTION — apply wherever it appears: same-bar 3+ is 512 trades / PF 35.11, not 505 / PF 53.70. Mixed-family penalty is all-F0 PF 35.72 vs MIXED 29.35 — an 18% cost, not 49%.
 
@@ -18,7 +18,7 @@ BASELINE CORRECTION — apply wherever it appears: same-bar 3+ is 512 trades / P
 5. Per-signal terrain coverage against BOTH denominators, pinned cell W15/K85/E75 named in every column: raw terrain (7,490 episodes) and REACHABLE (episodes holding >=1 eligible bar where D2D agrees with episode direction), reachable computed PER GRID CELL and never once. Reachable is the primary figure; abort the run if any episode threshold is a local percentile rather than mechanism D.
 6. Emit the unclaimed-reachable set — reachable episodes no catalogue signal touches, with direction, duration, displacement, time-of-day, plus `n_conditions_firing` and `n_valid_triples_touching`. Those last two separate a SEARCH gap (many conditions fire, no valid triple lands) from a GRAMMAR gap (few fire); without them the set shows what is unoccupied but not why.
 7. Emit per-signal touched-episode IDs (or a bitmap) alongside the coverage percentages, so the union and saturation curves can be re-derived from the artifacts alone. Coverage % on its own makes the round's load-bearing evidence unreproducible.
-8. Per-signal multiple-testing price per spec §5 — `n_trials_family`, `null_valid_rate_family`, `pf_null_exceedance_pct`, `q_value_BY_family`, `EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF`. N computed per family at run time, never a literal.
+8. Per-signal multiple-testing price — the eight columns defined in APPENDIX A at the end of this file. `N_F` computed per family at run time, never a literal, and Benjamini-Yekutieli not Hochberg.
 9. Add `folds_plus`, `min_fold_pf` and OOS to the same per-signal row using segment-local buckets. `wf.FOLDS` is month-literal Jan-Jun and unusable in-segment; if they are dropped instead, say so in the header.
 10. Score every signal BOTH ungated and with the conviction gate applied (solo: Hurst p90 + ticks>=300; double: Hurst p90; depth 3+ free), emitting trades, WR, PF, worst day and net for each arm plus the delta. This is what lets the operator set gating per signal instead of book-wide; it is a measurement, the gating itself lives in the EA.
 11. Pool-level same-bar cohort table — family composition of each bar as a curve over depth, not fixed at 3. Counts only, no P&L: depth-3 has no discriminating power at pool scale and P&L needs a book.
@@ -29,7 +29,7 @@ BASELINE CORRECTION — apply wherever it appears: same-bar 3+ is 512 trades / P
 13. Remove `/n_signals_d` from any objective (`selection.py L290`). Keep it as a reported column that never gates inclusion.
 14. Delete the `_sel_con` stub (`master.py L1174-1175` — a `def`, not a lambda). Constraint machinery moves to item 16.
 15. The catalogue is emitted from VALID, never from an argmax: no selected-book file is written in discover-fresh at all, and `sel.greedy_direction` is retained IN-MEMORY ONLY as item 12's dilution-curve admission loop. S8's discover-fresh path (`master.py L472`) currently reads `selected_book.csv` and scores it — disable that path with a message pointing at item 16, and leave S8's FROZEN path (`L468-470`) untouched so the committed book still scores from its ratified file.
-16. `score_book.py --book <csv> --data <frame> --out <dir>` — scores an operator-assembled book on FailConc, TailDep, mCVaR, survival, union coverage, same-bar ladder, L/S split, plus a set-level chance figure = sum of `pf_null_exceedance_pct` over the picked rows. Non-zero exit on breach, append-only `book_scored.jsonl`, and every catalogue header states a book is UNSCORED until it has been run.
+16. `score_book.py --book <csv> --data <frame> --out <dir>` — scores an operator-assembled book on the quantities and parameters defined in APPENDIX B, importing S5B's estimators rather than reimplementing them. Non-zero exit on breach, append-only `book_scored.jsonl`, and every catalogue header states a book is UNSCORED until it has been run.
 
 ## EVIDENCE — the deliverable the redesign exists for
 
@@ -106,3 +106,46 @@ P3. Stability selection, PBO/CSCV, White's Reality Check, Hansen SPA and Romano-
 
 - 2,216 unclaimed is what is visible, not what is tradable. Reachable only means the bar was eligible and the direction agreed, not that a signal exists there which survives the statistical bars. The count of valid triples per episode splits it, and the real number will land well below 2,216.
 - Whether the same-bar edge survives as weaker signals join is unknown until the dilution curve exists. That number decides whether the 4x target is real.
+
+---
+
+## APPENDIX A — item 8, the pricing columns
+
+For family `F` on segment `T`, with `N_F` trials and a MATCHED NULL — random signals drawn from the same post-hygiene vocabulary, fire-rate matched to `F`'s candidates, run through the IDENTICAL `VALID` predicate — every row carries:
+
+    n_trials_family                    N_F, computed at run time, stamped
+    null_valid_rate_family             fraction of matched-null signals passing VALID in F
+    expected_valid_by_chance_family    N_F * null_valid_rate_family
+    pf_null_p50_family / p90 / p99     PF quantiles among null signals that passed VALID in F
+    pf_null_exceedance_pct             P(null PF >= this row's PF)
+    EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF  N_F * pf_null_exceedance_pct    <-- THE PRICING COLUMN
+    q_value_BY_family                  Benjamini-Yekutieli q at family stratum
+
+`EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF` does the work: at this family's trial count, how many rows this good does chance alone produce? PF 12 beside an expected-count of 340 is not elite; PF 6 beside 0.4 is.
+
+Benjamini-Yekutieli, NOT Benjamini-Hochberg: measured signed pairwise dependence on the live vocabulary is 49.6% positive / 50.4% negative across 29,161 pairs, so PRDS fails and BH is invalid. BY holds under arbitrary dependence.
+
+Every catalogue CSV carries this header line:
+
+> This catalogue contains `N_F` rows for this family. Reading it and selecting rows IS a search of size `N_F`. `EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF` prices that search on every row. A row whose expected-count exceeds 1 is not evidence of an edge.
+
+The matched null is generated on the same segment and shares its structure. That is deliberate — it is a null for THIS market, not a universal one.
+
+## APPENDIX B — item 16, what `score_book.py` computes
+
+Input: a CSV of `signal_id` plus optional `direction` for assertion. Nothing else. No option changes the verdict.
+
+| quantity | parameters, stated at point of use |
+|---|---|
+| `TailDep` | `tau = 0.20`, `MIN_SHARED = 10`, RAW daily P&L, never `min(pnl,0)` |
+| exclusion-bias diagnostics | `exclusion_bias_degeneracy_guarded`, `degenerate_excluded_pairs_k_lt3` |
+| `FailConc` | worst single-day loss as a multiple of mean daily loss |
+| `mCVaR_i` | per-signal marginal tail contribution, worst 5% of book days |
+| absolute survival | worst modelled day against the FTMO ceiling, FULL population |
+| union terrain coverage | pinned cell W15/K85/E75, per direction |
+| same-bar depth ladder | distinct-signal basis, T=0 and the full tolerance curve |
+| directional composition | LONG/SHORT split, reported and never targeted |
+
+These are SET properties: they have no per-signal value and fabricating one would be worse than omitting it. The exposure this closes is union collapse — a 448-signal persistent union scored PF 1.82 against the curated 50-signal book's PF 6.40.
+
+Three enforcement mechanisms, because a convention is what failed fourteen times: non-zero exit on breach with the breach named on stdout; append-only `book_scored.jsonl` carrying `book_sha256`, `input_sha`, `code_sha`, UTC timestamp and every constraint verdict; and the catalogue header declaring any assembled book UNSCORED until the tool has run on it.
