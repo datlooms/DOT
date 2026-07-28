@@ -160,7 +160,9 @@ same-bar 5+         160 tr  WR100.0%  PF 999     net $14,182  wd  +$59.5    0 lo
 ```
 A 5-bar tolerance admits t, t+3, t+5 — a temporal cluster, not simultaneous agreement. The "9 variables agreeing on one bar" argument holds only at same-bar. Same-bar IS a subset of 5-bar, so the objective is not blind to it — but it does not distinguish it, so it does not maximise for it.
 
-**FIX.** `tolerances=(1, 5, 10)`. N then reported across three values and chosen from evidence, exactly as S is across five. `selection.py` is not sacred. **S5B is minutes and re-runnable against the same pool — no re-scan.**
+**AND THE UPPER END IS WRONG TOO — OPERATOR DIRECTIVE.** These are M1 bars, so 60 bars is ONE HOUR. `N=5` and `N=10` are five and ten MINUTES. The operator has observed clusters running for hours on this instrument. **A grid capped at 10 bars cannot see them.** Narrowing the field of time to under ten minutes is not a neutral default — it decides the answer before the measurement.
+
+**FIX.** `tolerances=(1, 5, 10, 15, 20, 25, 30)`. Seven values from same-bar to half an hour, reported across the existing `S_GRID = (3,4,5,6,7)` — 35 cells. **N is then CHOSEN FROM EVIDENCE, exactly as S already is. Do not pick N in code.** `selection.py` is not sacred. **S5B is minutes and re-runnable against the same pool — no re-scan.** Measure the compute cost of 35 cells rather than assuming it; DepthYield is cheap but that is an assumption until timed.
 
 ---
 
@@ -227,7 +229,7 @@ F1 chunk 1 produced no marker and the queue ran 3,584 further chunks without sur
 ```
 [ ] D0   S8 consumes S5B's selected book. Delete or demote _assemble_fresh_book.
 [ ] D1   Stop double-counting F0. Assert per-family count == collated count.
-[ ] D5   tolerances=(1, 5, 10). Report N across three values.
+[ ] D5   tolerances=(1, 5, 10, 15, 20, 25, 30). Report N across all seven; choose from evidence.
 [ ] D3   Book arm runs per split so the pass criterion produces a number.
 ```
 **PHASE 1 requires NO re-scan.** S3's 483,753 candidates are on disk with valid markers. S4 -> S9 is under an hour.
@@ -249,7 +251,7 @@ F1 chunk 1 produced no marker and the queue ran 3,584 further chunks without sur
 **PHASE 4 — then measure, in this order.**
 ```
 [ ] Re-run S4->S9 on the existing pool with PHASE 1 applied. No re-scan.
-[ ] Read the DepthYield grid at N=1 vs N=5 vs N=10 and CHOOSE from evidence.
+[ ] Read the DepthYield grid across all seven tolerances (1,5,10,15,20,25,30) x S (3..7) and CHOOSE from evidence. N=1 is the same-bar target; the upper end exists because M1 clusters have been observed running for hours.
 [ ] Read the pass criterion. A FAIL is a legitimate answer.
 [ ] Read REACH. If it has not moved from ~1.4%/0.76%, coverage still is not binding.
 [ ] Compare like-for-like against BOOK-50 on the SAME corrected data:
