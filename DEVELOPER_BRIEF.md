@@ -5,7 +5,7 @@ DOT master discovery corrections.
     git clone https://github.com/datlooms/DOT.git
 
 **READ FIRST, IN FULL:**
-`DEV_CHECKLIST.md` (repo root, 108 lines, sha256[:12] `c7a3d8e0503c`, 24 items)
+`DEV_CHECKLIST.md` (repo root, 108 lines, sha256[:12] `75f8ba2fafe2`, 24 items)
 
 That file is the DO list. Build items 1-24 IN ORDER. This brief does not repeat it — it tells you what the checklist does not say. If the two disagree the checklist wins, EXCEPT where this brief marks an item **DECIDED — AUTHORISED DEVIATION**.
 
@@ -22,8 +22,10 @@ You are NOT building a selection engine. You are building a **MEASURING INSTRUME
 **PRECISELY WHAT THAT MEANS FOR THE CHOOSER — read item 15 carefully:**
 
 - Item 14 deletes `_sel_con` only. That is the CONSTRAINT STUB, not the chooser.
-- `sel.greedy_direction` (`master.py L1185`) is NOT deleted. It currently feeds `chosen[d]` at L1187 and is consumed at L1193, L1212, L1218.
-- Item 15 governs it: **NO CATALOGUE MAY BE EMITTED FROM AN ARGMAX.** The greedy machinery is retained solely as item 12's dilution-curve admission loop. Any book it still selects is written as `legacy_greedy_book.csv`, labelled DIAGNOSTIC ONLY, and consumed by nothing downstream.
+- `sel.greedy_direction` (`master.py L1185`) is NOT deleted. It feeds `chosen[d]` at L1187, which is written to `selected_book.csv` at L1198 — **and S8 reads that file at L472 and scores it.** That chain is what produced the 2-signal book.
+- Item 15 governs it: **NO CATALOGUE MAY BE EMITTED FROM AN ARGMAX, AND NO SELECTED-BOOK FILE IS WRITTEN IN DISCOVER-FRESH AT ALL.** Do not rename or quarantine the artifact — do not write it. `greedy_direction` survives IN-MEMORY ONLY, as item 12's dilution-curve admission loop.
+- **S8's discover-fresh path is disabled**, with a message pointing at item 16's `score_book.py`. Under a catalogue design S8 has nothing to score automatically: the catalogue is the deliverable, and scoring happens when the operator composes a book and runs it through item 16.
+- **S8's FROZEN path (`L468-470`) is untouched.** It reads a ratified book file directly, not greedy output, and is how the committed book still scores.
 - Item 19's greedy-parallelism clause therefore refers to the DILUTION-CURVE admission loop, not to a book-selection path.
 
 If you find yourself adding a rank, a cap, a threshold nobody specified, or a "sensible default" that reduces what gets emitted — stop. That is the defect this rebuild exists to remove.

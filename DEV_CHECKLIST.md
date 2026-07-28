@@ -28,7 +28,7 @@ BASELINE CORRECTION — apply wherever it appears: same-bar 3+ is 512 trades / P
 
 13. Remove `/n_signals_d` from any objective (`selection.py L290`). Keep it as a reported column that never gates inclusion.
 14. Delete the `_sel_con` stub (`master.py L1174-1175` — a `def`, not a lambda). Constraint machinery moves to item 16.
-15. The catalogue is emitted from VALID, never from an argmax: `sel.greedy_direction` must not produce any catalogue. Retain the greedy machinery ONLY as item 12's dilution-curve admission loop, and write any book it still selects as `legacy_greedy_book.csv` labelled DIAGNOSTIC ONLY, consumed by nothing downstream.
+15. The catalogue is emitted from VALID, never from an argmax: no selected-book file is written in discover-fresh at all, and `sel.greedy_direction` is retained IN-MEMORY ONLY as item 12's dilution-curve admission loop. S8's discover-fresh path (`master.py L472`) currently reads `selected_book.csv` and scores it — disable that path with a message pointing at item 16, and leave S8's FROZEN path (`L468-470`) untouched so the committed book still scores from its ratified file.
 16. `score_book.py --book <csv> --data <frame> --out <dir>` — scores an operator-assembled book on FailConc, TailDep, mCVaR, survival, union coverage, same-bar ladder, L/S split, plus a set-level chance figure = sum of `pf_null_exceedance_pct` over the picked rows. Non-zero exit on breach, append-only `book_scored.jsonl`, and every catalogue header states a book is UNSCORED until it has been run.
 
 ## EVIDENCE — the deliverable the redesign exists for
@@ -87,7 +87,7 @@ P3. Stability selection, PBO/CSCV, White's Reality Check, Hansen SPA and Romano-
 
 13. See the whole reachable map, not occupy it. You decide what is worth trading; the tool measures and does not choose.
 14. Keep solos, doubles and triples all firing, gated by conviction rather than thrown away. That gating lives in the EA; this build gives you the measurements to set it.
-15. The catalogue is emitted from VALID, never from an argmax: `sel.greedy_direction` must not produce any catalogue. Retain the greedy machinery ONLY as item 12's dilution-curve admission loop, and write any book it still selects as `legacy_greedy_book.csv` labelled DIAGNOSTIC ONLY, consumed by nothing downstream.
+15. The catalogue is emitted from VALID, never from an argmax: no selected-book file is written in discover-fresh at all, and `sel.greedy_direction` is retained IN-MEMORY ONLY as item 12's dilution-curve admission loop. S8's discover-fresh path (`master.py L472`) currently reads `selected_book.csv` and scores it — disable that path with a message pointing at item 16, and leave S8's FROZEN path (`L468-470`) untouched so the committed book still scores from its ratified file.
 16. Stop the short side being an afterthought. It was never weak, it just never had enough signals to stack.
 
 ### What you will see when it finishes
