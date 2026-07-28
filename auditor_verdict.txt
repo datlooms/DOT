@@ -3,8 +3,8 @@ STATE
 
 HEAD e0eb79a. DEV_CHECKLIST.md 250 lines / 715a4f3499a9 ✓ · DEVELOPER_BRIEF.md 123 lines / b8c7102652a0 ✓ · master.py 3d45bd3b7f74 and the sacred five unchanged ✓.
 
+Delta confined — verified by measurement, not by your word. An opcode-level region diff against 9fb0e40253ef shows changed regions in exactly three places: ## APPENDIX D, the INVALID row, and the three concurrence_profiler rows. V2 SURVIVAL is byte-identical to the clause I ratified (compared directly, not inferred). Everything else — 24 items, Appendices A and B, the UNEVALUABLE table, signal_id, reason_code, determinism, item 5's pointer — unchanged, not re-verified.
 
-AMENDMENT 1 — V2's BASIS: APPLIED, UNAMBIGUOUS. One residual.
 AMENDMENTS 3 AND 4 — BOTH APPLIED CORRECTLY
 
 concurrence_profiler now has three rows: 239 the console depth distribution; 841 np.argsort(-J[iu])[:TOP_PAIRS_N], correctly described as a fixed top-N over a Jaccard matrix emitted to CSV, sanctioned on the ground that a fixed documented N is not a percentile; 1072 np.sort(v) in the circular-shift null, a null-statistic array. The INVALID row now reads "a single signal exceeds the daily ceiling on train" with the not-the-account-test note — the contradiction with V2's "item 16 guards the account. Do not merge them" is closed. ✓
