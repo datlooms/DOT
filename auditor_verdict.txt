@@ -1,68 +1,75 @@
-AUDITOR — FIFTH PASS (SCOPED)
+AUDITOR — SIXTH PASS (SCOPED)
 STATE
 
-HEAD e0eb79a. DEV_CHECKLIST.md 250 lines / 715a4f3499a9 ✓ · DEVELOPER_BRIEF.md 123 lines / b8c7102652a0 ✓ · master.py 3d45bd3b7f74 and the sacred five unchanged ✓.
+HEAD e5118e5. DEV_CHECKLIST.md 259 lines / d787d586627b ✓ · DEVELOPER_BRIEF.md 123 lines / 51cb8edde58d ✓ · master.py 3d45bd3b7f74 and the sacred five unchanged ✓.
 
-Delta confined — verified by measurement, not by your word. An opcode-level region diff against 9fb0e40253ef shows changed regions in exactly three places: ## APPENDIX D, the INVALID row, and the three concurrence_profiler rows. V2 SURVIVAL is byte-identical to the clause I ratified (compared directly, not inferred). Everything else — 24 items, Appendices A and B, the UNEVALUABLE table, signal_id, reason_code, determinism, item 5's pointer — unchanged, not re-verified.
+Delta confined — verified, not accepted. Opcode-level region diff against 715a4f3499a9 returns exactly one changed section: ## APPENDIX D. I additionally byte-compared Appendices A, B and C as whole blocks: all three byte-identical, which covers V2 SURVIVAL and the UNEVALUABLE table without inference. 24 items, the two-stage test, the classification record, determinism, item 5's pointer — unchanged, not re-verified.
 
-AMENDMENTS 3 AND 4 — BOTH APPLIED CORRECTLY
+CHALLENGE 2 — THE THREE SHAS: ALL CORRECT
 
-concurrence_profiler now has three rows: 239 the console depth distribution; 841 np.argsort(-J[iu])[:TOP_PAIRS_N], correctly described as a fixed top-N over a Jaccard matrix emitted to CSV, sanctioned on the ground that a fixed documented N is not a percentile; 1072 np.sort(v) in the circular-shift null, a null-statistic array. The INVALID row now reads "a single signal exceeds the daily ceiling on train" with the not-the-account-test note — the contradiction with V2's "item 16 guards the account. Do not merge them" is closed. ✓
+Computed against this clone's HEAD:
 
-POINT 5 — WRITTEN IN, ACCURATELY
+module	document	mine	
+engine/terrain.py	dcaecaf7e8e1	dcaecaf7e8e1	MATCH
+engine/cluster_profiler.py	070bb2aa7aaa	070bb2aa7aaa	MATCH
+scanners/concurrence_profiler.py	554019e93069	554019e93069	MATCH
+engine/dots_thresholds.py	518862bf19fb	518862bf19fb	MATCH
 
-Both stages are now on the page, stage (i) is named as the unstable one, and cluster_profiler.py L132 is given as the exact ambiguous case with its classification stated. That is what I asked for and it is stated more precisely than I put it. ✓
+The lock certifies the right bytes. And the framing is now correct in substance, not only form: "The Developer VERIFIES against them; he does not record his own baseline… a baseline computed by the person who can change the file is a checksum of his own work." That was the category point and it has landed as one.
 
-THE FOUR CHALLENGES
-1. Is locking three modules sufficient? NO. There is a fourth, and it is the one with prior form.
+A1 — FOURTH MODULE LOCKED: verified independently
 
-I ran my own constructor sweep — every definition of build_terrain, build_cluster_set, thrust_events, eligible_universe, atr_buckets, kmeans, *regime_labels, build_category_depth across dot_master_discovery/. It returns three files: terrain.py, cluster_profiler.py, and scanners/concurrence_profiler.py.
+concurrence_profiler.py L1146 compute_regime_labels does k-means over z-scored market features and labels every bar — confirmed in source. 0 mentions across items 1-24 for all four locked modules (my own grep, not yours). Locking is free and produces no false abort. The entry carries its evidence rather than an assertion.
 
-concurrence_profiler.py defines market objects today:
+CHALLENGE 1 — IS FOUR COMPLETE? Yes, and I used three methods independent of the one that found the fourth.
 
-compute_regime_labels (L1146) and causal_regime_labels (L1099) assign every bar a regime label — a stratum over market data — via kmeans (L347) / bic_kmeans (L393) over zscored market features. Not mechanism D. Not a percentile either, which is precisely why a token sweep never saw it and why the file-level guard is the right shape.
-causal_category_membership (L931) / build_category_depth (L963) define per-condition category membership; align_pool (L244) and depth_arrays (L261) partition the pool and build per-bar depth.
+Constructor-sweeping found the fourth last pass, so I did not repeat it as the primary test.
 
-It is F12's module, invoked by the pipeline, and its strata reach emitted artifacts. And it is the module that has already produced exactly this defect class once: a full-sample regime label gating entries, fixed by splitting lab_desc from lab_causal. It is the single most likely site of a recurrence and it sits outside the lock.
+Method A — MARKET-population claims. Only terrain.py emits a literal population: 'MARKET'. Weak as a completeness test (it finds one of four), so not relied on.
 
-It is also free to lock: my independent grep of items 1-24 finds only master.py ×5, family_evidence.py ×2, selection.py ×1, score_book.py ×1. terrain.py, cluster_profiler.py, concurrence_profiler.py and analysis_engine.py appear in no build item — which independently confirms your grep for the two you did lock.
+Method B — the third idiom class. pd.cut / pd.qcut / np.digitize across the package: exactly one live site, family_evidence.py L280, pd.cut(cl['size'], [0,1,2,4,7,12,10**6], …) — hardcoded literal bins on cluster size. pd.qcut appears nowhere. The Quant's claim verifies exactly.
 
-2. Is the residual still narrower than the truth? Yes — in its premise, not its structure.
+Method C — name-based sweep for every function implying a partition, then clearing each candidate on the data-derived question. Everything outside the four resolves:
 
-The carve-outs are right: a new module escapes, and so does a definition written into master.py / selection.py / family_evidence.py, which cannot be locked because this build edits them. You widened that correctly and the "not mechanical closure over the whole codebase" statement is honest.
+wf_selection.py (segment_is_valid, segment_month_buckets, h3_segment_rule) partitions market days — but I swept it for every cut idiom including pd.cut/digitize and it has none. Segments are fixed day-count floors plus calendar months. Not a data-derived cut.
+selection.py (clusters_from_entries, h3_buckets, segment_months) clusters entry bars — book events — and calendar months. Book side.
+analysis_engine.py _bucket buckets trades by calendar keys. Book side.
+family_evidence.py L280 bins a book quantity by literal bins.
+core.py capped_poc genuinely partitions price into buckets to build the PoC — a market object. It is already byte-locked as one of the sacred five (6530e2508b17, stated at the top of this same document), so it is covered.
+All scanners are frozen by the standing "No scanner edits" constraint, and the one scanner that defines strata is now locked explicitly.
 
-But the residual rests on the claim that file-locking "secures the market-object surface that exists today, in three named modules". The surface that exists today is four modules. So the residual understates the gap not by omitting a category but by mis-enumerating the one category it claims to have closed. You were right to suspect the width — it is still short, and this time on the enumeration rather than the edited-files dimension.
+No fifth module defines a market object by a data-derived cut and lacks a lock. One note for the record rather than an amendment: core.py is a market-object definer covered incidentally by the sacred-five lock rather than by Appendix D's enumeration. The protection is real today; it would silently lapse if core.py were ever un-sacred'd. Worth one clause in the residual, not a change to the lock table.
 
-3. Is sha-drift the same guard as the sacred five, or only in form? Only in form, as written.
+CHALLENGE 3 — DOES THE pd.cut PARAGRAPH CLARIFY OR BLUR? It clarifies.
 
-The sacred five carry their shas in the document — 518862bf19fb, 793e6e5f8d9a, and so on. Anyone can detect drift against a pre-agreed constant, and the Developer cannot move the baseline.
+The failure this appendix corrected twice was claiming coverage that did not exist. Naming an idiom while explicitly disclaiming enforcement is the inverse of that failure — it states a gap instead of papering one. Three things make the framing right: it sits inside the residual, the section about what is not closed; it says outright "NOT added to any enforcement sweep" with the reason ("that would repeat the sorted( volume mistake for no gain"); and it closes with "a concrete instance of the residual class above, not an exception to it." The chosen instance is well selected — family_evidence.py is edited, therefore unlockable, therefore a genuine evasion path, and pd.qcut(episode_disp, 10) is exactly the shape that evades both the token form and the file lock.
 
-terrain.py and cluster_profiler.py say "(record sha at build time)". The baseline then becomes whatever the Developer's working tree contains at the moment of recording. If either file were edited before recording — deliberately, or by an IDE reformat, or by a stray line-ending change — the lock certifies the edited file and reports "no drift" for the rest of the project's life. That is self-certification. It has the form of the sacred-five guard and not its substance, and the failure is silent, which is the property this whole appendix exists to eliminate.
+One refinement. The paragraph asserts a point-in-time fact — one live site, pd.qcut nowhere — with no expiry and no re-check owner. The locked modules are re-verified every run; this claim is verified once and never again. Date it ("verified at HEAD e0eb79a", as the sha block already does) or fold it into the review that adds modules to the lock manifest.
 
-The fix is one line each, and I have computed the values from HEAD so it is actionable immediately:
+CHALLENGE 4 — DOES THE DELTA CONTRADICT THE TWO-STAGE TEST OR V2?
 
-engine/terrain.py                dcaecaf7e8e1
-engine/cluster_profiler.py       070bb2aa7aaa
-scanners/concurrence_profiler.py 554019e93069
-4. Does removing the line-keyed manifest lose coverage that mattered? A little, and it is recoverable for free.
+V2: no. Byte-identical, verified by block comparison.
 
-Accounting: the manifest held 34 sites across 8 files. File-locking now covers 10 — terrain.py 3, cluster_profiler.py 7 — plus dots_thresholds.py, whose own idiom (builtin sorted) the sweep never caught, which is itself the argument for the file-level form. 24 sites are unguarded.
+The two-stage test: not contradicted, but the delta uses a ground the test does not state. Two sanctions now rest on a third criterion:
 
-Of those, 20 sit in selection.py, master.py and family_evidence.py — edited by the build, unlockable, correctly covered by your residual. The remaining 4 sit in analysis_engine.py (1) and concurrence_profiler.py (3), neither of which any build item touches. So the loss is real but small, and it is fully recoverable at zero cost on the module that matters. analysis_engine.py's single site is stable exit-bar ordering over a book-statistics module — locking it is optional and I would not press for it.
+concurrence_profiler L841 — "a fixed documented N is not a percentile and the objects are condition pairs, not market data"
+family_evidence L280 — "the bins are not data-derived and cluster size is a book quantity"
 
-Removing the line-keyed manifest was right. It was going to fire on the first mandated commit — I verified split_tree() is still at master.py L111-122 and that 20 of 34 sites sit in the three files the checklist orders edited. Trading a guard that self-destructs for one that is idiom-blind is the correct trade, and taking file-locking over index-narrowing was the better of the two routes I offered: index-narrowing would still have been a pattern match on idiom, which had just failed twice.
+Both cite (a) the cut is by a documented constant rather than derived from the data, and (b) the object is not market data. Only (b) is in the stated test. For these two sites it doesn't matter — both are book quantities, so stage (ii) alone reaches the same verdict.
+
+But the two grounds diverge for a case the document does not cover: a cut by a documented constant over market data — say "the top 100 episodes by displacement". The scope sentence prohibits defining a market object "by a percentile taken over the loaded span", and a fixed top-N is not a percentile, so the scope sentence permits it. Stage (ii) says market-data partitions are prohibited outside dots_thresholds, so stage (ii) forbids it. The document does not say which governs. This is the same shape as my point 5 last pass — the manifest applying more grounds than the page states — and it is worth closing while the section is open, because the answer is not obvious: a fixed top-N over episodes is not look-ahead in the percentile sense, but it is a market-object partition defined outside mechanism D.
 
 VERDICT: RATIFY WITH AMENDMENTS
 
-Two amendments. Neither blocks the build — Appendix D is a pre-run guard, and the build path is unaffected by both.
+Two amendments. Neither blocks the build. Appendix D is a pre-run guard, both amendments are single clauses, and nothing in either touches the build path, the catalogue, or any figure the operator will act on. On my reading this clears the bar to start.
 
-Add scanners/concurrence_profiler.py to the byte-locked market-object modules, and correct the residual's enumeration from three modules to four. It defines regime strata over market data by k-means, it is invoked by the pipeline, no build item edits it, and it has already produced a look-ahead-by-stratum defect once. Locking it costs nothing and closes the one gap in the surface the appendix claims to have secured.
-Record the lock shas in the document now rather than "at build time". terrain.py dcaecaf7e8e1, cluster_profiler.py 070bb2aa7aaa, concurrence_profiler.py 554019e93069 — all computed from HEAD e0eb79a. A baseline the Developer records himself is self-certification; a baseline stated in the document is the same guard the sacred five actually are.
+State which ground governs a cut by a documented constant over market data. The scope sentence (percentile-only) permits it; stage (ii) (market-data partitions prohibited) forbids it. Two sanctions in the delta lean on the "documented constant" ground, so it is load-bearing and unstated. One clause settles it either way — my own reading is that a documented constant over market data should still be prohibited outside dots_thresholds, because look-ahead is not the only contamination and a hand-chosen N over episodes is exactly the kind of choice the catalogue design exists to remove.
+Date the pd.cut / pd.qcut / np.digitize claim, or assign its re-check. "One live site, pd.qcut nowhere" is verified today and never again; every other claim in the mechanism section is re-verified each run by sha. Add "verified at HEAD e0eb79a" or fold the re-check into the lock-manifest review.
 
-Both are single-line changes and both are verifiable on sight.
+Optional, one clause: note in the residual that core.py is a fifth market-object definer covered by the sacred-five lock rather than by this enumeration, so the coverage does not silently lapse if its status ever changes.
 
-The mechanism is otherwise sound and the reasoning behind it is right. File-locking closes by construction what enumeration kept failing to close, the two-stage test is now stated where it is applied, the classification record is correctly demoted from enforcement to documentation, and the residual — once its enumeration is fixed — is the honest statement of what is and is not mechanically closed. Everything else in both documents remains as ratified.
+On the completeness of FOUR — which you named as your likeliest error: it holds. I tested it three ways, none of them the constructor sweep that found the fourth, and cleared every candidate outside the lock on the data-derived question. The Quant's pd.cut sweep reproduces exactly: one site, hardcoded bins, book quantity, and no pd.qcut anywhere.
 
-I formed no expectation about this pass and I am forming none about the next.
+The mechanism is sound, the shas are right, the residual is now stated at its true width, and the one thing I found is a precision gap in a test rather than a hole in a guard. I formed no expectation coming into this pass and I am forming none about what follows.
 
 Reporting and holding.
