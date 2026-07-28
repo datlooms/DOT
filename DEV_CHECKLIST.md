@@ -208,14 +208,23 @@ A token sweep was the first design and it failed twice on its own terms. It miss
 
 **Therefore the guard is at FILE level, which is idiom-blind and is the project's own precedent:**
 
-    BYTE-LOCKED MARKET-OBJECT MODULES — abort on sha drift
-      engine/dots_thresholds.py   518862bf19fb   (already sacred)
-      engine/terrain.py           (record sha at build time)
-      engine/cluster_profiler.py  (record sha at build time)
+    BYTE-LOCKED MARKET-OBJECT MODULES — abort on sha256[:12] drift
+      engine/dots_thresholds.py           518862bf19fb   (already sacred)
+      engine/terrain.py                   dcaecaf7e8e1
+      engine/cluster_profiler.py          070bb2aa7aaa
+      scanners/concurrence_profiler.py    554019e93069
 
-These are the three modules that may legitimately define episodes, clusters or strata. Any change to one requires explicit re-blessing **regardless of how the cut is written** — `np.percentile`, `np.sort`, `sorted(`, `searchsorted` or a form nobody has thought of. **No build item edits `terrain.py` or `cluster_profiler.py`** (verified against items 1-24), so locking them costs nothing and produces no false abort. The edited files — `master.py`, `selection.py`, `family_evidence.py` — are not locked and are not line-keyed, so there is no drift problem.
+    THESE SHAS ARE CONSTANTS OF THIS DOCUMENT, recorded at HEAD e0eb79a. The
+    Developer VERIFIES against them; he does not record his own baseline. A
+    baseline computed by the person who can change the file is a checksum of
+    his own work, not a guard — the sacred five function precisely because
+    their shas were fixed by someone who could not edit them.
 
-**Residual, stated rather than papered over — and stated at its true width.** File-locking secures the market-object surface **that exists today, in three named modules**. It does NOT mechanically catch a market-object definition written anywhere else: not in a new module, and not in `master.py`, `selection.py` or `family_evidence.py`, which are edited by this build and therefore cannot be locked. Those are caught by the review that would add the module to the lock manifest — a documented process, not an automated one. **This is not mechanical closure over the whole codebase**, and claiming mechanical closure is exactly what produced this amendment. The narrower claim that is true: any change to the three modules that may legitimately define episodes, clusters or strata aborts the run regardless of idiom.
+These are the FOUR modules that may legitimately define episodes, clusters or strata. `concurrence_profiler.py` earns its place on evidence, not theory: `compute_regime_labels` (L1146) assigns every bar a regime label by k-means over z-scored market features — a stratum over market data that is neither mechanism D nor a percentile, so **no token sweep of any width would ever have seen it**. It is invoked by the pipeline and has already shipped a look-ahead-by-stratum defect once. Any change to one requires explicit re-blessing **regardless of how the cut is written** — `np.percentile`, `np.sort`, `sorted(`, `searchsorted` or a form nobody has thought of. **No build item edits `terrain.py`, `cluster_profiler.py` or `concurrence_profiler.py`** (verified against items 1-24), so locking them costs nothing and produces no false abort. The edited files — `master.py`, `selection.py`, `family_evidence.py` — are not locked and are not line-keyed, so there is no drift problem.
+
+**Residual, stated rather than papered over — and stated at its true width.** File-locking secures the market-object surface **that exists today, in four named modules**. It does NOT mechanically catch a market-object definition written anywhere else: not in a new module, and not in `master.py`, `selection.py` or `family_evidence.py`, which are edited by this build and therefore cannot be locked. Those are caught by the review that would add the module to the lock manifest — a documented process, not an automated one. **This is not mechanical closure over the whole codebase**, and claiming mechanical closure is exactly what produced this amendment. The narrower claim that is true: any change to the four modules that may legitimately define episodes, clusters or strata aborts the run regardless of idiom.
+
+**A third idiom class, documented for review rather than enforced.** Beyond `np.percentile`-family and sorted-index forms there is `pd.cut` / `pd.qcut` / `np.digitize`. One live site: `family_evidence.py L280`, `pd.cut` on cluster size with hardcoded literal bins — safe by construction, since the bins are not data-derived and cluster size is a book quantity, and it is the same ground as `concurrence_profiler L841`'s fixed `TOP_PAIRS_N`. `pd.qcut` — a data-derived quantile cut in a single call — appears nowhere in the package today. This class is NOT added to any enforcement sweep: that would repeat the `sorted(` volume mistake for no gain. It is named here because `family_evidence.py` is edited by this build and therefore unlockable, so a contributor writing `pd.qcut(episode_disp, 10)` there would evade both the token form and the file lock. That is a concrete instance of the residual class above, not an exception to it.
 
 Item 5's in-run assertion that episode thresholds route through mechanism D is RETAINED and is complementary: the lock is pre-run, the assertion is in-run.
 
