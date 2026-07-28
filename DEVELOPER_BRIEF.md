@@ -5,11 +5,11 @@ DOT master discovery corrections.
     git clone https://github.com/datlooms/DOT.git
 
 **READ FIRST, IN FULL:**
-`DEV_CHECKLIST.md` (repo root, 189 lines, sha256[:12] `3c31eda0f5b9`, 24 items + Appendices A, B and C)
+`DEV_CHECKLIST.md` (repo root, 208 lines, sha256[:12] `f9a4adc063fc`, 24 items + Appendices A, B, C and D)
 
 That file is the DO list. Build items 1-24 IN ORDER. This brief does not repeat it — it tells you what the checklist does not say. If the two disagree the checklist wins, EXCEPT where this brief marks an item **DECIDED — AUTHORISED DEVIATION**.
 
-**The checklist is self-contained** — Appendix A defines item 8's pricing columns, Appendix B defines what item 16 computes, and **Appendix C defines `VALID`, the predicate the entire catalogue is emitted from**. You do not need any other document to build.
+**The checklist is self-contained** — Appendix A defines item 8's pricing columns, Appendix B defines what item 16 computes, and **Appendix C defines `VALID`, the predicate the entire catalogue is emitted from, and Appendix D defines the local-percentile abort with its allowlist**. You do not need any other document to build.
 
 Background reading only, never required: `CORRECTION_CHECKLIST.md`, `CATALOGUE_MEASUREMENT_SPEC.md`, `POST_SCAN_DEFECTS.md` (in `dot_master_discovery/`), `DOT_signal_discovery_mantra.md`.
 
@@ -111,7 +111,7 @@ ONE DELIVERY, containing:
 - **THE COVERAGE ACHIEVED, per direction, against BOTH denominators.** Reachable-denominated is the primary figure (incumbent 4.72% UP / 2.42% DOWN, ceiling 100%); terrain-denominated alongside. **30.0% UP / 31.4% DOWN of terrain is not a prediction — it IS the reachable set** (1,143/3,816 = 29.95%, 1,155/3,674 = 31.44%). Report the terrain figure and read it BY CAUSE, not by direction:
   - **ABOVE the plateau** — arithmetically impossible while the terrain and reachable definitions hold. It means a definitional or measurement bug in one of those denominators. Investigate that before reading anything else in the run.
   - **AT the plateau** — expected. The catalogue has saturated the reachable set.
-  - **MATERIALLY BELOW** — either `VALID` is rejecting more than the proxy admitted (the proxy required 30 qualifying fires; `VALID` requires 30 EXECUTED trades plus V2-V4, and executed <= qualifying), or the catalogue is too small to saturate. **Report which of the two.**
+  - **MATERIALLY BELOW** — three possible causes, and they are not interchangeable. **Report WHICH.** (a) `VALID` rejects more than the proxy admitted — the proxy required 30 qualifying fires, `VALID` requires 30 EXECUTED trades plus V2-V4, and executed <= qualifying. (b) The catalogue is too small to saturate. (c) **STRUCTURAL, and expected: F0's scanner carries an internal `MIN_PF` pre-gate (4.0 at `triple_convergence_and_d2ddir.py L25`, overridden to 2.0 in `run_f0_full.py`), unremovable under "no scanner edits", so F0's rows are a strict PF-filtered subset of VALID.** No other family scanner carries a PF filter. Cause (c) is not a defect and must not be reported as one.
 - The stage timing table from the run log, with the fraction of total runtime that is genuinely concurrent stated explicitly.
 - The walk-forward number, READ FROM THE ARTIFACT and quoted as it appears in the file.
 - The dedup parity proof result.

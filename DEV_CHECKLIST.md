@@ -15,7 +15,7 @@ BASELINE CORRECTION — apply wherever it appears: same-bar 3+ is 512 trades / P
 ## COUNTING — these nine ship together or not at all (4-12 INDIVISIBLE)
 
 4. Count distinct `signal_idx` within a tolerance run, not entry rows, and build tolerance runs PER DIRECTION, never pooled across both. Same-signal re-fire is 1.8% at N=1, 15.4% at N=5 and 26.1% at N=30 per direction; pooled clustering gives 27.6% at N=30 and shifts every downstream count.
-5. Per-signal terrain coverage against BOTH denominators, pinned cell W15/K85/E75 named in every column: raw terrain (7,490 episodes) and REACHABLE (episodes holding >=1 eligible bar where D2D agrees with episode direction), reachable computed PER GRID CELL and never once. Reachable is the primary figure; ABORT the run if ANY local percentile defines any object, event, cluster, episode OR STRATUM rather than mechanism D — `terrain.py L177` is a live instance (`np.percentile` on `abs_displacement_pts` defining the biggest-decile stratum) and an episode-threshold-only check will not catch it.
+5. Per-signal terrain coverage against BOTH denominators, pinned cell W15/K85/E75 named in every column: raw terrain (7,490 episodes) and REACHABLE (episodes holding >=1 eligible bar where D2D agrees with episode direction), reachable computed PER GRID CELL and never once. Reachable is the primary figure; the local-percentile ABORT is defined in APPENDIX D — it is scoped to MARKET-OBJECT DEFINITION and must not fire on the book-statistic estimators this document itself mandates.
 6. Emit the unclaimed-reachable set — reachable episodes no catalogue signal touches, with direction, duration, displacement, time-of-day, plus `n_conditions_firing` and `n_valid_triples_touching`. Those last two separate a SEARCH gap (many conditions fire, no valid triple lands) from a GRAMMAR gap (few fire); without them the set shows what is unoccupied but not why.
 7. Emit per-signal touched-episode IDs (or a bitmap) alongside the coverage percentages, so the union and saturation curves can be re-derived from the artifacts alone. Coverage % on its own makes the round's load-bearing evidence unreproducible.
 8. Per-signal multiple-testing price — the eight columns defined in APPENDIX A at the end of this file. `N_F` computed per family at run time, never a literal, and Benjamini-Yekutieli not Hochberg.
@@ -152,7 +152,7 @@ These are SET properties: they have no per-signal value and fabricating one woul
 
 Three enforcement mechanisms, because a convention is what failed fourteen times: non-zero exit on breach with the breach named on stdout; append-only `book_scored.jsonl` carrying `book_sha256`, `input_sha`, `code_sha`, UTC timestamp and every constraint verdict; and the catalogue header declaring any assembled book UNSCORED until the tool has run on it.
 
-DETERMINISM CARVE-OUT, stated at file level: every CSV artifact is byte-identical across runs and worker counts and contains no wall-clock. The run log and `book_scored.jsonl` are ATTESTATION RECORDS, not artifacts — both are exempt, and both are required to carry wall-clock. Nothing else is exempt.
+DETERMINISM CARVE-OUT, stated at file level: EVERY artifact except the two named below is byte-identical across runs and worker counts and contains no wall-clock — CSV, markdown or otherwise. The run log and `book_scored.jsonl` are ATTESTATION RECORDS, not artifacts: both are exempt, and both are REQUIRED to carry wall-clock. Nothing else is exempt in either direction.
 
 ## APPENDIX C — item 15/17/22, the `VALID` predicate
 
@@ -162,7 +162,7 @@ For signal `s`, training segment `T`, direction `d = dir(s)`. **No component rea
 
 **V1 SUFFICIENCY** — `trades(s,T) >= MIN_TRADES`, `MIN_TRADES = 30`. A sample-size floor, not a fitted quality bar. Report `trades(s,T)` in the catalogue regardless so marginal cases are visible.
 
-**V2 SURVIVAL** — `worst_day(s,T) >= -(2500 * (1 - MARGIN))`. The FTMO ceiling is an external account fact, not data-derived, so it is admissible. Evaluated on the FULL population including gap fillers, because the ceiling does not distinguish sources. Checked BEFORE any profitability quantity.
+**V2 SURVIVAL** — `worst_day(s,T) >= -FTMO_DAILY_CEILING`, `FTMO_DAILY_CEILING = 2500`. **There is no `MARGIN` parameter.** Measured on the corrected frame, the worst single signal's worst day is -$204.7 and the median is -$142.6, so V2 admits all 50 at every margin from 0.0 to 0.5 — and it cannot bind inside a split either, since a segment's worst day is >= the full-span worst day by construction. The 2,500 figure is already the operator's self-imposed hard stop, tighter than FTMO's actual daily limit, so a margin on it double-counts; an undefined free parameter inside a survival predicate is worse than no parameter. If a buffer is wanted, LOWER THE CEILING — one number, not two. V2 is retained as a guard against a pathological single signal; the binding survival test is book-level and lives in item 16.
 
 **V3 MEASURABILITY** — headline statistics computable and finite on `T`: at least one losing trade (else PF is undefined — report `PF = inf` with a `pf_undefined` flag, never a number that ranks first), and `>= MIN_ACTIVE_DAYS = 10` distinct entry-basis trading days.
 
@@ -177,13 +177,32 @@ For signal `s`, training segment `T`, direction `d = dir(s)`. **No component rea
 | value | meaning |
 |---|---|
 | `VALID` | measurable and survives; enters the catalogue |
-| `UNEVALUABLE` | V3 or V4 unmet; ENTERS THE CATALOGUE flagged, statistics blank, with `reason_code` |
+| `UNEVALUABLE` | **V1, V3 or V4 unmet**; ENTERS THE CATALOGUE flagged, statistics blank, with `reason_code`. V1 failure is the highest-volume rejection path on a large pool and MUST route here, not fall through undefined. |
 | `INVALID` | V2 breached — fails the account constraint on train |
 
-`reason_code` vocabulary, fixed: `insufficient_trades`, `insufficient_active_days`, `pf_undefined`, `insufficient_buckets_direction`. UNEVALUABLE rows are never dropped — dropping them makes "this family catalogues nothing" and "this family could not be measured" look identical, which is the rule-5 failure.
+`reason_code` vocabulary, fixed and 1:1 with the failure paths: `insufficient_trades` (V1), `pf_undefined` (V3a), `insufficient_active_days` (V3b), `insufficient_buckets_direction` (V4). **Report the INVALID count per family** even though those rows do not enter the catalogue — without it, "this family had no candidates" and "every candidate breached survival" are indistinguishable, which is the same rule-5 failure the UNEVALUABLE retention exists to prevent. UNEVALUABLE rows are never dropped — dropping them makes "this family catalogues nothing" and "this family could not be measured" look identical, which is the rule-5 failure.
 
-**`signal_id`** — every catalogue row carries a stable `signal_id`: the family tag plus the signal definition string plus direction, deterministic and reproducible across runs. It is the join key between the catalogue and any book the operator assembles, and it is item 16's sole required input column.
+**`signal_id`** — every catalogue row carries a stable `signal_id` of the form `family|signal_definition|direction`, PIPE-DELIMITED to match the existing parser at `master.py L1194` (`key.split('|', 2)`). Deterministic and reproducible across runs: F0 triples emit in ascending index order from `combinations`, F1 pairs are canonical by construction, and threshold tags (`:hi`, `:lo`, `==v`) are stable and contain no comma or pipe. It is the join key between the catalogue and any book the operator assembles, and it is item 16's sole required input column.
 
 **Falsification:** if VALID admits >=95% of every family's candidates on every split it is a formality, not a predicate, and the sufficiency floors need re-deriving. Report the admit rate per family per split.
 
 *Fit risk:* `MIN_TRADES=30` and `MIN_ACTIVE_DAYS=10` are inherited constants. They are sufficiency floors, so a wrong value costs coverage rather than correctness — but they are RESTATED inside each split, never re-fitted.
+
+## APPENDIX D — item 5, the local-percentile abort
+
+**Scope.** The prohibition is on defining a MARKET OBJECT — an episode, cluster, stratum or any other partition of market data — by a percentile taken over the loaded span. Those must route through `dots_thresholds` mechanism D (rolling-2500, day-refreshed, floor-index), or the object is look-ahead contaminated and every figure denominated on it inherits that.
+
+**It does NOT apply to book-statistic estimators whose quantile parameter is specified in this document.** `TailDep`'s `tau = 0.20`, `C_max`'s p10 and the null critical values are estimators over an already-defined population, not definitions of one. Without this scope the abort would fire on the very estimators APPENDIX B mandates by name.
+
+**Mechanical form, because "defines" is semantic and not greppable.** Maintain an ALLOWLIST of sanctioned percentile/quantile call sites and ABORT on any occurrence outside it. Verified sites at `master.py 3d45bd3b7f74`:
+
+| site | role | status |
+|---|---|---|
+| `selection.py L348, L349, L422, L423` | `np.quantile(x, tau)` — TailDep tail-event set, `tau` mandated in Appendix B | SANCTIONED |
+| `selection.py L466` | `np.percentile(v, 10)` — `C_max` from incumbent | SANCTIONED |
+| `selection.py L711, L725, L740` | null critical value, kept-set quantile | SANCTIONED |
+| `selection.py L190` | `p90_abs_r` / `p99_abs_r` — descriptive output, defines nothing | SANCTIONED |
+| `terrain.py L160-161` | descriptive quartile columns, define nothing | SANCTIONED |
+| `terrain.py L177` | `np.percentile` on `abs_displacement_pts` defining the biggest-decile STRATUM, emitted with `population: 'MARKET'` | **NOT SANCTIONED — this is the live defect the abort exists to catch** |
+
+An episode-threshold-only check would not have caught `terrain.py L177`, because episodes are already built by the time it runs. Any new percentile site must be added to the allowlist with a stated role, or the run aborts.
