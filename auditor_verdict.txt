@@ -1,0 +1,126 @@
+AUDITOR VERDICT
+RE-INITIALISATION — verified
+
+HEAD a746d2a ✓. Both audit targets match: DEV_CHECKLIST.md 151 lines / 0d76790b14db ✓, DEVELOPER_BRIEF.md 120 lines / 25df1445265e ✓. master.py 3d45bd3b7f74 and the sacred five all unchanged ✓. The three removed files are absent by design and not reported as missing. File count is 92, not the stated 100 — the previous clone was 93 and only AUDITOR_BRIEF.md was removed; the arithmetic is consistent, the stated figure is not. Non-blocking.
+
+Extraction fidelity — Appendix A/B against 37b0f23^:CATALOGUE_MEASUREMENT_SPEC.md (527 lines, 7445869f8209): FAITHFUL. All eight pricing columns carry identical definitions and formulae; the matched-null definition, the BY-not-BH argument and its evidence (49.6% / 50.4% across 29,161 pairs — which matches my own independent measurement from an earlier phase), and the mandatory header line are verbatim or semantically identical. Appendix B's table is row-for-row identical in every parameter: tau=0.20, MIN_SHARED=10, raw daily P&L not min(pnl,0), worst 5% of book days, FULL population, cell W15/K85/E75, T=0 plus the full tolerance curve. No definition, parameter or threshold changed value in the move. One deliberate and correct improvement: "post-§G vocabulary" became "post-hygiene vocabulary", removing an outward pointer without changing meaning.
+
+Delegation: items 8 and 16 now point at Appendices A and B, and both resolve. The only remaining mention of the removed specs is line 5, which correctly demotes them to "reference-only reasoning, not required reading". Item 24's §D.0/§D.2/§C.3/§12 references are the target of an edit to discovery_redesign_spec.md (present in the repo), not build-path delegation. Nothing else delegates outward.
+
+TASK 1 — LOAD-BEARING FIGURES
+
+Reproduced exactly, from source and data:
+
+figure	claim	mine
+same-bar 3+	512 tr / PF 35.11 / 97.3% / 14 losses	512 / 35.11 / 97.3% / 14 ✓
+same-bar 5+	160 / PF 999 / 100% / 0 losses / +59.5	160 / 999 / 100.0% / 0 / +59.5 ✓
+re-fire per direction	1.8 / 15.4 / 26.1% @ N=1/5/30	1.8 / 15.4 / 26.1 ✓
+re-fire pooled @ N=30	27.6%	27.6 ✓
+same-bar (T=0) error	exactly zero	0.00% ✓
+terrain, pinned cell	7,490 episodes	7,490 ✓
+terrain split	3,816 UP / 3,674 DOWN	3,816 / 3,674 ✓
+eligible	60.5 / 60.8%	60.5 / 60.8 ✓
+reachable	30.0 / 31.4%	30.0 / 31.4 ✓
+reachable denominators	1,143 / 1,155	1,143 / 1,155 ✓
+BOOK-50 coverage	4.72% (54/1,143) / 2.42% (28/1,155)	4.72% (54/1,143) / 2.42% (28/1,155) ✓
+unclaimed	1,089 UP / 1,127 DOWN	1,089 / 1,127 ✓
+raw-terrain coverage	1.415% / 0.762%	1.415% / 0.762% ✓
+
+That is every load-bearing figure in the audit targets. All correct.
+
+Did not reproduce — the depth-1 and depth-2 rows of the ladder (these live in AUDITOR_BRIEF.md Part 1, not in either audit target):
+
+depth	brief	mine
+1	1,199 / 88.7% / 3.18 / 136	1,225 / 88.2% / 3.00 / 144
+2	974 / 91.0% / 5.27 / 88	992 / 90.5% / 4.99 / 94
+
+Construction: non-gap BOOK population (2,729 of 3,101), depth = distinct signal_name per entry_bar at T=0. Worst-day figures match exactly (−574.0, −365.8) and 3+ matches exactly, so the divergence is a 44-trade population difference confined entirely to the solo and double layers. The brief's ladder sums to 2,685; mine to 2,729. Monotonicity — the conclusion the ladder carries — is unaffected: 3.00 → 4.99 → 35.11 → 999, WR 88.2 → 90.5 → 97.3 → 100. Worth reconciling before the ladder is quoted again, but it does not touch the checklist.
+
+Could not verify: all-F0 PF 35.72 vs MIXED 29.35. My family attribution failed — I attempted name-matching, which the checklist's own NOTES explicitly forbid ("family attribution comes from the trigger column, never name parsing"), and the trade log's signal_name does not join to book50_signals.csv. What would settle it: the trigger column carried through to the trade log, which requires a candidate pool I am forbidden to generate. The note exists for exactly the reason I just hit.
+
+TASK 2 — LINE NUMBERS AND FUNCTION NAMES
+
+All resolve against master.py 3d45bd3b7f74. master.py L858-860 (the two _ROOT legacy fallbacks) ✓ · family_evidence.py L73-77 _find_outputs ✓ · orchestrator L48 RESULTS_DIR = "discovery_results" ✓ · family_evidence.py L53 F1_part*.csv ✓ · master.py L111-122 split_tree ✓ · selection.py L290 /n_signals_d ✓ · master.py L1174-1175 _sel_con ✓ · L1185 sel.greedy_direction ✓ · L1187 chosen[d] ✓ · L1198 the selected_book.csv write ✓ (path built L1197, write call L1198) · L468-470 FROZEN ✓ · L472 discover-fresh ✓ · L1460-1463 the nan block ✓.
+
+Item 14's parenthetical is a correction, and it is right. L1174 is def _sel_con(d, ss): — a def. The original spec §6.4 called it _sel_con = lambda d, ss: (True, ''). The checklist corrected the spec rather than inheriting the error.
+
+TASK 3 — THE INDIVISIBLE BLOCK (4–12)
+
+The dependency is real and is not overstated, and my measurement corroborates the mechanism rather than the assertion. Item 4 sets the depth count; items 11 and 12 consume it (11 as a curve over depth, 12 by re-scoring "the same-bar 3+ population at each step"); items 5–10 share one per-signal row.
+
+The quantitative case: at T=0 distinct-signal and entry-row counting agree exactly (0.00% error, measured). At N=5 the gap is 15.4% and at N=30 26.1%. So shipping 11 or 12 without 4 inherits an overstatement of precisely that size wherever tolerance > 0 — and both items are explicitly specified over tolerance > 0 (item 11 "a curve over depth, not fixed at 3"; Appendix B "T=0 and the full tolerance curve"). Shipping 5 without 8 gives a coverage figure with no price beside it, which at 37,000 rows is the difference between evidence and noise.
+
+One precision the documents could add: the indivisibility bites only where tolerance > 0. A T=0-only table would be unaffected. That strengthens rather than weakens the case, and stating it would stop a Developer arguing the block apart on the grounds that the same-bar figure is safe.
+
+TASK 4 — ITEM 15 AND THE BRANCH
+
+The branch exists exactly as described and the cut is clean. sel.greedy_direction (L1185) → chosen[d] (L1187) → selected_book.csv (L1197/98) → S8 reads it at L472 and scores it. The two S8 arms are gated by frozen = book_file is not None at L467; the FROZEN arm (L468-470) reads book_file directly and never touches greedy output, so disabling the else arm cannot reach it. Item 15's claim that no selected-book file should be written at all — rather than renamed or quarantined — is the correct resolution of the contradiction the Quant caught: a file labelled DIAGNOSTIC that S8 still consumes is not diagnostic.
+
+One amendment. S8's discover-fresh arm already carries a not-found branch at L473-476 which prints "no selected_book.csv from S5B… Run S5B with a candidate pool present. NOT marking done." If the Developer stops writing the file and reads "disable that path" as "let it fall through", the operator gets advice that contradicts the catalogue design — it points at S5B instead of score_book.py. Item 15 does require "a message pointing at item 16", but it does not name the existing misleading message as the thing being replaced. Name L473-476 explicitly.
+
+TASK 5 — THE FIFTEENTH INSTANCE
+
+Found one, and it is the documents' own check being narrower than the documents' own constraint.
+
+DEVELOPER_BRIEF CONSTRAINTS: "No local percentile defining any object, event, cluster, episode or stratum."
+Item 5's enforcement: "abort the run if any episode threshold is a local percentile rather than mechanism D."
+
+terrain.py L177: cut = float(np.percentile(g['abs_displacement_pts'].values, 100 * (1 - top_fraction))), then big = g[g['abs_displacement_pts'] >= cut] — this defines the biggest_decile_episodes / biggest_decile_share_pct stratum by local percentile, and emits it with population: 'MARKET'. It is not an episode threshold — episodes are already built by then — so item 5's abort would not fire on it. The check exists; the path it must cover sits outside its scope. That is the project's defining pattern in its fifteenth form, and this time it is in the specification rather than the code.
+
+Episode construction itself is clean: build_terrain routes every threshold through cp.thrust_thresholds → dt.compute_adaptive_thresholds (mechanism D, rolling-2500, day-refreshed), which I verified as causal by truncation test in an earlier phase. The other two np.percentile calls (L160-161) are descriptive quartile output columns and gate nothing.
+
+TASK 6 — CAUSALITY AND PARITY
+
+Episode thresholds are oracle-routed and causal ✓. Nothing in either document's design introduces look-ahead ✓. Item 5's abort requirement is correct in principle and correctly placed on the primary figure. The single exception is the stratum above, which the abort does not cover.
+
+TASK 7 — DOCTRINE
+Rule 1 (MARKET/BOOK): honoured in the build constraints and in terrain's emitted population column. The checklist's own NOTES block mixes MARKET figures (60.5/60.8, 30.0/31.4) and BOOK figures (4.72/2.42) without labels. Minor.
+Rule 2 (include, let evidence sort): honoured — VALID is measurability-and-survival, not quality; item 22 keeps UNEVALUABLE rows with a reason_code.
+Rule 3 (no pre-set targets): honoured. No quota, floor or target survives; "operator picks N from the grid" is stated in both documents. The 30.0/31.4 prediction in REPORT BACK is a check against a measurement, not a target — and Part 7A explicitly frames it as a bound. The "4×" appears in the checklist only as an open question ("that number decides whether the 4x target is real"), not a build input.
+Rule 4 (depth is the unit): honoured — items 11 and 12 are depth-centric.
+Rule 5 (negative burden): actively applied — item 24 forces §D.0's "89.8% had no qualifying signal" to be restated because it is a gate artifact.
+Standing construction (the filter is part of the finding): one violation. The NOTES line "eligible (ADX>=15, ticks>50, post-warmup) 60.5/60.8%" does not name its basis. The same data gives 54.7 / 54.9 on the start-bar basis and 60.5 / 60.8 on the ≥1-eligible-bar basis. Item 5 names the ≥1 basis for REACHABLE; the eligibility line inherits it silently. This is exactly the failure mode the construction exists to prevent, and both numbers are defensible — only the unlabelled one is not.
+TASK 8 — WHAT IS MISSING
+VALID is never defined in either document. It appears in item 15 ("emitted from VALID"), item 17 ("apply VALID on the training segment") and Appendix A ("run through the IDENTICAL VALID predicate"). It is the predicate the entire catalogue is emitted from. Its only prose description lives in AUDITOR_BRIEF.md, which the Developer does not receive and which is no longer in the repo. This is the largest gap: the Developer would have to invent the deliverable's admission rule.
+signal_id is undefined. Appendix B's sole input is "a CSV of signal_id", but nothing states that the catalogue emits such a key or what it is. Without it the operator's assembled book cannot be joined back to the catalogue, and item 16 cannot run.
+Item 9's "segment-local buckets" are undefined. The item says wf.FOLDS is unusable in-segment but does not say what replaces it — how many buckets, on what boundaries.
+Item 22's reason_code vocabulary is undefined — which codes exist, and which UNEVALUABLE conditions map to which.
+Item 10's Hurst p90 has no stated source. The constraint requires all thresholds via dots_thresholds; the item gives the parameter but not the routing.
+A determinism contradiction, and it is precise. CONSTRAINTS: "every ARTIFACT byte-identical across runs… and no wall-clock time in any artifact." Appendix B mandates that book_scored.jsonl be append-only and carry a UTC timestamp. Item 3 treats .jsonl as an artifact ("every artifact writes as one file"), and split_tree handles .csv and .jsonl alike. As written, Appendix B requires a violation of the determinism rule. The carve-out sentence covers only the run log ("the log is exempt, every CSV is not"). Name book_scored.jsonl as an attestation record and exempt it explicitly — the same basis on which I ratified the S5C attestation trail.
+Numbering collision. DEVELOPER_BRIEF instructs "Read DEV_CHECKLIST.md line 69 onward — the plain-English summary — before writing code", and then cites technical item numbers throughout ("items 1-18", "item 19", "item 20"). In that section the numbers mean different things: plain-English 16 is "stop the short side being an afterthought" (technical 16 is score_book.py), plain-English 18 is reachable coverage (technical 18 is S5C arm agreement), plain-English 20 is the walk-forward number (technical 20 is profiling). A Developer told to read from line 69 and then told to build "item 20" has two incompatible referents. Also, line 69 now lands two lines before the section header; the pointer should read line 71.
+PART 7 — CARRIED FORWARD
+
+A. The plateau reasoning does NOT survive the design change. Refuted.
+
+The argument: 30.0/31.4 was measured on random VALID-passing triples; real candidates additionally cleared PF≥2, so they are a strict subset; therefore the true figure lands at or below the plateau. The monotonicity step is sound — coverage is non-decreasing in the signal set, so a subset of signals covers no more episodes.
+
+But the premise no longer holds. Under this rebuild the catalogue is emitted from VALID with no PF bar — the checklist is explicit: "No PF bar, no WR bar; those are columns." The catalogue is therefore not the PF≥2 subset; it is the full VALID set, which is precisely the population the plateau was measured on. The expected result is at the plateau, not below it. The strict-subset argument describes the old S5-filtered funnel that this rebuild removes.
+
+This matters operationally: DEVELOPER_BRIEF's REPORT BACK says to flag immediately if the run lands "materially above or below" 30.0/31.4. Under the corrected reasoning, below is now the surprising direction — it would mean VALID is rejecting signals the proxy admitted — and at is the expected outcome rather than a ceiling touched. The asymmetry the item asserts should be restated.
+
+B. The item-20 override is sound and the determinism carve-out is coherent — with one boundary to fix.
+
+Profiling genuinely requires a real run at real scale; taking item 20 literally costs the operator a second full night for a table that instrumentation yields as a by-product. Speculative parallelism remains forbidden, so the item's protective intent survives. The carve-out works because timings go to the run log and the log is declared not-an-artifact while every CSV is.
+
+The boundary is under-specified in exactly one place — book_scored.jsonl — as set out in Task 8 item 6. State the rule at file level (CSV artifacts are byte-identical and wall-clock-free; the run log and the attestation jsonl are exempt) and the carve-out is airtight.
+
+VERDICT: RATIFY WITH AMENDMENTS
+
+The documents are substantially sound and I want to be plain about that, because the amendments below are precise rather than structural. Every load-bearing figure in both audit targets reproduces exactly from source and data — the 512/PF 35.11 headline, all three re-fire figures per direction and the 27.6 pooled contrast, 7,490 episodes at 3,816/3,674, eligibility 60.5/60.8, reachable 30.0/31.4 on denominators 1,143/1,155, coverage 54 and 28, unclaimed 1,089/1,127. Every line number and function name resolves against master.py 3d45bd3b7f74, including the correction that _sel_con is a def and not the lambda the old spec described. The Appendix A/B extraction is faithful in every definition, parameter and threshold. The indivisible block is real and correctly argued. Item 15's branch exists as described and the cut is clean.
+
+Amendments, in priority order:
+
+Define VALID in DEV_CHECKLIST.md. It is referenced by items 15, 17 and Appendix A, it is the predicate the entire catalogue is emitted from, and its only description sits in a document the Developer never sees. Without it he invents the admission rule for the deliverable. This is the one amendment I would treat as blocking.
+Resolve the determinism contradiction. Appendix B mandates a UTC timestamp in book_scored.jsonl; CONSTRAINTS forbids wall-clock in any artifact and item 3 treats .jsonl as one. Exempt the attestation record by name.
+Widen item 5's abort from "any episode threshold" to any local percentile defining an object, event, cluster, episode or stratum, matching the brief's own constraint — and name terrain.py L177 as the live instance, which the abort as written would not catch.
+Name the basis on the eligibility figure. "60.5/60.8%" is the ≥1-eligible-bar basis; the start-bar basis gives 54.7/54.9 on the same data. The filter is part of the finding.
+Restate Part 7A. Under a no-PF-bar catalogue the expected result is at the plateau, not below it; the strict-subset argument belongs to the funnel being replaced.
+Name S8 L473-476 as the message item 15 replaces, so "disable" is not read as "let it fall through" into advice that contradicts the design.
+Fix the numbering collision and the line-69 pointer — same integers meaning different items in the same file, in a brief that cites those integers throughout.
+Define signal_id, item 9's segment-local buckets, item 22's reason_code vocabulary, and item 10's Hurst-p90 routing.
+
+Amendments 1 and 2 change what the Developer builds. Amendments 3–8 change what he can get wrong without noticing. None requires re-deriving a figure, because the figures are right.
+
+Two items from my measurement that are not amendments but should reach whoever owns them: the depth-1/depth-2 ladder rows in AUDITOR_BRIEF.md do not reproduce (1,225/992 against 1,199/974, a 44-trade population difference with 3+ and both worst-days identical), and the all-F0 vs MIXED penalty could not be verified here for want of trigger-column attribution on the trade log.
+
+Reporting and holding.
