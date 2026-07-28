@@ -5,11 +5,11 @@ DOT master discovery corrections.
     git clone https://github.com/datlooms/DOT.git
 
 **READ FIRST, IN FULL:**
-`DEV_CHECKLIST.md` (repo root, 151 lines, sha256[:12] `0d76790b14db`, 24 items + Appendices A and B)
+`DEV_CHECKLIST.md` (repo root, 189 lines, sha256[:12] `3c31eda0f5b9`, 24 items + Appendices A, B and C)
 
 That file is the DO list. Build items 1-24 IN ORDER. This brief does not repeat it — it tells you what the checklist does not say. If the two disagree the checklist wins, EXCEPT where this brief marks an item **DECIDED — AUTHORISED DEVIATION**.
 
-**The checklist is self-contained** — Appendix A defines item 8's pricing columns and Appendix B defines what item 16 computes. You do not need any other document to build.
+**The checklist is self-contained** — Appendix A defines item 8's pricing columns, Appendix B defines what item 16 computes, and **Appendix C defines `VALID`, the predicate the entire catalogue is emitted from**. You do not need any other document to build.
 
 Background reading only, never required: `CORRECTION_CHECKLIST.md`, `CATALOGUE_MEASUREMENT_SPEC.md`, `POST_SCAN_DEFECTS.md` (in `dot_master_discovery/`), `DOT_signal_discovery_mantra.md`.
 
@@ -17,7 +17,7 @@ Background reading only, never required: `CORRECTION_CHECKLIST.md`, `CATALOGUE_M
 
 ## WHAT YOU ARE BUILDING
 
-Read `DEV_CHECKLIST.md` line 69 onward — the plain-English summary — before writing code.
+Read the PLAIN-ENGLISH SUMMARY section of `DEV_CHECKLIST.md` before writing code. It carries no item numbers and is not a build list — every "item N" reference in this brief means the numbered DO list, items 1-24.
 
 You are NOT building a selection engine. You are building a **MEASURING INSTRUMENT**. It emits fourteen per-family catalogues holding EVERY valid signal, with the measurements needed to judge them, and the operator composes the final system himself.
 
@@ -108,7 +108,10 @@ ONE DELIVERY, containing:
 - The `.zip` and its sha256[:12] manifest.
 - Verbatim console output of a run reaching S9.
 - **CATALOGUE ROW COUNT PER FAMILY.** This determines whether the operator can read the output at all — 37,000 rows and he needs the pricing column, 400 and the framing changes.
-- **THE REACHABLE COVERAGE ACHIEVED, per direction.** Predicted plateau is 30.0% UP / 31.4% DOWN of reachable, saturating near 1,000 signals per direction. If the run lands materially above or below that, the terrain or the VALID predicate has moved and it must be flagged immediately, not buried.
+- **THE COVERAGE ACHIEVED, per direction, against BOTH denominators.** Reachable-denominated is the primary figure (incumbent 4.72% UP / 2.42% DOWN, ceiling 100%); terrain-denominated alongside. **30.0% UP / 31.4% DOWN of terrain is not a prediction — it IS the reachable set** (1,143/3,816 = 29.95%, 1,155/3,674 = 31.44%). Report the terrain figure and read it BY CAUSE, not by direction:
+  - **ABOVE the plateau** — arithmetically impossible while the terrain and reachable definitions hold. It means a definitional or measurement bug in one of those denominators. Investigate that before reading anything else in the run.
+  - **AT the plateau** — expected. The catalogue has saturated the reachable set.
+  - **MATERIALLY BELOW** — either `VALID` is rejecting more than the proxy admitted (the proxy required 30 qualifying fires; `VALID` requires 30 EXECUTED trades plus V2-V4, and executed <= qualifying), or the catalogue is too small to saturate. **Report which of the two.**
 - The stage timing table from the run log, with the fraction of total runtime that is genuinely concurrent stated explicitly.
 - The walk-forward number, READ FROM THE ARTIFACT and quoted as it appears in the file.
 - The dedup parity proof result.

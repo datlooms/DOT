@@ -15,12 +15,12 @@ BASELINE CORRECTION — apply wherever it appears: same-bar 3+ is 512 trades / P
 ## COUNTING — these nine ship together or not at all (4-12 INDIVISIBLE)
 
 4. Count distinct `signal_idx` within a tolerance run, not entry rows, and build tolerance runs PER DIRECTION, never pooled across both. Same-signal re-fire is 1.8% at N=1, 15.4% at N=5 and 26.1% at N=30 per direction; pooled clustering gives 27.6% at N=30 and shifts every downstream count.
-5. Per-signal terrain coverage against BOTH denominators, pinned cell W15/K85/E75 named in every column: raw terrain (7,490 episodes) and REACHABLE (episodes holding >=1 eligible bar where D2D agrees with episode direction), reachable computed PER GRID CELL and never once. Reachable is the primary figure; abort the run if any episode threshold is a local percentile rather than mechanism D.
+5. Per-signal terrain coverage against BOTH denominators, pinned cell W15/K85/E75 named in every column: raw terrain (7,490 episodes) and REACHABLE (episodes holding >=1 eligible bar where D2D agrees with episode direction), reachable computed PER GRID CELL and never once. Reachable is the primary figure; ABORT the run if ANY local percentile defines any object, event, cluster, episode OR STRATUM rather than mechanism D — `terrain.py L177` is a live instance (`np.percentile` on `abs_displacement_pts` defining the biggest-decile stratum) and an episode-threshold-only check will not catch it.
 6. Emit the unclaimed-reachable set — reachable episodes no catalogue signal touches, with direction, duration, displacement, time-of-day, plus `n_conditions_firing` and `n_valid_triples_touching`. Those last two separate a SEARCH gap (many conditions fire, no valid triple lands) from a GRAMMAR gap (few fire); without them the set shows what is unoccupied but not why.
 7. Emit per-signal touched-episode IDs (or a bitmap) alongside the coverage percentages, so the union and saturation curves can be re-derived from the artifacts alone. Coverage % on its own makes the round's load-bearing evidence unreproducible.
 8. Per-signal multiple-testing price — the eight columns defined in APPENDIX A at the end of this file. `N_F` computed per family at run time, never a literal, and Benjamini-Yekutieli not Hochberg.
-9. Add `folds_plus`, `min_fold_pf` and OOS to the same per-signal row using segment-local buckets. `wf.FOLDS` is month-literal Jan-Jun and unusable in-segment; if they are dropped instead, say so in the header.
-10. Score every signal BOTH ungated and with the conviction gate applied (solo: Hurst p90 + ticks>=300; double: Hurst p90; depth 3+ free), emitting trades, WR, PF, worst day and net for each arm plus the delta. This is what lets the operator set gating per signal instead of book-wide; it is a measurement, the gating itself lives in the EA.
+9. Add `folds_plus`, `min_fold_pf` and OOS to the same per-signal row using SEGMENT-LOCAL buckets: whatever calendar months the training segment contains, minimum 3, evaluated within direction. `wf.FOLDS` is month-literal Jan-Jun and sacred; never import it.
+10. Score every signal BOTH ungated and with the conviction gate applied (solo: Hurst p90 + ticks>=300; double: Hurst p90; depth 3+ free), emitting trades, WR, PF, worst day and net for each arm plus the delta. The Hurst p90 threshold routes through `dots_thresholds` mechanism D like every other threshold — never a local percentile.
 11. Pool-level same-bar cohort table — family composition of each bar as a curve over depth, not fixed at 3. Counts only, no P&L: depth-3 has no discriminating power at pool scale and P&L needs a book.
 12. `dilution_curve.csv` — admit signals best-first and re-score the same-bar 3+ population at each step, over the WHOLE catalogue, not a top-ranked subset. Name the ranking key and emit the curve under at least two keys (PF and `EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF`), because the stop-point differs by key.
 
@@ -28,7 +28,7 @@ BASELINE CORRECTION — apply wherever it appears: same-bar 3+ is 512 trades / P
 
 13. Remove `/n_signals_d` from any objective (`selection.py L290`). Keep it as a reported column that never gates inclusion.
 14. Delete the `_sel_con` stub (`master.py L1174-1175` — a `def`, not a lambda). Constraint machinery moves to item 16.
-15. The catalogue is emitted from VALID, never from an argmax: no selected-book file is written in discover-fresh at all, and `sel.greedy_direction` is retained IN-MEMORY ONLY as item 12's dilution-curve admission loop. S8's discover-fresh path (`master.py L472`) currently reads `selected_book.csv` and scores it — disable that path with a message pointing at item 16, and leave S8's FROZEN path (`L468-470`) untouched so the committed book still scores from its ratified file.
+15. The catalogue is emitted from VALID (APPENDIX C), never from an argmax: no selected-book file is written in discover-fresh at all, and `sel.greedy_direction` is retained IN-MEMORY ONLY as item 12's dilution-curve admission loop. Disable S8's discover-fresh arm (`master.py L472`) and REPLACE its existing not-found message at `L473-476` — which points at S5B and contradicts this design — with one pointing at item 16; leave S8's FROZEN path (`L467-470`) untouched.
 16. `score_book.py --book <csv> --data <frame> --out <dir>` — scores an operator-assembled book on the quantities and parameters defined in APPENDIX B, importing S5B's estimators rather than reimplementing them. Non-zero exit on breach, append-only `book_scored.jsonl`, and every catalogue header states a book is UNSCORED until it has been run.
 
 ## EVIDENCE — the deliverable the redesign exists for
@@ -44,7 +44,7 @@ BASELINE CORRECTION — apply wherever it appears: same-bar 3+ is 512 trades / P
 
 ## RUN
 
-22. Full run from an empty tree — fourteen per-family books, every valid signal, no pruning. UNEVALUABLE rows stay in the catalogue with a `reason_code`.
+22. Full run from an empty tree — fourteen per-family books, every valid signal, no pruning. UNEVALUABLE rows stay in the catalogue with statistics blank and a `reason_code` drawn from the fixed vocabulary in APPENDIX C.
 23. Deliver one `.zip` of the complete `dot_master_discovery/` directory plus a sha256[:12] manifest. Windows: `.zip`, not `.tar.gz`.
 
 24. Edit the spec, do not merely flag it: §D.0's '89.8% of missed episodes had no qualifying signal' is a gate artifact and must be restated as a gate decomposition or deleted. Give §D.2 strata, §C.3 step-5 tolerance, §12 and mantra §2 their reachable counterparts in the same pass.
@@ -58,7 +58,7 @@ P3. Stability selection, PBO/CSCV, White's Reality Check, Hansen SPA and Romano-
 ## NOTES
 
 - Family attribution comes from the `trigger` column, never name parsing.
-- WHOLE CAKE = the reachable universe, not all price action. Measured: all episodes 100% -> eligible (ADX>=15, ticks>50, post-warmup) 60.5/60.8% -> D2D agrees 30.0/31.4%. The two exclusions are deliberate, measured decisions (gating PF 16.63 vs 2.25 OOS; D2D gated PF 5.14 vs long-ungated 1.53).
+- WHOLE CAKE = the reachable universe, not all price action. Measured, MARKET, pinned cell W15/K85/E75, EPISODE-BASIS >=1 QUALIFYING BAR (the start-bar basis gives 54.7/54.9 on the same data — the basis is part of the finding): all episodes 100% -> eligible (ADX>=15, ticks>50, post-warmup) 60.5/60.8% -> D2D agrees 30.0/31.4%. The two exclusions are deliberate, measured decisions (gating PF 16.63 vs 2.25 OOS; D2D gated PF 5.14 vs long-ungated 1.53).
 - EVIDENCE FOR 'not a vocabulary limit' IS THE SATURATION CURVE, not condition density: valid triples plateau at exactly 30.0/31.4 and do not move from 1,000 to 6,000 signals per direction, measured twice independently. Do NOT cite 'any of the 249 fires' — it fires on 100.00% of all 103,214 eligible bars and is tautological.
 - BOOK-50 occupies 1.415%/0.762% of raw terrain = 4.72% (54/1,143) UP and 2.42% (28/1,155) DOWN of reachable. UNCLAIMED REACHABLE: 1,089 UP / 1,127 DOWN episodes. The constraint is signal count, not vocabulary, not gates, not search.
 - RECORD CORRECTION: spec §D.0's '89.8% of missed episodes had no qualifying signal' was computed against raw terrain and is a GATE artifact, not signal absence. Restate as a gate decomposition or delete; §D.2 strata, §C.3 step-5 tolerance, §12 and mantra §2 reach figures all need reachable counterparts alongside the raw ones.
@@ -69,38 +69,40 @@ P3. Stability selection, PBO/CSCV, White's Reality Check, Hansen SPA and Romano-
 
 ## PLAIN-ENGLISH SUMMARY — tick all before running master
 
+These are NOT build items and carry no item numbers. The numbered DO list is items 1-24 above; this section restates it in plain terms for the operator. Any reference to "item N" anywhere means the technical list, never this section.
+
 ### What this build fixes
 
-- [ ] 1. The pipeline was reading old files from a leftover folder, data from a different dataset entirely. It now reads only from the run it just did.
-- [ ] 2. A convenience feature chopped the pipeline's own output files into pieces, and the next step then read those broken pieces as if they were real. That feature is gone.
-- [ ] 3. When counting how many signals agreed at once, the same signal firing repeatedly was counted as several. On the same bar it was exactly zero error; it grows to about 15% at a five-bar window and 26% at thirty.
-- [ ] 4. The part meant to pick signals never actually ran, and it is not being repaired. It is being deleted: nothing chooses signals any more, you do.
-- [ ] 5. A safety check on assembled books was wired permanently to "pass". It is removed, and those checks move into a separate tool you run against whatever book you build.
-- [ ] 6. The test that proves the method works, not just that one book worked, never produced a number. It now does.
-- [ ] 7. Only two of fifteen stages used more than one processor core. All stages get parallelised.
-- [ ] 8. One exception: the step that strips near-duplicate signals stays sequential, or duplicates slip through. It ships with a proof that the parallel result matches the sequential one exactly.
-- [ ] 9. Stages are timed first and parallelised second, so the speed-up is measured rather than guessed.
-- [ ] 10. Every long stage prints progress, a heartbeat and an estimated finish time. You have twice had to guess whether a healthy run was stuck.
-- [ ] 11. The run writes its own log into the output folder, and the console stays readable whether you watch it, pipe it or redirect it.
+- [ ] The pipeline was reading old files from a leftover folder, data from a different dataset entirely. It now reads only from the run it just did.
+- [ ] A convenience feature chopped the pipeline's own output files into pieces, and the next step then read those broken pieces as if they were real. That feature is gone.
+- [ ] When counting how many signals agreed at once, the same signal firing repeatedly was counted as several. On the same bar it was exactly zero error; it grows to about 15% at a five-bar window and 26% at thirty.
+- [ ] The part meant to pick signals never actually ran, and it is not being repaired. It is being deleted: nothing chooses signals any more, you do.
+- [ ] A safety check on assembled books was wired permanently to "pass". It is removed, and those checks move into a separate tool you run against whatever book you build.
+- [ ] The test that proves the method works, not just that one book worked, never produced a number. It now does.
+- [ ] Only two of fifteen stages used more than one processor core. All stages get parallelised.
+- [ ] One exception: the step that strips near-duplicate signals stays sequential, or duplicates slip through. It ships with a proof that the parallel result matches the sequential one exactly.
+- [ ] Stages are timed first and parallelised second, so the speed-up is measured rather than guessed.
+- [ ] Every long stage prints progress, a heartbeat and an estimated finish time. You have twice had to guess whether a healthy run was stuck.
+- [ ] The run writes its own log into the output folder, and the console stays readable whether you watch it, pipe it or redirect it.
 
 ### What you are trying to achieve
 
-13. See the whole reachable map, not occupy it. You decide what is worth trading; the tool measures and does not choose.
-14. Keep solos, doubles and triples all firing, gated by conviction rather than thrown away. That gating lives in the EA; this build gives you the measurements to set it.
-15. The catalogue is emitted from VALID, never from an argmax: no selected-book file is written in discover-fresh at all, and `sel.greedy_direction` is retained IN-MEMORY ONLY as item 12's dilution-curve admission loop. S8's discover-fresh path (`master.py L472`) currently reads `selected_book.csv` and scores it — disable that path with a message pointing at item 16, and leave S8's FROZEN path (`L468-470`) untouched so the committed book still scores from its ratified file.
-16. Stop the short side being an afterthought. It was never weak, it just never had enough signals to stack.
+- See the whole reachable map, not occupy it. You decide what is worth trading; the tool measures and does not choose.
+- Keep solos, doubles and triples all firing, gated by conviction rather than thrown away. That gating lives in the EA; this build gives you the measurements to set it.
+- The catalogue is emitted from VALID, never from an argmax: no selected-book file is written in discover-fresh at all, and `sel.greedy_direction` is retained IN-MEMORY ONLY as item 12's dilution-curve admission loop. S8's discover-fresh path (`master.py L472`) currently reads `selected_book.csv` and scores it — disable that path with a message pointing at item 16, and leave S8's FROZEN path (`L468-470`) untouched so the committed book still scores from its ratified file.
+- Stop the short side being an afterthought. It was never weak, it just never had enough signals to stack.
 
 ### What you will see when it finishes
 
-- [ ] 15. Fourteen books, one per family, every valid signal kept. Thousands per family and tens of thousands for the largest: last run 41,148 candidates cleared the filter, over 37,000 of them from a single family.
-- [ ] 16. Every signal scored both ungated and gated, so you can see per signal whether the conviction filter helps it, rather than assuming it book-wide.
-- [ ] 17. Every row carries a price: how many rows that good come up by chance alone. At fifty rows you can eyeball, at thirty-seven thousand you cannot.
-- [ ] 18. Coverage against what is actually reachable. You hold 82 of 2,298 episodes today, 4.7% on the long side and 2.4% on the short.
-- [ ] 19. The unclaimed list: 2,216 episodes you could legitimately trade and do not, each marked whether nothing searched there or nothing could express it.
-- [ ] 20. A walk-forward number saying whether your inclusion rule beats chance.
-- [ ] 21. A dilution curve in two versions, ranked two different ways, showing what happens to the triple edge as weaker signals join. The gap between the two curves is the overfit estimate.
-- [ ] 22. Reach stops near 30% of the terrain, the market's clean directional moves, which is already a filtered set. That ceiling is the dead-bar filter plus the alternating bias, a trade you chose rather than a fault.
-- [ ] 23. The other thirteen families add depth, timing and diversity inside that ceiling. They do not add reach.
+- [ ] Fourteen books, one per family, every valid signal kept. Thousands per family and tens of thousands for the largest: last run 41,148 candidates cleared the filter, over 37,000 of them from a single family.
+- [ ] Every signal scored both ungated and gated, so you can see per signal whether the conviction filter helps it, rather than assuming it book-wide.
+- [ ] Every row carries a price: how many rows that good come up by chance alone. At fifty rows you can eyeball, at thirty-seven thousand you cannot.
+- [ ] Coverage against what is actually reachable. You hold 82 of 2,298 episodes today, 4.7% on the long side and 2.4% on the short.
+- [ ] The unclaimed list: 2,216 episodes you could legitimately trade and do not, each marked whether nothing searched there or nothing could express it.
+- [ ] A walk-forward number saying whether your inclusion rule beats chance.
+- [ ] A dilution curve in two versions, ranked two different ways, showing what happens to the triple edge as weaker signals join. The gap between the two curves is the overfit estimate.
+- [ ] Reach stops near 30% of the terrain, the market's clean directional moves, which is already a filtered set. That ceiling is the dead-bar filter plus the alternating bias, a trade you chose rather than a fault.
+- [ ] The other thirteen families add depth, timing and diversity inside that ceiling. They do not add reach.
 
 ### Hold onto this
 
@@ -149,3 +151,39 @@ Input: a CSV of `signal_id` plus optional `direction` for assertion. Nothing els
 These are SET properties: they have no per-signal value and fabricating one would be worse than omitting it. The exposure this closes is union collapse — a 448-signal persistent union scored PF 1.82 against the curated 50-signal book's PF 6.40.
 
 Three enforcement mechanisms, because a convention is what failed fourteen times: non-zero exit on breach with the breach named on stdout; append-only `book_scored.jsonl` carrying `book_sha256`, `input_sha`, `code_sha`, UTC timestamp and every constraint verdict; and the catalogue header declaring any assembled book UNSCORED until the tool has run on it.
+
+DETERMINISM CARVE-OUT, stated at file level: every CSV artifact is byte-identical across runs and worker counts and contains no wall-clock. The run log and `book_scored.jsonl` are ATTESTATION RECORDS, not artifacts — both are exempt, and both are required to carry wall-clock. Nothing else is exempt.
+
+## APPENDIX C — item 15/17/22, the `VALID` predicate
+
+For signal `s`, training segment `T`, direction `d = dir(s)`. **No component reads a bar outside `T`** — no `wf.FOLDS`, no `OOS_MONTHS`, no full-series percentile, no incumbent-anchored bound.
+
+    VALID(s|T) := SUFFICIENCY AND SURVIVAL AND MEASURABILITY AND REGIME_EVALUABLE
+
+**V1 SUFFICIENCY** — `trades(s,T) >= MIN_TRADES`, `MIN_TRADES = 30`. A sample-size floor, not a fitted quality bar. Report `trades(s,T)` in the catalogue regardless so marginal cases are visible.
+
+**V2 SURVIVAL** — `worst_day(s,T) >= -(2500 * (1 - MARGIN))`. The FTMO ceiling is an external account fact, not data-derived, so it is admissible. Evaluated on the FULL population including gap fillers, because the ceiling does not distinguish sources. Checked BEFORE any profitability quantity.
+
+**V3 MEASURABILITY** — headline statistics computable and finite on `T`: at least one losing trade (else PF is undefined — report `PF = inf` with a `pf_undefined` flag, never a number that ranks first), and `>= MIN_ACTIVE_DAYS = 10` distinct entry-basis trading days.
+
+**V4 REGIME_EVALUABLE** — segment-local monthly buckets: whatever calendar months `T` contains, minimum 3, evaluated within direction. Fewer than 3 buckets for that direction makes the signal UNEVALUABLE, not INVALID.
+
+**V4 sets a bar but does not gate.** `regime_positive_buckets` and `regime_total_buckets` are COLUMNS. Whether "positive in all but at most one" is required is the operator's call and is not specified here.
+
+**THERE IS NO PF BAR AND NO WR BAR.** Those are columns. VALID is a measurability-and-survival predicate, not a quality predicate — that is what stops the catalogue being a chooser in disguise.
+
+**Three-value return, and the third is the point:**
+
+| value | meaning |
+|---|---|
+| `VALID` | measurable and survives; enters the catalogue |
+| `UNEVALUABLE` | V3 or V4 unmet; ENTERS THE CATALOGUE flagged, statistics blank, with `reason_code` |
+| `INVALID` | V2 breached — fails the account constraint on train |
+
+`reason_code` vocabulary, fixed: `insufficient_trades`, `insufficient_active_days`, `pf_undefined`, `insufficient_buckets_direction`. UNEVALUABLE rows are never dropped — dropping them makes "this family catalogues nothing" and "this family could not be measured" look identical, which is the rule-5 failure.
+
+**`signal_id`** — every catalogue row carries a stable `signal_id`: the family tag plus the signal definition string plus direction, deterministic and reproducible across runs. It is the join key between the catalogue and any book the operator assembles, and it is item 16's sole required input column.
+
+**Falsification:** if VALID admits >=95% of every family's candidates on every split it is a formality, not a predicate, and the sufficiency floors need re-deriving. Report the admit rate per family per split.
+
+*Fit risk:* `MIN_TRADES=30` and `MIN_ACTIVE_DAYS=10` are inherited constants. They are sufficiency floors, so a wrong value costs coverage rather than correctness — but they are RESTATED inside each split, never re-fitted.
