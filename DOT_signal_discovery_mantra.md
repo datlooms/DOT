@@ -54,13 +54,15 @@ Measured participation, W=30 / K=p85 / E=p75 / post-warmup mask:
 | UP-thrusts | 2,684 | 11.6% | **88.4%** |
 | DOWN-thrusts | 2,705 | 10.6% | **89.4%** |
 
+**ITEM 24 CORRECTION — THESE ARE RAW-TERRAIN FIGURES AND NEED THEIR REACHABLE COUNTERPARTS ALONGSIDE, NOT INSTEAD.** Raw terrain counts episodes the book could never have taken. Two deliberate, measured exclusions sit between raw terrain and reachable — the eligibility mask (ADX>=15, ticks>50, post-warmup) and D2D directional agreement — and together they remove ~70% of the population. Measured on the corrected frame at W15/K85/E75: raw 3,816 UP / 3,674 DOWN reduces to REACHABLE 1,143 UP (29.95%) / 1,155 DOWN (31.44%), and BOOK-50 occupies **4.72% UP (54/1,143) and 2.42% DOWN (28/1,155) of reachable** against 1.415%/0.762% of raw. THE PAIR IS WHAT SHOWS ROOM REMAINING: the raw figure alone overstates the gap by counting ground that was excluded by design, and quoting only the reachable figure hides how much was excluded. Rule 1 requires both, with parameters attached.
+
 At the spec's §D.0.2 operating point the same relationship reads 3,067 episodes at 4.1% / 3.0%
 traded. **The parameters move the level by several-fold. They do not move the conclusion at all:**
 across every cell tested, the book participates in a small single-digit-to-low-double-digit
 percentage of the market's clean directional moves, and the up/down split of the opportunity stays
 within +/-0.6pp of 50/50.
 
-And of the episodes it misses, **89.8% are places where not one signal in the book fires at all.**
+And of the episodes it misses, **89.8% are places where not one signal in the book fires at all** — but that figure is computed against RAW TERRAIN and is a GATE ARTIFACT, restated in `discovery_redesign_spec.md` §D.0 as a gate decomposition (item 24). Most of it is the eligibility mask and the D2D gate, both deliberate. The residual that means anything is the reachable unclaimed set: 1,089 UP / 1,127 DOWN.
 Not blocked. Not busy. Absent.
 
 **The book is not a system with a coverage gap. It is a handful of crumbs, and the terrain it samples

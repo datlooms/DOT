@@ -45,7 +45,7 @@ import rolling_leadlag as f11
 #  cut is baked in. Collect ALL candidates (survivors AND rejects).
 # ═══════════════════════════════════════════════════════════════
 
-RESULTS_DIR = "discovery_results"
+RESULTS_DIR = os.environ.get('DOT_RESULTS_DIR', "discovery_results")
 SCHEMA = ['family', 'script', 'signal_def', 'direction', 'd2d_mode', 'trades', 'WR',
           'agg_pf', 'worst_day_usd', 'hard_stop_days', 'folds_plus', 'min_fold_pf',
           'spread_pf', 'survival']
@@ -418,10 +418,162 @@ def run_f0_chunk(df, adaptive, structural, warmup, kw, lo, hi):
     return list(survivors), f0_combo_count(kw, lo, hi)
 
 
-def f0_rows_from_raw(df, adaptive, structural, warmup, raw_survivors):
+def _f0_score_chunk(payload):
+    lo, hi, scope, frame_path = payload
+    import discovery_orchestrator as orch
+    df, adaptive, structural, warmup, _kw = orch._worker_context(scope, frame_path, 'F0')
+    import pickle as _pk
+    with open(orch._F0_KEPT_PATH, 'rb') as f:
+        kept = _pk.load(f)
+    month = pd.Series(df['Time'].values).str[:7].values
+    return lo, [f0s.score_survivor(df, row, month, adaptive, structural, warmup)
+                for row in kept[lo:hi]]
+
+
+_F0_KEPT_PATH = None
+
+
+def f0_rows_from_raw(df, adaptive, structural, warmup, raw_survivors, workers=1,
+                     scope='full', frame_path=None, results_dir=None):
+    """Item 19: the RE-SCORE parallelises. THE DEDUP DOES NOT.
+
+    deduplicate() is a global greedy pass against a running keep-set: each
+    candidate is compared with every set already kept, so splitting it lets
+    near-duplicates survive in different shards and reunite in the output. It
+    stays SINGLE-PASS IN ASCENDING CHUNK ORDER. Only the per-survivor re-score
+    parallelises, and each of those is genuinely independent - 19,757 of them,
+    measured at ~5 hours single-threaded, which is why this is the stage worth
+    parallelising at all.
+
+    A PARITY PROOF AGAINST THE SERIAL RESULT IS MANDATORY and is what
+    f0_parity_proof() runs.
+    """
+    global _F0_KEPT_PATH
     kept = f0m.deduplicate(list(raw_survivors))
     month = pd.Series(df['Time'].values).str[:7].values
-    return [f0s.score_survivor(df, row, month, adaptive, structural, warmup) for row in kept]
+    if workers <= 1 or frame_path is None or results_dir is None or len(kept) < 64:
+        return [f0s.score_survivor(df, row, month, adaptive, structural, warmup) for row in kept]
+    import pickle as _pk
+    _F0_KEPT_PATH = os.path.join(results_dir, '_f0_kept.pkl')
+    with open(_F0_KEPT_PATH, 'wb') as f:
+        _pk.dump(kept, f)
+    n = len(kept)
+    size = max(1, -(-n // (workers * 4)))
+    bounds = [(i, min(i + size, n)) for i in range(0, n, size)]
+    out = {}
+    from concurrent.futures import ProcessPoolExecutor
+    import multiprocessing as _mp
+    import runlog as _rl
+    payloads = [(lo, hi, scope, frame_path) for lo, hi in bounds]
+    with _rl.Progress('F0 re-score', len(payloads)) as pg:
+        with ProcessPoolExecutor(max_workers=min(workers, len(payloads)),
+                                 mp_context=_mp.get_context('spawn')) as ex:
+            for lo, rows in ex.map(_f0_score_chunk, payloads):
+                out[lo] = rows
+                pg.step(1)
+    return [r for lo, _hi in bounds for r in out[lo]]
+
+
+F0_PARITY_SAMPLE = 512
+
+
+def _f0_code_sha():
+    """The proof certifies CODE, so the attestation key must include the code."""
+    import hashlib as _h
+    h = _h.sha256()
+    for rel in ('orchestrator/discovery_orchestrator.py', 'scanners/f0_to_schema.py',
+                'scanners/triple_convergence_and_d2ddir.py'):
+        p_ = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), rel)
+        if os.path.exists(p_):
+            h.update(open(p_, 'rb').read())
+    return h.hexdigest()[:12]
+
+
+def _stratified_indices(n_total, n_sample, workers):
+    """C1: a CONTIGUOUS HEAD exercises zero chunk boundaries at realistic worker counts.
+
+    With n=19,757 and chunk size ceil(n/(workers*4)), the first 512 survivors sit
+    inside chunk 0 at every worker count up to 8 - including the default of 2 -
+    so a head-bounded proof touches NO boundary. Chunk-boundary coverage was
+    ruled sufficient when the proof ran over the full population; bounding it to
+    a head silently voided that. A stratified spread across the whole index range
+    costs the same and covers every boundary at any worker count. Deterministic,
+    so kept[i] and par[i] index the same survivor.
+    """
+    if n_sample >= n_total:
+        return list(range(n_total))
+    idx = set()
+    size = max(1, -(-n_total // max(int(workers), 1) // 4))
+    for b in range(0, n_total, size):
+        for off in (0, 1):
+            if b + off < n_total:
+                idx.add(b + off)
+    stride = max(1, n_total // max(n_sample - len(idx), 1))
+    for i in range(0, n_total, stride):
+        if len(idx) >= n_sample:
+            break
+        idx.add(i)
+    return sorted(idx)[:max(n_sample, len(idx))]
+
+
+def _parity_attest_path(results_dir):
+    return os.path.join(results_dir, '_f0_parity.attest')
+
+
+def f0_parity_proof(df, adaptive, structural, warmup, raw_survivors, workers, scope, frame_path,
+                    results_dir, input_sha=''):
+    """Mandatory parity, WITHOUT repaying the cost item 19 exists to remove.
+
+    The first wiring computed the serial reference over all 19,757 survivors,
+    computed the parallel result to compare against it, discarded that result,
+    and then computed the parallel result AGAIN for the caller - three full
+    re-scores on a stage whose whole purpose is to stop paying for one. Now:
+    the FULL parallel pass runs ONCE and is RETURNED for the caller to use, and
+    the serial reference is BOUNDED to a deterministic prefix sample and
+    ATTESTED PER input_sha so it is paid once rather than every run.
+
+    The reference stays genuine: f0_rows_from_raw at workers <= 1 is a plain
+    list comprehension with no ProcessPool, so the sample is not produced by the
+    machinery under test. DataFrame.equals is element-wise, order-sensitive,
+    dtype-sensitive and NaN-aware, which is what covers float accumulation,
+    ordering and chunk boundaries.
+    """
+    par = f0_rows_from_raw(df, adaptive, structural, warmup, raw_survivors, workers=workers,
+                           scope=scope, frame_path=frame_path, results_dir=results_dir)
+    att = _parity_attest_path(results_dir)
+    key = f'{input_sha}|{_f0_code_sha()}'
+    if input_sha and os.path.exists(att):
+        prev = open(att, 'r', encoding='utf-8').read().strip()
+        if prev == key:
+            print(f'  F0 RE-SCORE PARITY: already attested for input_sha+code_sha {key[:29]}... '
+                  f'({os.path.basename(att)}) - paid once per DATASET AND CODE STATE. Keying on '
+                  f'input_sha alone would skip the proof after a change to score_survivor, the '
+                  f'chunking or the reassembly against an unchanged dataset, and the proof exists '
+                  f'to certify CODE.', flush=True)
+            return True, par
+    kept = f0m.deduplicate(list(raw_survivors))
+    n = min(int(F0_PARITY_SAMPLE), len(kept))
+    idx = _stratified_indices(len(kept), n, workers)
+    month = pd.Series(df['Time'].values).str[:7].values
+    ser = [f0s.score_survivor(df, kept[i], month, adaptive, structural, warmup) for i in idx]
+    a_ = pd.DataFrame(ser, columns=SCHEMA).reset_index(drop=True)
+    b_ = pd.DataFrame([par[i] for i in idx], columns=SCHEMA).reset_index(drop=True)
+    same = a_.equals(b_)
+    print(f'  F0 RE-SCORE PARITY: serial reference on a bounded {n}-survivor prefix vs the same '
+          f'prefix of the parallel result | IDENTICAL: {same} | dedup ran SERIALLY in both, only '
+          f'the re-score parallelised | full parallel pass computed ONCE and reused | sample is '
+          f'STRATIFIED across the index range so every chunk boundary is covered at any worker '
+          f'count | this reference is ~{100.0*n/max(len(par),1):.1f}% of a serial pass and is paid '
+          f'on the FIRST run per dataset+code only, zero thereafter', flush=True)
+    if not same:
+        raise SystemExit('ABORT [item 19] the parallel F0 re-score does not equal the serial one. '
+                         'The parity proof is mandatory and it failed.')
+    if input_sha:
+        tmp = att + '.tmp'
+        with open(tmp, 'w', encoding='utf-8') as f:
+            f.write(key)
+        os.replace(tmp, att)
+    return same, par
 
 
 def _f0_chunk_pickle(script, idx):
@@ -441,7 +593,13 @@ def collate_f0(script, n_chunks, df, adaptive, structural, warmup, expected_tota
         with open(pk, 'rb') as f:
             raw.extend(pickle.load(f))
     n_raw = len(raw)
-    rows = f0_rows_from_raw(df, adaptive, structural, warmup, raw)
+    _wk = int(os.environ.get('DOT_WORKERS', '1'))
+    _fp = os.environ.get('DOT_FRAME_PATH') or None
+    if _wk > 1 and _fp:
+        _ok, rows = f0_parity_proof(df, adaptive, structural, warmup, raw, _wk, 'full', _fp,
+                                    RESULTS_DIR, input_sha=str(input_sha or ''))
+    else:
+        rows = f0_rows_from_raw(df, adaptive, structural, warmup, raw)
     csv, done = _family_paths('F0', script)
     _write_atomic_csv(pd.DataFrame(rows, columns=SCHEMA), csv)
     _mark_family_done(csv, done, len(rows))

@@ -523,7 +523,7 @@ The objective is applied **per direction**, and the constraints below are evalua
 2. **Hard constraint:** `FailConc(B) <= F_max`, with `F_max` set from the incumbent book's value **measured on the ACTIVE TRAINING SEGMENT** — never the full-series figure (§I.4.2).
 3. **Hard constraint:** `TailDep(B) <= T_max` and per-signal `mCVaR_i <= C_max` per §C.2.
 4. **Maximise:** `DepthYield_d(B)` — the normalised, within-direction measure of §C.1, run independently for each direction per §C.3.1.
-5. **Tie-break (§D.1):** higher `Coverage(B)` among books within tolerance of the best `DepthYield_d`.
+5. **Tie-break (§D.1):** higher `Coverage(B)` among books within tolerance of the best `DepthYield_d`. **ITEM 24 CORRECTION — THE TOLERANCE IS RELATIVE, NOT A PERCENTAGE-POINT BAND.** A band stated in points means something different at a 5% coverage scale than at 1.4%: one point is a fifth of the former and three-quarters of the latter, so a fixed band silently tightens as coverage falls and is a different rule at each scale. State it as a fraction of the best `DepthYield_d` in that direction, or re-derive it at the scale it will actually be applied at.
 6. **Tie-break:** lower `FailCorr(B)` (Pearson, reported diagnostic).
 
 **This inverts the old objective on axis (i) while preserving it on axis (ii).** Co-firing is now rewarded; correlated failure is still penalised.
@@ -624,7 +624,16 @@ The reach programme rests on knowing the *mechanism* of the shortfall, not merel
 | B — a signal qualified but no entry resulted | 314 | 10.2% | 87.0 pt |
 | of B, span >50% occupied (jar / already-in-trade blocked) | 43 | **1.4% of all missed** | — |
 
-**Nine in ten missed thrusts are places where the book has nothing that fires at all.** Occupancy and the 6-lot jar account for 1.4%. The shortfall is therefore a **COVERAGE gap in the signal book — not a throughput gap in the execution layer.** Raising `MAX_POSITIONS`, loosening the jar, or any other throughput change would address 1.4% of the problem and is not the remedy.
+**ITEM 24 CORRECTION — THIS IS A GATE DECOMPOSITION, NOT SIGNAL ABSENCE.** The 89.8% was computed against RAW TERRAIN, which counts episodes the book could never have taken. Two deliberate, measured exclusions sit between raw terrain and anything reachable: the eligibility mask (ADX>=15, ticks>50, post-warmup) and D2D directional agreement. Measured on the corrected frame at this same cell, raw terrain 3,816 UP / 3,674 DOWN reduces to REACHABLE 1,143 UP (29.95%) / 1,155 DOWN (31.44%). So the correct decomposition of a missed episode is:
+
+| gate | what it means | status |
+|---|---|---|
+| episode not eligible | the bar failed ADX/volume/warm-up | EXCLUDED BY DESIGN, gating PF 16.63 vs 2.25 OOS |
+| D2D disagreed with episode direction | the directional gate refused the side | EXCLUDED BY DESIGN, D2D-gated PF 5.14 vs long-ungated 1.53 |
+| reachable, no signal fired | the genuine search/vocabulary gap | THE ONLY RESIDUAL THAT MEANS ANYTHING |
+
+**As previously written the line said the vocabulary is the limit, which is the exact framing this rebuild retired.** ~70% of the raw-terrain shortfall is two gates the operator chose and measured, not signal absence. The residual is the reachable unclaimed set — 1,089 UP / 1,127 DOWN against BOOK-50 — and item 6's catalogue emits it per episode with `n_conditions_firing` and `n_valid_triples_touching` so a SEARCH gap (many conditions fire, no valid triple lands) is distinguishable from a GRAMMAR gap (few fire). Occupancy and the 6-lot jar account for 1.4%.
+
 
 **EXPLICIT LIMIT OF THIS CONCLUSION.** This measurement *locates* the gap. It does **not** establish that the available vocabulary can fill it. Directly against that hope: S8B basis 3 found **no single condition that separates thrust episodes — maximum ATR-controlled lift 1.35.** So the conditions that would populate the missed 89.8% have not been shown to exist in the current 249-condition vocabulary, and it remains entirely possible that they do not. The correct reading is: the gap is real, its mechanism is identified, and whether it is *fillable* is an open question the redesign tests rather than assumes.
 
@@ -696,7 +705,7 @@ Against that baseline, BOOK-50's capture (**property of the BOOK**):
 
 **DOCTRINE RECONCILIATION — `DOT_signal_discovery_mantra.md`, 305 lines, sha256[:12] `fae943d40231`.** The doctrine is binding and is not superseded by measurement. **Verified against the current revision: the two documents agree, and no divergence stands.**
 
-Reconciled figures: §2's cross-reference to this spec's operating point (3,067 episodes at 4.1% / 3.0%), the 89.8% no-signal-fires figure, §4's depth ladder (N=10, BOOK, with N=5 values noted), §4.1's arc table at `j/(size−1)` (7.74 / 19.43 / 8.32 / 6.79) and its N=5 tolerance caveat, §4.2's win-rate dispersion (sd 9.01 → 4.67 → 5.52), and §5's cluster structure (N=5, BOOK: LONG 3.38 / SHORT 1.72).
+Reconciled figures: §2's cross-reference to this spec's operating point (3,067 episodes at 4.1% / 3.0% RAW TERRAIN (item 24: the REACHABLE counterparts are the primary figures and must be quoted alongside - BOOK-50 occupies 4.72% UP and 2.42% DOWN of reachable, 1.415%/0.762% of raw)), the 89.8% no-signal-fires figure, §4's depth ladder (N=10, BOOK, with N=5 values noted), §4.1's arc table at `j/(size−1)` (7.74 / 19.43 / 8.32 / 6.79) and its N=5 tolerance caveat, §4.2's win-rate dispersion (sd 9.01 → 4.67 → 5.52), and §5's cluster structure (N=5, BOOK: LONG 3.38 / SHORT 1.72).
 
 **The directional-symmetry figures now agree in form as well as substance.** The doctrine states the split as **~50% up / ~50% down, range 49.7–50.6%, never leaving a ±0.6pp band across six independent parameter cells**, with down-moves larger at every cell. This spec measures **49.8% / 50.2%** at its own stated cell (W=30 / K=p85 / E=p75 / post-warmup), which sits inside that band. **These are the same statement measured at different cells, not a disagreement** — an earlier revision of this block recorded a divergence against the doctrine's superseded point estimates (50.0/50.0, medians 83.5/76.5, April 44.3%); those were replaced by the robustness range and the divergence no longer exists.
 
@@ -713,10 +722,12 @@ The acceptance bar for a signal recruited for coverage is **identical** to the b
 Concretely, coverage enters as **step 5** of the §C.3 lexicographic objective, after the three hard constraints and the `DepthYield` maximisation:
 
 4. maximise `DepthYield(B)`
-5. **among books within a stated tolerance of the best `DepthYield`, prefer the book with higher `Coverage(B)`**
+5. **among books within a stated RELATIVE tolerance (a fraction of the best `DepthYield_d`, never a percentage-point band — item 24) of the best `DepthYield`, prefer the book with higher `Coverage(B)`, measured against the REACHABLE denominator with the raw-terrain figure reported alongside**
 6. tie-break on `FailCorr(B)` (Pearson, reported diagnostic only)
 
 ### D.2 — Defining Coverage
+
+**ITEM 24 CORRECTION — SIZE STRATA MUST BE COMPUTED WITHIN REACHABLE.** Strata computed over raw terrain do not sum to the reachable population, so a per-stratum coverage table built on raw terrain has a denominator no row of it shares. Compute every stratum inside the reachable set (episodes holding >=1 eligible bar where D2D agrees with the episode direction, per grid cell), and report the raw-terrain counterpart alongside rather than instead — the pair is what shows the room remaining.
 
 ```
 Coverage(B) = fraction of thrust episodes (basis 3) that book B touches with >= 1 entry

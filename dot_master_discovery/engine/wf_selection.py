@@ -332,16 +332,45 @@ def entity_persistence(train_trades, test_trades, key='signal_name'):
                      'train_net': round(tr['net'], 1), 'train_PF': round(tr['PF'], 3), 'train_WR': round(tr['WR'], 1),
                      'test_net': round(te['net'], 1), 'test_PF': round(te['PF'], 3), 'test_WR': round(te['WR'], 1),
                      'train_passes': tr['passes'], 'test_passes': te['passes'],
+                     'test_traded': bool(len(test_trades[test_trades[key] == name]) > 0),
                      'persists': bool(tr['passes'] and te['passes'])})
     return pd.DataFrame(rows)
 
 
+PERSIST_DEFINITION = (f'net>0 AND PF>={PERSIST_MIN_PF} AND WR>={PERSIST_MIN_WR}, '
+                      f'applied identically to train and test')
+DENOMINATOR_DEFINITION = ('n_traded: signals that qualified on TRAIN and FIRED AT LEAST ONCE ON '
+                          'TEST. A signal that never fired on test did not fail, and folding it in '
+                          'conflates silence with loss.')
+
+
 def persistence_rate(frame):
-    elig = frame[frame['train_passes']]
+    """Item 18: the denominator is n_TRADED, not n_included.
+
+    Both arms call THIS function. The definition strings above are asserted
+    identical across arms at run time, because this stage was once reported
+    fixed while its artifact stayed byte-identical to the broken version.
+    """
+    elig = frame[frame['train_passes'] & (frame['test_traded'] if 'test_traded' in frame.columns
+                                          else True)]
     if len(elig) == 0:
         return np.nan, 0, 0
     k = int(elig['persists'].sum())
     return float(k / len(elig)), k, int(len(elig))
+
+
+def assert_arms_agree(book_meta, null_meta):
+    """Item 18: ABORT if the two arms do not share persist and denominator."""
+    bad = []
+    for key in ('persist_definition', 'denominator_definition'):
+        if book_meta.get(key) != null_meta.get(key):
+            bad.append(f'{key}: book="{book_meta.get(key)}" null="{null_meta.get(key)}"')
+    if bad:
+        raise SystemExit(
+            'ABORT [item 18] the walk-forward arms do not agree: ' + '; '.join(bad) +
+            '. A ratio between two arms measuring different things is not a ratio.')
+    return {'arms_agree': True, 'persist_definition': book_meta['persist_definition'],
+            'denominator_definition': book_meta['denominator_definition']}
 
 
 def random_triple_null(pool_keys, rng, n_triples, arity=3, seen=None):
@@ -632,3 +661,90 @@ def pass_criterion(book_rates, null_rates, null_evaluable=None):
                  'mean_ratio_lb95': round(lb, 4) if lb == lb else np.nan,
                  'verdict': 'PASS' if ok else 'FAIL'})
     return base
+
+
+SPLIT_REQUIRED_KEYS = ('train_first_bar', 'train_last_bar', 'test_first_bar', 'test_last_bar')
+
+
+def assert_split_shape(splits):
+    """Item 17: fail LOUDLY if the split dict is not the shape derive_splits emits.
+
+    book_arm_from_valid once read train_lo_bar/test_lo_bar while derive_splits
+    emitted train_first_bar/test_first_bar. The mismatch was invisible because
+    the arm sits behind `if _pool_ok:` - with no pool it never runs, book_rates
+    stays nan, and the artifact reads UNEVALUABLE, WHICH IS INDISTINGUISHABLE
+    FROM CORRECT BEHAVIOUR. A silent nan is exactly the failure this stage has
+    already shipped twice, so the shape is asserted rather than assumed. NO
+    TRANSLATION LAYER: these are derive_splits' own key names, read directly, so
+    there is nothing to drift out of step.
+    """
+    if not splits:
+        raise SystemExit('ABORT [item 17] no splits were derived; the book arm cannot run and a '
+                         'nan rate would be indistinguishable from a correct UNEVALUABLE.')
+    missing = [k for k in SPLIT_REQUIRED_KEYS if k not in splits[0]]
+    if missing:
+        raise SystemExit(
+            f'ABORT [item 17] split dict is missing {missing}. book_arm_from_valid reads '
+            f'derive_splits\' own keys {list(SPLIT_REQUIRED_KEYS)}; got {sorted(splits[0])[:12]}. '
+            f'Failing loudly because a shape change here returns nan silently.')
+    return True
+
+
+def book_arm_from_valid(df, cands, pool, anchor, ad, st, warmup, splits, build_book_fn,
+                        run_portfolio_fn, evaluate_valid_fn, bar_day, conviction=None,
+                        gap_names=()):
+    """Item 17: per split, apply VALID on the TRAINING SEGMENT ALONE, score on TEST.
+
+    IT CERTIFIES THE CATALOGUE'S INCLUSION RULE, NOT ANY BOOK. The entities are
+    the signals VALID admits on train; the rate is how many of those persist on
+    test. Re-scoring a hand-assembled book per split is PROHIBITED and is the
+    thing that already failed - a validated generator is not a validated book.
+    """
+    assert_split_shape(splits)
+    if bar_day is None:
+        raise SystemExit(
+            'ABORT [item 17] bar_day is None. Appendix C V3b counts DISTINCT ENTRY-BASIS days; with '
+            'bar_day absent evaluate_valid falls back to exit-day groups, so the arm would apply a '
+            'V3b VARIANT while the catalogue and the null apply the specified one. Item 17 certifies '
+            'VALID and Appendix A requires the null to run the IDENTICAL predicate, so a divergence '
+            'in even one clause breaks the thing this stage exists to certify.')
+    out = []
+    for s_i, sp in enumerate(splits):
+        tr_lo, tr_hi = int(sp['train_first_bar']), int(sp['train_last_bar'])
+        te_lo, te_hi = int(sp['test_first_bar']), int(sp['test_last_bar'])
+        train_rows, test_rows = [], []
+        for _i, cr in cands.iterrows():
+            fam = str(cr.get('family', ''))
+            sig = str(cr.get('signal_def', ''))
+            direction = str(cr.get('direction', 'LONG')).upper()
+            one = pd.DataFrame([{'trigger': fam, 'family': fam, 'direction': direction,
+                                 'signal_def': sig}])
+            try:
+                sg = build_book_fn(df, pool, anchor, one, adaptive=ad, structural=st)
+                td = run_portfolio_fn(df, sg, adaptive=ad, structural=st, warmup=warmup,
+                                      verbose=False, conviction=conviction)
+            except SystemExit:
+                continue
+            if len(gap_names):
+                td = td[~td['signal_name'].isin(gap_names)]
+            eb = np.asarray(td['entry_bar'].values, dtype=np.int64)
+            tr_t = td[(eb >= tr_lo) & (eb <= tr_hi)]
+            te_t = td[(eb >= te_lo) & (eb <= te_hi)]
+            verdict, _reason, _stats = evaluate_valid_fn(tr_t, bar_day)
+            if verdict != 'VALID':
+                continue
+            name = f'{fam}|{sig}|{direction}'
+            tr_t = tr_t.copy(); tr_t['signal_name'] = name
+            te_t = te_t.copy(); te_t['signal_name'] = name
+            train_rows.append(tr_t); test_rows.append(te_t)
+        if not train_rows:
+            out.append({'split': s_i, 'rate': float('nan'), 'k': 0, 'n_traded': 0,
+                        'entities': 0, 'note': 'VALID admitted no signal on this training segment'})
+            continue
+        trf = pd.concat(train_rows, ignore_index=True)
+        tef = pd.concat(test_rows, ignore_index=True)
+        frame = entity_persistence(trf, tef)
+        rate, k, n = persistence_rate(frame)
+        out.append({'split': s_i, 'rate': rate, 'k': k, 'n_traded': n,
+                    'entities': int(len(frame)), 'note': ''})
+    return out

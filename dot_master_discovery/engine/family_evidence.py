@@ -50,7 +50,7 @@ import cluster_profiler as cp
 S5_GATE = 'trades>=30 & folds_plus>=4 & agg_pf>=2.0'
 FAMILY_REGISTRY = [
     ('F0', 'triple_convergence_and_d2ddir.py', ('results_F0*.csv', 'deduped_survivors.csv', 'raw_survivors.csv')),
-    ('F1', 'sequential_temporal.py', ('F1_part*.csv', 'results_F1_*.csv')),
+    ('F1', 'sequential_temporal.py', ('results_F1_*.csv',)),
     ('F2', 'state_transition.py', ('results_F2*.csv',)),
     ('F3', 'conditional_interaction.py', ('results_F3*.csv',)),
     ('F4', 'divergence_nonconfirm.py', ('results_F4*.csv',)),
@@ -71,10 +71,22 @@ def _sha12(path):
 
 
 def _find_outputs(search_dirs, patterns):
+    """Item 1: the RUN TREE only. Item 2: never a split part.
+
+    S3B previously searched legacy discovery_results/ and dots_results/ as
+    fallbacks, so the only two families with output in those folders read
+    non-zero and the twelve that had just produced hundreds of thousands of rows
+    in THIS run read zero and were reported INSUFFICIENT-EVIDENCE. The parts
+    exclusion is item 2: auto-split is gone, but a stale *_part*.csv left on
+    disk must never be counted as a family output.
+    """
     hits = []
     for d in search_dirs:
         for pat in patterns:
-            hits.extend(sorted(glob.glob(os.path.join(d, pat))))
+            for h in sorted(glob.glob(os.path.join(d, pat))):
+                if '_part' in os.path.basename(h):
+                    continue
+                hits.append(h)
     return sorted(set(hits))
 
 

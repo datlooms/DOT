@@ -2,8 +2,8 @@ import argparse
 import glob
 import hashlib
 import json
+import math
 import os
-import shutil
 import sys
 import time
 
@@ -36,7 +36,7 @@ FOLD_BASIS_NOTE = ('folds and OOS are PROPORTIONAL, never calendar. The loaded p
 OOS_MONTHS = ['2026.05', '2026.06']
 OOS_LEGACY_NOTE = 'LEGACY DIAGNOSTIC, STALE: fixed calendar months, neither out-of-sample nor segment-relative on a stitched series; not a selection input (spec B.1). oos_rel_* are the data-relative counterpart.'
 OOS_REL_N_MONTHS = 2
-STAGES = ['S0', 'S1', 'S2', 'S2B', 'S3', 'S3B', 'S4', 'S5', 'S6', 'S5B', 'S5C', 'S7', 'S8', 'S8B', 'S9']
+STAGES = ['S0', 'S1', 'S2', 'S2B', 'S3', 'S3B', 'S4', 'S5', 'S5D', 'S6', 'S5B', 'S5C', 'S7', 'S8', 'S8B', 'S9']
 FAMILIES = [
     ('F0', 'triple_convergence_and_d2ddir', 'committed'),
     ('F1', 'sequential_temporal', 'committed'),
@@ -54,7 +54,7 @@ FAMILIES = [
 ]
 
 
-from _packutil import sha12, _natkey, split_output
+from _packutil import sha12, _natkey
 
 
 def verify_sacred():
@@ -108,26 +108,11 @@ def _pf(x):
     return 999.0 if len(x) else 0.0
 
 
-def split_tree(out, chunk_mb):
-    n = 0
-    for root, _, files in os.walk(out):
-        if '.markers' in root:
-            continue
-        for fn in files:
-            if fn.endswith(('.csv', '.jsonl')) and '_part' not in fn and '_manifest' not in fn:
-                p = os.path.join(root, fn)
-                parts = split_output(p, chunk_mb)
-                if len(parts) > 1:
-                    n += 1
-    return n
-
-
-# ── S0 INGEST ──
 def _is_header_row(first_line):
     return first_line.split(',')[0].strip() == 'Time'
 
 
-def s0_ingest(data_dir, out, chunk_mb):
+def s0_ingest(data_dir, out):
     import portfolio_simulation_engine as engine
     files = sorted(glob.glob(os.path.join(data_dir, '*.csv')), key=_natkey)
     if not files:
@@ -207,6 +192,7 @@ def s3_discovery(out, workers, input_sha, scope, df=None, ad=None, st=None, w=No
         return
     import discovery_orchestrator as orch
     orch.RESULTS_DIR = results
+    os.environ['DOT_RESULTS_DIR'] = results
     frame_path = None
     if df is not None and workers and workers > 1:
         frame_path = os.path.join(results, f'_s3_frame_{input_sha}.csv')
@@ -247,6 +233,8 @@ def s4_schema(out, input_sha):
     else:
         frames = []
         for f in sorted(glob.glob(os.path.join(results, 'results_F*.csv'))):
+            if '_part' in os.path.basename(f):
+                continue
             try:
                 frames.append(pd.read_csv(f))
             except Exception:
@@ -439,26 +427,6 @@ def s7_contenders(df, ad, st, w, sigs, out, input_sha):
 
 
 # ── S8 COMMITTED (frozen-book replay vs discover-fresh) ──
-def _baseline_top50_sort(out):
-    cand = os.path.join(out, 'results', 'candidates.csv')
-    if not os.path.exists(cand):
-        return None
-    c = pd.read_csv(cand)
-    if 'worst_day_usd' in c.columns:
-        c = c.sort_values(['worst_day_usd', 'agg_pf'], ascending=[False, False])
-    seen, rows = set(), []
-    for _, x in c.iterrows():
-        key = x.get('signal_def')
-        if key in seen:
-            continue
-        seen.add(key)
-        rows.append({'trigger': x.get('family', 'F0'), 'direction': x.get('direction', 'LONG'),
-                     'signal_def': key})
-        if len(rows) >= 50:
-            break
-    return pd.DataFrame(rows)
-
-
 def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
     import conviction as C
     import score_g
@@ -469,28 +437,16 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
         book = pd.read_csv(book_file)
         book_tag = f'FROZEN ratified book ({os.path.basename(book_file)})'
     else:
-        sel_path = os.path.join(out, 'selected_book.csv')
-        if not os.path.exists(sel_path):
-            print('  S8 discover-fresh: no selected_book.csv from S5B. S8 no longer assembles a '
-                  'book by sorting: the selection layer selects and S8 scores what it selected. '
-                  'Run S5B with a candidate pool present. NOT marking done.')
-            return None
-        book = pd.read_csv(sel_path, comment='#')
-        if not len(book):
-            print('  S8 discover-fresh: S5B selected ZERO signals. That is a reported outcome of '
-                  'the objective, not an error, and there is nothing to score. NOT marking done.')
-            return None
-        fresh_path = os.path.join(committed, 'discovered_book.csv')
-        book.to_csv(fresh_path, index=False, lineterminator='\n', encoding='utf-8')
-        book_tag = (f'S5B-SELECTED book ({len(book)} signals; {fresh_path}) — chosen by the '
-                    f'per-direction greedy/CELF search, NOT a top-N sort')
-        base = _baseline_top50_sort(out)
-        if base is not None:
-            bpath = os.path.join(committed, 'baseline_top50_sort_book.csv')
-            base.to_csv(bpath, index=False, lineterminator='\n', encoding='utf-8')
-            print(f'  BASELINE CONTENDER written: {os.path.basename(bpath)} — the old '
-                  f'top-50-by-worst-day sort, kept ONLY so the sort-vs-selection delta is visible. '
-                  f'It is NOT what S8 scores as the discovered book.')
+        print('  S8 DISCOVER-FRESH IS DISABLED (item 15). Under a catalogue design S8 has '
+              'nothing to score automatically: the deliverable is fourteen per-family catalogues '
+              'holding every VALID signal, and NOTHING in this build chooses which of them to '
+              'trade. Scoring happens when YOU compose a book and run it through:')
+        print('      python score_book.py --book <your_book.csv> --data <frame> --out <dir>   (item 16, not yet built)')
+        print('  That tool (item 16) applies the constraint machinery - TailDep, FailConc, mCVaR, '
+              'absolute survival, union coverage - which are SET properties of an assembled book '
+              'and have no per-signal value. Every catalogue states a book is UNSCORED until it '
+              'has been run. S8 FROZEN path is untouched and still scores the ratified book.')
+        return None
     sigs = score_g.build_book(df, pool, anchor, book, adaptive=ad, structural=st)
     conv = C.build_conviction(df, True, True, True, d2d_conviction=True, d2d_gap=True)
     r, executed = _score(df, sigs, ad, st, w, conv, want_trades=True)
@@ -855,9 +811,7 @@ def s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha, 
     U = cp.eligible_universe(df, w)
     fam = fe.build_family_evidence(df, bk, qual_depth, cs_by_basis, cs_by_basis['basis3'], U, pool,
                                    f1_names, _SCANNERS,
-                                   [os.path.join(out, 'results'), out,
-                                    os.path.join(_ROOT, 'discovery_results'),
-                                    os.path.join(_ROOT, 'dots_results')], grid_label)
+                                   [os.path.join(out, 'results'), out], grid_label)
     _write_with_header(os.path.join(out, 'family_evidence.csv'), fam, [
         'DOT S3B per-family evidence review (spec A.1)',
         f'dataset_rows={attest["rows"]} dataset_range={attest["range"]}',
@@ -876,6 +830,254 @@ def s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha, 
           f'INSUFFICIENT-EVIDENCE {(fam.verdict == "INSUFFICIENT-EVIDENCE").sum()}')
     mark_done(out, 'S3B', {'input_sha': input_sha, 'families': len(fam)})
     return {'family': fam, 'd2d': d2d, 'mixed': mix, 'executed': executed, 'sigs': sigs}
+
+
+def _no_constraint(_d, _ss):
+    return True, ''
+
+
+NULL_SEED_BASE = 20260728
+CONCURRENT_STAGES = ('S3', 'S5C', 'S5D', 'S7')
+
+
+def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=None):
+    import catalogue as cat
+    import cluster_profiler as cp
+    import conviction as C
+    import selection as sel
+    import terrain as tr
+    import portfolio_simulation_engine as engine
+    import score_g
+    import numpy as np
+    oracle_sha = sha12(os.path.join(_ENGINE, 'dots_thresholds.py'))
+    print(f'  oracle dots_thresholds.py sha256 : {oracle_sha}')
+    cand = os.path.join(out, 'results', 'candidates.csv')
+    if not os.path.exists(cand):
+        print('  CATALOGUE: no candidates.csv - S3/S4/S5 have not produced a pool. NOT marking done.')
+        return None
+    cands = pd.read_csv(cand)
+    null_k = int(null_k) if null_k else cat.NULL_K_DEFAULT
+    n = len(df)
+    bar_day = pd.Series(df['Time'].astype(str).values).str[:10].values
+    U = cp.eligible_universe(df, w)
+    W, K, E = cat.PINNED_CELL
+    fwd, mag, eff, valid, thr, mcol, ecol = cp.thrust_thresholds(df, W, (K,), (E,))
+    ev = cp.thrust_events(fwd, mag, eff, valid, thr[(mcol, f'k{int(K*100)}')],
+                          thr[(ecol, f'e{int(E*100)}')], w)
+    mda = cat.assert_episode_thresholds_mechanism_d(_HERE, thr, mcol, ecol,
+                                                    f'k{int(K*100)}', f'e{int(E*100)}')
+    print(f'  ITEM 5 IN-RUN ASSERTION: {mda["modules_verified"]}/4 market-object modules '
+          f'byte-verified, episode K/E are per-bar arrays from {mda["basis"]}')
+    cs = cp.build_cluster_set(n, ev, tr.CONTIGUOUS_TOLERANCE)
+    reach = cat.reachable_episodes(cs, df, w, U)
+    raw_tot = {d: int((cs['clusters']['dir'] == d).sum()) for d in (1, -1)}
+    print(f'  TERRAIN cell W={W} K=p{int(K*100)} E=p{int(E*100)} | MARKET | raw '
+          f'UP {raw_tot[1]} DOWN {raw_tot[-1]} | REACHABLE UP {len(reach[1])} '
+          f'({100.0*len(reach[1])/max(raw_tot[1],1):.2f}%) DOWN {len(reach[-1])} '
+          f'({100.0*len(reach[-1])/max(raw_tot[-1],1):.2f}%)')
+    hurst_hi = ad.get(('Hurst', 'hi'))
+    gate_ok = np.flatnonzero((df['Hurst'].values >= hurst_hi) if hurst_hi is not None
+                             else np.ones(n, dtype=bool)).astype(np.int64)
+    conv = C.build_conviction(df, True, True, True, d2d_conviction=True, d2d_gap=True)
+    fam_fire_counts = {}
+    for fam, g in cands.groupby('family'):
+        fc = []
+        for _i, cr in g.iterrows():
+            try:
+                mk = score_g.family_mask(df, pool, fam, str(cr['signal_def']), ad, st)
+                fc.append(int(np.asarray(mk, dtype=bool).sum()))
+            except Exception:
+                continue
+        fam_fire_counts[fam] = fc
+    per_family = {}
+    entries_by_id, dirs_by_id, fams_by_id = {}, {}, {}
+    for fam, g in cands.groupby('family'):
+        rows = []
+        null_pfs, null_rate = [], 0.0
+        for _i, cr in g.iterrows():
+            sig = str(cr['signal_def'])
+            dr = str(cr.get('direction', 'LONG')).upper()
+            sid = cat.signal_id(fam, sig, dr)
+            one = pd.DataFrame([{'trigger': fam, 'family': fam, 'direction': dr, 'signal_def': sig}])
+            try:
+                sg = score_g.build_book(df, pool, anchor, one, adaptive=ad, structural=st)
+                td = engine.run_portfolio(df, sg, adaptive=ad, structural=st, warmup=w,
+                                          verbose=False, conviction=conv)
+                td = td[~td['signal_name'].isin(cp.GAP_NAMES)]
+            except SystemExit:
+                continue
+            verdict, reason, stx = cat.evaluate_valid(td, bar_day)
+            d = 1 if dr == 'LONG' else -1
+            row = {'signal_id': sid, 'family': fam, 'signal_def': sig, 'direction': dr,
+                   'verdict': verdict, 'reason_code': reason}
+            row.update(stx)
+            if verdict == 'VALID':
+                bars = np.asarray(td['entry_bar'].values, dtype=np.int64)
+                entries_by_id[sid] = bars
+                dirs_by_id[sid] = d
+                fams_by_id[sid] = fam
+                tch = cat.touched_episodes(bars, d, cs)
+                tch_reach = [t for t in tch if t in reach[d]]
+                row['touched_episode_ids'] = ';'.join(str(x) for x in tch)
+                row['episodes_touched'] = len(tch)
+                row['coverage_pct_raw_terrain'] = round(100.0 * len(tch) / max(raw_tot[d], 1), 4)
+                row['coverage_pct_reachable'] = round(100.0 * len(tch_reach) / max(len(reach[d]), 1), 4)
+                row['terrain_cell'] = f'W{W}/K{int(K*100)}/E{int(E*100)}'
+                row.update(cat.segment_fold_stats(td))
+                row.update({f'gated_{k}': v for k, v in cat.gated_arm(td, gate_ok).items()})
+                row['gated_delta_net'] = (round(row['gated_net'] - stx.get('net', 0.0), 2)
+                                          if row['gated_net'] != '' else '')
+            rows.append(row)
+        fr = pd.DataFrame(rows)
+        if len(fr):
+            N_F = len(fr)
+            rng = np.random.default_rng(NULL_SEED_BASE + abs(hash(fam)) % 100000)
+            fire_targets = [c for c in fam_fire_counts.get(fam, []) if c > 0]
+            fam_k = cat.null_k_for(fam, null_k)
+            drawn, nstats = cat.draw_matched_null_masks(pool, fire_targets, rng, k=fam_k)
+            long_share = float((g['direction'].astype(str).str.upper() == 'LONG').mean()) \
+                if len(g) else 0.5
+            null_frames = []
+            for j, nd in enumerate(drawn):
+                col = f'__NULL_{fam}_{j}'
+                df[col] = np.asarray(nd['mask'], dtype=bool).astype(int)
+                nsig = pd.DataFrame([{'feat_1': col, 'thresh_1': '==1', 'feat_2': col,
+                                      'thresh_2': '==1', 'feat_3': col, 'thresh_3': '==1',
+                                      'direction': ('LONG' if rng.random() < long_share
+                                                    else 'SHORT')}])
+                ntd = engine.run_portfolio(df, nsig, adaptive=ad, structural=st, warmup=w,
+                                           verbose=False, conviction=conv)
+                null_frames.append(ntd[~ntd['signal_name'].isin(cp.GAP_NAMES)])
+                df.drop(columns=[col], inplace=True)
+            null_rate, null_pfs = cat.matched_null_rate(null_frames, bar_day)
+            qflag, qwhy = cat.null_quality(len(null_frames), fam_k, nstats)
+            print(f'    {fam:4} matched null: requested K={fam_k}, IN-BAND {nstats["matched"]} '
+                  f'({nstats["matched_fraction"]:.1%} matched, {nstats["rejected_out_of_band"]} '
+                  f'rejected out-of-band, targets {nstats["target_min"]}..{nstats["target_max"]} '
+                  f'fires, tol +/-{nstats["tol"]:.0%}), direction LONG-share {long_share:.2f}, '
+                  f'VALID-passing {len(null_pfs)}, rate {null_rate:.4f}'
+                  + (f' | {qflag} -> Appendix A columns BLANK' if qflag else ''))
+            if qflag:
+                blanks = cat.pricing_blank(qwhy)
+                for kk, vv in blanks.items():
+                    fr[kk] = vv
+                fr['n_null_family'] = len(null_frames)
+                fr['null_matched_fraction'] = nstats['matched_fraction']
+                fr['null_rejected_out_of_band'] = nstats['rejected_out_of_band']
+                fr['null_direction_long_share'] = round(long_share, 4)
+                fr['null_seed'] = NULL_SEED_BASE
+            else:
+                price = [cat.pricing_columns(r.get('agg_pf', float('nan')), N_F, null_rate,
+                                             null_pfs) for _j, r in fr.iterrows()]
+                for kk in price[0]:
+                    fr[kk] = [pz[kk] for pz in price]
+                exc = pd.to_numeric(fr['pf_null_exceedance_pct'], errors='coerce').fillna(1.0).values
+                fr['q_value_BY_family'] = np.round(cat.benjamini_yekutieli(exc), 6)
+                fr['pricing_unavailable_reason'] = ''
+                fr['n_null_family'] = len(null_frames)
+                fr['null_matched_fraction'] = nstats['matched_fraction']
+                fr['null_rejected_out_of_band'] = nstats['rejected_out_of_band']
+                fr['null_direction_long_share'] = round(long_share, 4)
+                fr['null_seed'] = NULL_SEED_BASE
+        per_family[fam] = fr
+    _priced = {f: (len(fr) > 0 and 'pricing_unavailable_reason' in fr.columns
+                   and str(fr['pricing_unavailable_reason'].iloc[0]) == '')
+               for f, fr in per_family.items()}
+    _why = {f: (str(fr['pricing_unavailable_reason'].iloc[0]) if len(fr)
+                and 'pricing_unavailable_reason' in fr.columns else 'no rows')
+            for f, fr in per_family.items()}
+    cat_dir = os.path.join(out, 'catalogues')
+    os.makedirs(cat_dir, exist_ok=True)
+    print('  CATALOGUE ROW COUNT PER FAMILY:')
+    for fam in sorted(per_family):
+        fr = per_family[fam]
+        path = os.path.join(cat_dir, f'catalogue_{fam}.csv')
+        _write_with_header(path, fr, [
+            f'DOT CATALOGUE - family {fam} - every signal VALID admits, nothing ranked or capped',
+            f'dataset_rows={attest["rows"]} dataset_range={attest["range"]}',
+            f'oracle_sha256_12={oracle_sha}',
+            f'terrain cell W={W} K=p{int(K*100)} E=p{int(E*100)} | coverage emitted against BOTH '
+            f'denominators: raw terrain (UP {raw_tot[1]} / DOWN {raw_tot[-1]}, MARKET) and REACHABLE '
+            f'(UP {len(reach[1])} / DOWN {len(reach[-1])}, MARKET). REACHABLE IS PRIMARY.',
+            'per-signal statistics are PROPERTY OF THE BOOK; terrain and reachable are PROPERTY OF '
+            'THE MARKET.',
+            (cat.CATALOGUE_HEADER_PRICING if _priced.get(fam) else
+             'PRICING COLUMNS ARE BLANK for this family: ' + str(_why.get(fam, '')) +
+             '. The Appendix A names carry no substitute quantity - reading this catalogue is still '
+             'a search of size N_F, and nothing in this file prices it.'),
+            cat.CATALOGUE_HEADER_UNSCORED,
+            'UNEVALUABLE rows are RETAINED with statistics blank and a reason_code. INVALID rows '
+            '(V2 survival breach) do not enter; their count is reported in the run log.'])
+        vc = fr['verdict'].value_counts().to_dict() if len(fr) else {}
+        print(f'    {fam:4} {len(fr):7} rows | {vc}')
+    has_f0 = 'F0' in per_family and len(per_family.get('F0', []))
+    n_valid_triples = {}
+    if has_f0:
+        f0v = per_family['F0']
+        for _i, rr in f0v[f0v['verdict'] == 'VALID'].iterrows():
+            for t in str(rr.get('touched_episode_ids', '')).split(';'):
+                if t:
+                    n_valid_triples[int(t)] = n_valid_triples.get(int(t), 0) + 1
+    unclaimed = []
+    spans = cat.episode_spans(cs)
+    claimed = {d: set() for d in (1, -1)}
+    for sid, bars in entries_by_id.items():
+        d = dirs_by_id[sid]
+        claimed[d].update(cat.touched_episodes(bars, d, cs))
+    for d, lab in ((1, 'UP'), (-1, 'DOWN')):
+        for eid in sorted(reach[d] - claimed[d]):
+            b0, b1, _dd = spans[eid]
+            unclaimed.append({'episode_id': eid, 'direction': lab, 'start_bar': b0, 'end_bar': b1,
+                              'duration_bars': b1 - b0 + 1,
+                              'displacement_pts': round(abs(float(df['Close'].values[min(b1 + W, n - 1)]
+                                                                 - df['Close'].values[b0])), 1),
+                              'est_hour_start': int(df['EST_Hour'].values[b0]),
+                              'n_conditions_firing': int(sum(1 for k in pool
+                                                             if pool[k][b0:b1 + 1].any())),
+                              'n_valid_triples_touching': n_valid_triples.get(eid, '' if not has_f0 else 0),
+                              'population': 'MARKET'})
+    uf = pd.DataFrame(unclaimed)
+    _write_with_header(os.path.join(cat_dir, 'unclaimed_reachable.csv'), uf, [
+        'DOT item 6 - REACHABLE episodes no catalogue signal touches - PROPERTY OF THE MARKET',
+        f'dataset_rows={attest["rows"]} terrain cell W={W} K=p{int(K*100)} E=p{int(E*100)}',
+        'n_conditions_firing vs n_valid_triples_touching separates a SEARCH gap (many conditions '
+        'fire, no valid triple lands) from a GRAMMAR gap (few fire). Without both the set shows what '
+        'is unoccupied but not why.'])
+    print(f'  UNCLAIMED REACHABLE: {len(uf)} episodes '
+          f'(UP {int((uf["direction"] == "UP").sum()) if len(uf) else 0} / '
+          f'DOWN {int((uf["direction"] == "DOWN").sum()) if len(uf) else 0})')
+    ent = {d: [] for d in (1, -1)}
+    ids = {d: [] for d in (1, -1)}
+    for sid, bars in entries_by_id.items():
+        d = dirs_by_id[sid]
+        ent[d].extend(np.asarray(bars, dtype=np.int64).tolist())
+        ids[d].extend([sid] * len(bars))
+    cohort = cat.same_bar_cohort_table(ent, ids, fams_by_id)
+    _write_with_header(os.path.join(cat_dir, 'same_bar_cohort.csv'), cohort, [
+        'DOT item 11 - family composition of each bar as a CURVE OVER DEPTH - counts only',
+        f'dataset_rows={attest["rows"]}',
+        'Depth is DISTINCT SIGNALS on the same bar, per direction, never pooled (item 4). No P&L: '
+        'depth-3 has no discriminating power at pool scale and P&L needs a book.'])
+    allrows = pd.concat([f for f in per_family.values() if len(f)], ignore_index=True) \
+        if per_family else pd.DataFrame()
+    if len(allrows):
+        v = allrows[allrows['verdict'] == 'VALID'].copy()
+        for key, asc in (('agg_pf', False), ('EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF', True)):
+            if key not in v.columns:
+                continue
+            o = v.sort_values(key, ascending=asc)['signal_id'].tolist()
+            dc = cat.dilution_curve(o, entries_by_id, dirs_by_id, key)
+            _write_with_header(os.path.join(cat_dir, f'dilution_curve_{key}.csv'), dc, [
+                f'DOT item 12 - dilution curve, ranking key = {key}',
+                f'dataset_rows={attest["rows"]}',
+                'Admission is best-first over the WHOLE catalogue, not a top-ranked subset. The '
+                'curve is emitted under two keys because the stop-point differs by key, and the '
+                'gap between them is the overfit estimate. Counts only, no P&L.'])
+            print(f'  DILUTION CURVE ({key}): {len(dc)} admission steps')
+    mark_done(out, 'S5D', {'input_sha': input_sha,
+                           'families': len(per_family),
+                           'rows': int(sum(len(f) for f in per_family.values()))})
+    return {'per_family': per_family, 'unclaimed': uf, 'reach': reach, 'raw_tot': raw_tot}
 
 
 def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest):
@@ -924,7 +1126,17 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
            -1: bk[bk['direction'] == 'SHORT']['entry_bar'].values}
     sgn = {1: bk[bk['direction'] == 'LONG']['signal_name'].nunique(),
            -1: bk[bk['direction'] == 'SHORT']['signal_name'].nunique()}
-    grid = sel.depth_yield_grid(ent, sgn, tdays)
+    ids_dir = {1: bk[bk['direction'] == 'LONG']['signal_name'].values.tolist(),
+               -1: bk[bk['direction'] == 'SHORT']['signal_name'].values.tolist()}
+    grid = sel.depth_yield_grid(ent, sgn, tdays, ids_by_dir=ids_dir)
+    grid['depth_yield_LONG_per_signal'] = [sel.depth_yield_per_signal(v, sgn.get(1, 0))
+                                           for v in grid['depth_yield_LONG']]
+    grid['depth_yield_SHORT_per_signal'] = [sel.depth_yield_per_signal(v, sgn.get(-1, 0))
+                                            for v in grid['depth_yield_SHORT']]
+    grid['same_signal_refire_LONG'] = [round(sel.same_signal_refire_rate(
+        ent.get(1, []), int(t), ids_dir[1]), 4) for t in grid['tolerance_N']]
+    grid['same_signal_refire_SHORT'] = [round(sel.same_signal_refire_rate(
+        ent.get(-1, []), int(t), ids_dir[-1]), 4) for t in grid['tolerance_N']]
     h3 = sel.h3_within_direction(bk)
     base_hdr = [f'dataset_rows={attest["rows"]} segment={segment_label}',
                 f'oracle_sha256_12={oracle_sha}']
@@ -1009,7 +1221,7 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
         if not sset:
             return 0.0
         bars = np.concatenate([ent_map[d][x] for x in sset])
-        v, _g = sel.depth_yield_direction(bars, len(sset), tdays, sel.S_DEFAULT, sel.N_TOLERANCE)
+        v, _g = sel.depth_yield_direction(bars, tdays, sel.S_DEFAULT, sel.N_TOLERANCE)
         return v
 
     def _gain(d, selected, cid):
@@ -1150,7 +1362,8 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
                                                      int(mm.group(2)), anchor), dtype=bool)
                 else:
                     mk = np.asarray(score_g.family_mask(df, pool, fam, sig, ad, st), dtype=bool)
-            except SystemExit:
+            except SystemExit as _e:
+                rl.warn(f'S5D candidate skipped ({fam}): {_e}')
                 skipped += 1
                 continue
             cand_bars[d][key] = np.flatnonzero(mk & entry_ok_sel).astype(np.int64)
@@ -1161,7 +1374,7 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
             if not sset:
                 return 0.0
             bars = np.concatenate([cand_bars[d][x] for x in sset])
-            v, _g = sel.depth_yield_direction(bars, len(sset), tdays, sel.S_DEFAULT,
+            v, _g = sel.depth_yield_direction(bars, tdays, sel.S_DEFAULT,
                                               sel.N_TOLERANCE)
             return v
 
@@ -1170,9 +1383,6 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
 
         def _sel_setgain(d, selected, add):
             return _dy(d, list(selected) + list(add)) - _dy(d, list(selected))
-
-        def _sel_con(d, ss):
-            return True, ''
 
         chosen = {}
         stops = {}
@@ -1183,40 +1393,21 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
                 stops[d] = 'no candidates in this direction'
                 continue
             picked, reason, log, meta = sel.greedy_direction(
-                d, ids, _sel_gain, _sel_con, set_gain_fn=_sel_setgain)
+                d, ids, _sel_gain, _no_constraint, set_gain_fn=_sel_setgain)
             chosen[d] = picked
             stops[d] = reason
             print(f'    {lab}: selected {len(picked)} of {len(ids)} candidates | '
                   f'pair escapes {meta["pair_escapes"]} | stop: {reason[:80]}')
-        rows = []
-        for d, lab in ((1, 'LONG'), (-1, 'SHORT')):
-            for key in chosen[d]:
-                fam, sig, dr = key.split('|', 2)
-                rows.append({'trigger': fam, 'family': fam, 'direction': dr, 'signal_def': sig})
-        selected_book = pd.DataFrame(rows)
-        sb_path = os.path.join(out, 'selected_book.csv')
-        _write_with_header(sb_path, selected_book, [
-            'DOT S5B SELECTED BOOK - the output of the per-direction greedy/CELF search'] +
-            base_hdr + [
-            'THIS IS WHAT S8 SCORES. It is NOT a top-N sort: the size is whatever the objective '
-            'stopped at, per direction, on marginal DepthYield gain under the lookahead-2 rule.',
-            'Constraint references (F_max, T_max, C_max, absolute survival) are incumbent-derived '
-            'per spec C.2, which is correct - they are the bounds the search is held to.',
-            'OBJECTIVE PROXY, STATED: the marginal-gain objective uses each candidate QUALIFYING '
-            'mask under entry_ok as its entry-bar set, not a full jar simulation per marginal '
-            'addition, which is not affordable at pool scale. The SELECTED book is then scored '
-            'properly by S8 through run_portfolio. DECIDED - REVERSIBLE; the alternative is a full '
-            'simulation per candidate per step.',
-            f'stop reasons: LONG {stops[1]} | SHORT {stops[-1]}'])
-        print(f'  SELECTED BOOK: {len(selected_book)} signals '
-              f'(LONG {len(chosen[1])} / SHORT {len(chosen[-1])}) -> {os.path.basename(sb_path)}')
-        if len(selected_book):
-            fmix = selected_book.groupby('family').size().to_dict()
-            print(f'    family mix: {fmix}')
+        admitted = {lab: list(chosen[d]) for d, lab in ((1, 'LONG'), (-1, 'SHORT'))}
+        print(f'  ADMISSION ORDER retained IN MEMORY ONLY for item 12\'s dilution curve: '
+              f'LONG {len(admitted["LONG"])} / SHORT {len(admitted["SHORT"])}. '
+              f'NO selected_book.csv is written. Item 15: the catalogue is emitted from VALID, '
+              f'never from an argmax, so no argmax output is persisted anywhere. greedy_direction '
+              f'survives as the dilution-curve admission loop and nothing else consumes it.')
         report_lines.append(
-            f'SELECTION SEARCH RAN: {len(cands)} candidates -> {len(selected_book)} selected '
-            f'(LONG {len(chosen[1])} / SHORT {len(chosen[-1])}). Size is the objective stopping '
-            f'point, not a count.')
+            f'ADMISSION ORDER computed in memory for the dilution curve from {len(cands)} '
+            f'candidates (LONG {len(chosen[1])} / SHORT {len(chosen[-1])}). NO selected book is '
+            f'written: item 15 forbids emitting a catalogue from an argmax.')
     if not exercised:
         report_lines.append('SELECTION SEARCH NOT RUN: no candidates.csv on this run, so the '
                             'objective and per-direction greedy were not exercised. The constraint '
@@ -1252,6 +1443,11 @@ def s5c_walk_forward(df, ad, st, w, pool, anchor, book_file, out, input_sha, att
     n0 = len(df)
     wfs.assert_no_row_deletion(df, n0)
     splits, day_tbl, meta = wfs.derive_splits(df, w)
+    wfs.assert_split_shape(splits)
+    print(f'  ITEM 17 SPLIT SHAPE ASSERTED at derivation ({len(splits)} splits) - not '
+          f'only inside the book arm, which sits behind the pool gate and does not run '
+          f'on a pool-less run. A key drift would otherwise surface on the one night the '
+          f'real run happens.')
     if not splits:
         print('  S5C: the floor admits no valid split; walk-forward is not executable on this dataset.')
         mark_done(out, 'S5C', {'input_sha': input_sha, 'splits': 0})
@@ -1458,9 +1654,41 @@ def s5c_walk_forward(df, ad, st, w, pool, anchor, book_file, out, input_sha, att
     null_rates = [r['null_persistence_rate'] for r in null_summary] if null_summary else []
     null_ok = [not str(r['status']).startswith('UNEVALUABLE') for r in null_summary] if null_summary else []
     book_rates = [float('nan')] * len(null_rates)
+    book_meta = {'persist_definition': wfs.PERSIST_DEFINITION,
+                 'denominator_definition': wfs.DENOMINATOR_DEFINITION}
+    null_meta = {'persist_definition': wfs.PERSIST_DEFINITION,
+                 'denominator_definition': wfs.DENOMINATOR_DEFINITION}
+    agree = wfs.assert_arms_agree(book_meta, null_meta)
+    print(f'  ITEM 18 ARMS AGREE (asserted, abort on mismatch): persist = '
+          f'{agree["persist_definition"]}')
+    print(f'    denominator = {agree["denominator_definition"]}')
+    if not _pool_ok:
+        print(f'  BOOK ARM SKIPPED: {_pool_why}. book_rates stay nan and the criterion will read '
+              f'UNEVALUABLE. THIS LINE EXISTS SO A nan IS ALWAYS ATTRIBUTABLE: without it, "no pool, '
+              f'correctly skipped" and "pool present but the provenance stamp did not match" are '
+              f'indistinguishable on the console, which is exactly what concealed a key mismatch '
+              f'through three deliveries.', flush=True)
+    if _pool_ok:
+        import catalogue as cat2
+        cands_wf = pd.read_csv(_cand)
+        conv_wf = C.build_conviction(df, True, True, True, d2d_conviction=True, d2d_gap=True)
+        arm = wfs.book_arm_from_valid(df, cands_wf, pool, anchor, ad, st, w, splits,
+                                      score_g.build_book, engine.run_portfolio,
+                                      cat2.evaluate_valid,
+                                      pd.Series(df['Time'].astype(str).values).str[:10].values,
+                                      conviction=conv_wf, gap_names=cp.GAP_NAMES)
+        book_rates = [a_['rate'] for a_ in arm]
+        for a_ in arm:
+            print(f'    split {a_["split"]}: VALID admitted {a_["entities"]} on train, '
+                  f'{a_["k"]}/{a_["n_traded"]} persisted on test -> rate '
+                  f'{a_["rate"] if a_["rate"] == a_["rate"] else "nan"}'
+                  + (f' | {a_["note"]}' if a_['note'] else ''))
     verdict = wfs.pass_criterion(book_rates, null_rates, null_ok)
-    verdict['book_arm'] = ('UNEVALUABLE - the book arm requires the selection funnel re-run per split, which '
-                           'requires a candidate pool S3 has never produced')
+    verdict['certifies'] = ('THE CATALOGUE INCLUSION RULE (VALID), NOT ANY BOOK. Re-scoring a '
+                            'hand-assembled book per split is prohibited: a validated generator '
+                            'is not a validated book.')
+    verdict['persist_definition'] = agree['persist_definition']
+    verdict['denominator_definition'] = agree['denominator_definition']
     pc = pd.DataFrame([{**verdict, 'splits_derived': len(splits),
                         'attestation_records': int(len(trail)),
                         'attestation_repeat_groups': int(len(repeats)),
@@ -1663,7 +1891,7 @@ def s8b_cluster_profile(df, ad, st, w, pool, anchor, book_file, committed, out, 
 
 
 # ── S9 REPORT + SPLIT ──
-def s9_report(out, attest, contenders, committed, sacred, market_label, chunk_mb, input_sha, profile=None, evidence=None, selection_state=None):
+def s9_report(out, attest, contenders, committed, sacred, market_label, input_sha, profile=None, evidence=None, selection_state=None):
     scored_fresh = 'regenerated fresh this run (S6) — stale 746102aae415 / 0910f360a628 NOT inherited'
     L = []
     L.append(f'# DOT Master Report — {market_label}')
@@ -1744,9 +1972,9 @@ def s9_report(out, attest, contenders, committed, sacred, market_label, chunk_mb
     L.append('')
     rep = os.path.join(out, 'master_report.md')
     open(rep, 'w', encoding='utf-8').write('\n'.join(L) + '\n')
-    nsplit = split_tree(out, chunk_mb)
-    print(f'  report → {rep} | auto-split: {nsplit} oversized artifact(s) chunked (≤{chunk_mb}MB, header-in-part1)')
-    mark_done(out, 'S9', {'input_sha': input_sha, 'split_files': nsplit})
+    print(f'  report -> {rep} | every artifact written as ONE file (item 3: auto-split deleted; '
+          f'the next stage used to read the chopped parts as if they were whole)')
+    mark_done(out, 'S9', {'input_sha': input_sha})
 
 
 def resolve_data(data):
@@ -1767,6 +1995,7 @@ def resolve_book(book):
 
 
 def main():
+    import runlog as rl
     for _stream in (sys.stdout, sys.stderr):
         try:
             _stream.reconfigure(encoding='utf-8', errors='replace')
@@ -1779,7 +2008,6 @@ def main():
     ap.add_argument('--workers', type=int, default=2)
     ap.add_argument('--stage', default=None, choices=STAGES)
     ap.add_argument('--market-label', default='US30 (sealed baseline)')
-    ap.add_argument('--chunk-mb', type=int, default=9)
     ap.add_argument('--parity', default=None,
                     help="run the chunking parity harness and exit: a family (e.g. F0) or 'all'")
     ap.add_argument('--s3-limit', type=int, default=0,
@@ -1789,6 +2017,7 @@ def main():
                     help='cap each family to the first N axis units, applied to BOTH parity legs')
     args = ap.parse_args()
     args.workers = min(args.workers, 16)
+    os.environ['DOT_WORKERS'] = str(args.workers)
 
     t0 = time.time()
     print('═' * 68)
@@ -1806,7 +2035,10 @@ def main():
 
     only = args.stage
     print('\n[S0] INGEST & VALIDATE')
-    df, attest, input_sha = s0_ingest(data_dir, out, args.chunk_mb)
+    _logp = rl.open_run_log(out)
+    print(f'  run log -> {_logp} (ATTESTATION RECORD: carries wall-clock; every CSV does not)')
+    with rl.Stage('S0', 'ingest & validate'):
+        df, attest, input_sha = s0_ingest(data_dir, out)
     bind_ingested_frame_permanently(df, input_sha, os.path.join(out, 'results'))
     print('\n[S1] ADAPTIVE THRESHOLDS (oracle)')
     ad, st = s1_thresholds(df)
@@ -1818,6 +2050,7 @@ def main():
         results = os.path.join(out, 'results')
         os.makedirs(results, exist_ok=True)
         orch.RESULTS_DIR = results
+        os.environ['DOT_RESULTS_DIR'] = results
         fams = None if args.parity.lower() == 'all' else [x.strip().upper()
                                                          for x in args.parity.split(',')]
         frame_path = None
@@ -1849,10 +2082,12 @@ def main():
 
     contenders = committed = profile = evidence = selection_state = wf_state = None
     terrain_state = None
+    catalogue_state = None
     run_all = only is None
     if run_all or only == 'S2B':
         print('\n[S2B] MARKET TERRAIN MAP')
-        terrain_state = s2b_terrain(df, w, out, input_sha, attest)
+        with rl.Stage('S2B', 'market terrain map'):
+            terrain_state = s2b_terrain(df, w, out, input_sha, attest)
     discover = (book_file is None)
     if not discover and run_all:
         print('\n[S3–S6] DISCOVERY / REGEN — SKIPPED on the frozen-book verification path.')
@@ -1874,6 +2109,10 @@ def main():
     if (run_all and discover) or only == 'S6':
         print('\n[S6] FULL-FIELD SCORING (REGEN fresh)')
         s6_regen(out, input_sha)
+    if run_all or only == 'S5D':
+        print('\n[S5D] CATALOGUE - fourteen per-family books, every VALID signal')
+        with rl.Stage('S5D', 'catalogue emission'):
+            catalogue_state = s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest)
     if run_all or only == 'S5B':
         print('\n[S5B] SELECTION LAYER')
         selection_state = s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest)
@@ -1894,7 +2133,9 @@ def main():
         profile = s8b_cluster_profile(df, ad, st, w, pool, anchor, book_file, committed, out, input_sha, attest)
     if run_all or only == 'S9':
         print('\n[S9] REPORT & SPLIT')
-        s9_report(out, attest, contenders, committed, sacred, args.market_label, args.chunk_mb, input_sha, profile, evidence, selection_state)
+        with rl.Stage('S9', 'report'):
+            s9_report(out, attest, contenders, committed, sacred, args.market_label, input_sha, profile, evidence, selection_state)
+    rl.print_timing_table(concurrent_stages=CONCURRENT_STAGES)
 
     print('\n' + '═' * 68)
     print(f'MASTER COMPLETE in {_hms(time.time() - t0)} | out: {out}')
