@@ -441,7 +441,7 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
               'nothing to score automatically: the deliverable is fourteen per-family catalogues '
               'holding every VALID signal, and NOTHING in this build chooses which of them to '
               'trade. Scoring happens when YOU compose a book and run it through:')
-        print('      python score_book.py --book <your_book.csv> --data <frame> --out <dir>   (item 16, not yet built)')
+        print('      python score_book.py --book <your_book.csv> --data <frame> --out <dir>')
         print('  That tool (item 16) applies the constraint machinery - TailDep, FailConc, mCVaR, '
               'absolute survival, union coverage - which are SET properties of an assembled book '
               'and have no per-signal value. Every catalogue states a book is UNSCORED until it '
