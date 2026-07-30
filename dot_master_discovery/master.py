@@ -868,6 +868,16 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
     if not os.path.exists(cand):
         print('  CATALOGUE: no candidates.csv - S3/S4/S5 have not produced a pool. NOT marking done.')
         return None
+    cat_dir_chk = os.path.join(out, 'catalogues')
+    if is_done(out, 'S5D', input_sha) and os.path.isdir(cat_dir_chk) and \
+            any(f.startswith('catalogue_') for f in os.listdir(cat_dir_chk)):
+        have = sorted(f for f in os.listdir(cat_dir_chk) if f.startswith('catalogue_'))
+        print(f'  S5D already complete for this input_sha - {len(have)} catalogues on disk, '
+              f'RESUMING PAST IT. The per-candidate scoring loop is the longest single-threaded '
+              f'stage in the pipeline (F1 alone was 1:39:20 on the real pool); repeating it on '
+              f'every restart is a cost the operator should never pay twice.')
+        return {'per_family': None, 'unclaimed': None, 'reach': None, 'raw_tot': None,
+                'resumed': True, 'catalogues': have}
     cands = pd.read_csv(cand)
     null_k = int(null_k) if null_k else cat.NULL_K_DEFAULT
     n = len(df)
@@ -1149,14 +1159,14 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
     ids_dir = {1: bk[bk['direction'] == 'LONG']['signal_name'].values.tolist(),
                -1: bk[bk['direction'] == 'SHORT']['signal_name'].values.tolist()}
     grid = sel.depth_yield_grid(ent, sgn, tdays, ids_by_dir=ids_dir)
-    grid['depth_yield_LONG_per_signal'] = [sel.depth_yield_per_signal(v, sgn.get(1, 0))
-                                           for v in grid['depth_yield_LONG']]
-    grid['depth_yield_SHORT_per_signal'] = [sel.depth_yield_per_signal(v, sgn.get(-1, 0))
-                                            for v in grid['depth_yield_SHORT']]
+    grid['DepthYield_LONG_per_signal'] = [sel.depth_yield_per_signal(v, sgn.get(1, 0))
+                                           for v in grid['DepthYield_LONG']]
+    grid['DepthYield_SHORT_per_signal'] = [sel.depth_yield_per_signal(v, sgn.get(-1, 0))
+                                            for v in grid['DepthYield_SHORT']]
     grid['same_signal_refire_LONG'] = [round(sel.same_signal_refire_rate(
-        ent.get(1, []), int(t), ids_dir[1]), 4) for t in grid['tolerance_N']]
+        ent.get(1, []), int(t), ids_dir[1]), 4) for t in grid['N']]
     grid['same_signal_refire_SHORT'] = [round(sel.same_signal_refire_rate(
-        ent.get(-1, []), int(t), ids_dir[-1]), 4) for t in grid['tolerance_N']]
+        ent.get(-1, []), int(t), ids_dir[-1]), 4) for t in grid['N']]
     h3 = sel.h3_within_direction(bk)
     base_hdr = [f'dataset_rows={attest["rows"]} segment={segment_label}',
                 f'oracle_sha256_12={oracle_sha}']
