@@ -570,7 +570,7 @@ def lexicographic_rank(candidates):
 
 
 PAIR_EXHAUSTIVE_MAX = 20000
-PAIR_SAMPLE_K = 20000
+PAIR_SAMPLE_K = 5000
 PAIR_SAMPLE_SEED = 20260724
 _PAIR_CTX = {}
 
