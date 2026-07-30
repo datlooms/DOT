@@ -1405,19 +1405,49 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
         print(f'  candidate entry masks built: LONG {len(cand_bars[1])} | SHORT {len(cand_bars[-1])}'
               + (f' | {skipped} unparseable skipped' if skipped else ''))
 
+        _EMPTY = np.empty(0, dtype=np.int64)
+        _prefix = {}
+
+        def _dy_bars(d, bars):
+            if bars.size == 0:
+                return 0.0
+            v, _g = sel.depth_yield_direction(bars, tdays, sel.S_DEFAULT, sel.N_TOLERANCE)
+            return v
+
+        def _prefix_of(d, selected):
+            """Cache the FIXED prefix. `selected` does not change across a pair sweep.
+
+            _dy previously re-concatenated every selected candidate's bars and
+            recomputed the base DepthYield inside EVERY marginal-gain call, so a
+            20,000-pair plateau escape at step 98 rebuilt a 98-array
+            concatenation 40,000 times and recomputed the same base value 20,000
+            times. Both are constant for the whole sweep. Caching them changes
+            no arithmetic: depth_yield_direction sorts internally, so the
+            concatenation order is irrelevant to the result, and the base is the
+            identical float it was recomputing.
+            """
+            key = (d, tuple(selected))
+            ent = _prefix.get(key)
+            if ent is None:
+                bars = (np.concatenate([cand_bars[d][x] for x in selected])
+                        if selected else _EMPTY)
+                ent = (bars, _dy_bars(d, bars))
+                _prefix[key] = ent
+            return ent
+
         def _dy(d, sset):
             if not sset:
                 return 0.0
-            bars = np.concatenate([cand_bars[d][x] for x in sset])
-            v, _g = sel.depth_yield_direction(bars, tdays, sel.S_DEFAULT,
-                                              sel.N_TOLERANCE)
-            return v
+            return _dy_bars(d, np.concatenate([cand_bars[d][x] for x in sset]))
 
         def _sel_gain(d, selected, cid):
-            return _dy(d, list(selected) + [cid]) - _dy(d, list(selected))
+            base_bars, base_val = _prefix_of(d, list(selected))
+            return _dy_bars(d, np.concatenate([base_bars, cand_bars[d][cid]])) - base_val
 
         def _sel_setgain(d, selected, add):
-            return _dy(d, list(selected) + list(add)) - _dy(d, list(selected))
+            base_bars, base_val = _prefix_of(d, list(selected))
+            return _dy_bars(d, np.concatenate([base_bars]
+                                              + [cand_bars[d][x] for x in add])) - base_val
 
         chosen = {}
         stops = {}

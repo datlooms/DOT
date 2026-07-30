@@ -572,6 +572,76 @@ def lexicographic_rank(candidates):
 PAIR_EXHAUSTIVE_MAX = 20000
 PAIR_SAMPLE_K = 20000
 PAIR_SAMPLE_SEED = 20260724
+_PAIR_CTX = {}
+
+
+def _pair_init(base_bars, bars_map, tdays, S, n_tol):
+    """Runs INSIDE each spawned worker, which is why a module global is safe here.
+
+    initargs are pickled and handed to the initializer in the worker, so each
+    worker sets its OWN copy. That is the opposite of the _F0_KEPT_PATH defect,
+    where a parent-side global was never transported at all.
+    """
+    _PAIR_CTX['base'] = base_bars
+    _PAIR_CTX['bars'] = bars_map
+    _PAIR_CTX['tdays'] = tdays
+    _PAIR_CTX['S'] = S
+    _PAIR_CTX['n_tol'] = n_tol
+
+
+def _pair_chunk(chunk):
+    """Evaluate a chunk of pairs against the FIXED selected set. Pure max-reduction.
+
+    Every pair is scored against the same frozen prefix, so no pair depends on
+    any other and the chunking cannot change a result. The reduction key is
+    (gain, pair) so ties break on pair order, never on which worker finished
+    first - that is what keeps the winner independent of core count.
+    """
+    base = _PAIR_CTX['base']
+    bars = _PAIR_CTX['bars']
+    tdays = _PAIR_CTX['tdays']
+    S = _PAIR_CTX['S']
+    n_tol = _PAIR_CTX['n_tol']
+    best_gain = float('-inf')
+    best = None
+    for a, b in chunk:
+        arr = np.concatenate([base, bars[a], bars[b]])
+        v, _g = depth_yield_direction(arr, tdays, S, n_tol)
+        if best is None or (v, (a, b)) > (best_gain, best):
+            best_gain = v
+            best = (a, b)
+    return best_gain, best
+
+
+def parallel_best_pair(pairs, base_bars, base_val, bars_map, tdays, S, n_tol, workers,
+                       progress=None):
+    """Chunk the pair list across the pool; reduce by max in the parent.
+
+    Returns (best_pair, best_gain) IDENTICAL to the serial sweep on the same
+    seeded pair list. The pair list is already deterministic via
+    PAIR_SAMPLE_SEED; the stable (gain, pair) tie-break is what makes the
+    reduction deterministic too.
+    """
+    import multiprocessing as _mp
+    from concurrent.futures import ProcessPoolExecutor
+    if not pairs:
+        return None, float('-inf')
+    nw = max(1, int(workers))
+    size = max(1, -(-len(pairs) // (nw * 4)))
+    chunks = [pairs[i:i + size] for i in range(0, len(pairs), size)]
+    best_gain = float('-inf')
+    best = None
+    with ProcessPoolExecutor(max_workers=min(nw, len(chunks)),
+                             mp_context=_mp.get_context('spawn'),
+                             initializer=_pair_init,
+                             initargs=(base_bars, bars_map, tdays, S, n_tol)) as ex:
+        for g, pr in ex.map(_pair_chunk, chunks):
+            if pr is not None and (best is None or (g, pr) > (best_gain, best)):
+                best_gain = g
+                best = pr
+            if progress is not None:
+                progress.step(1)
+    return best, best_gain - base_val
 
 
 def _pair_candidates(pool_ids, rng):
