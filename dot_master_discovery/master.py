@@ -4,6 +4,9 @@ import hashlib
 import json
 import math
 import os
+import warnings
+
+warnings.filterwarnings('ignore', message='DataFrame is highly fragmented')
 import sys
 import time
 
@@ -853,6 +856,7 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
     import catalogue as cat
     import cluster_profiler as cp
     import conviction as C
+    import runlog as rl
     import selection as sel
     import terrain as tr
     import portfolio_simulation_engine as engine
@@ -904,7 +908,10 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
     for fam, g in cands.groupby('family'):
         rows = []
         null_pfs, null_rate = [], 0.0
+        _pg = rl.Progress(f'S5D {fam} per-candidate scoring', len(g))
+        _pg.__enter__()
         for _i, cr in g.iterrows():
+            _pg.step(1, extra=f'{len(rows)} rows so far')
             sig = str(cr['signal_def'])
             dr = str(cr.get('direction', 'LONG')).upper()
             sid = cat.signal_id(fam, sig, dr)
@@ -938,6 +945,7 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
                 row['gated_delta_net'] = (round(row['gated_net'] - stx.get('net', 0.0), 2)
                                           if row['gated_net'] != '' else '')
             rows.append(row)
+        _pg.__exit__(None, None, None)
         fr = pd.DataFrame(rows)
         if len(fr):
             N_F = len(fr)
@@ -1092,6 +1100,7 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
 
 def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest):
     import cluster_profiler as cp
+    import runlog as rl
     import selection as sel
     import terrain as tr
     import portfolio_simulation_engine as engine

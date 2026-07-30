@@ -1,3 +1,27 @@
+"""Runs at interpreter startup in EVERY process, including spawned workers.
+
+The warning filter lives HERE and not in master.py for the same reason the frame
+binding and F13's scanner paths do: a spawned worker re-imports everything fresh
+and never sees a parent-side setting. master.py could silence its own console and
+every one of the 14 workers would still flood the pipe.
+
+FILTERED ON THE MESSAGE, NOT THE CATEGORY. pandas has moved PerformanceWarning
+between namespaces across versions, so `from pandas.errors import
+PerformanceWarning` can raise on a different pandas and take the whole run with
+it. A message match cannot fail that way.
+
+EXACTLY ONE MESSAGE IS SILENCED. DtypeWarning and FutureWarning are information
+the operator needs; a blanket filter would hide the next real problem. The
+fragmentation warning is true but expected: S5D assigns a mask column once per
+candidate on a 177,251 x 172 frame, ~39,000 times, and on a healthy run that
+prints thousands of identical lines in red through PowerShell, which is
+indistinguishable from failure.
+"""
+
+import warnings
+
+warnings.filterwarnings('ignore', message='DataFrame is highly fragmented')
+
 try:
     import dot_frame_binding
 except Exception:
