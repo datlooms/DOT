@@ -29,6 +29,34 @@ _F6 = re.compile(r'^(.+?)\s+(up|down)-cross\(level=(hi|lo)\)\s+ROC=(\S+)$')
 _F8 = re.compile(r'^(.+?)\s+(>|<|!=)\s+(.+)$')
 _F11 = re.compile(r'^(.+?)<->(.+?)\s+N=(\d+)\s+(\S+)$')
 _F4 = re.compile(r'^(.+?):(\S+)\s+NOT-CONFIRMED-BY\s+(.+?):(\S+)$')
+_F0_TERM = re.compile(r'^(.+?):(hi|lo|==-?\d+)$')
+
+
+def parse_f0(sig):
+    """THE SINGLE F0 DEFINITION. can_parse, family_mask and build_book all call it.
+
+    F0 triples mix suffixes freely: the discovered pool holds 944 rows of
+    V:V + V:V + V:V, 733 of V:V + V:V + V:==N, 152 of V:V + V:==N + V:==N and 11
+    of V:==N + V:==N + V:==N. All four are legitimate. Each term is parsed
+    INDEPENDENTLY by its own suffix rather than special-casing a shape.
+
+    A COUNTING check previously certified the grammar while a STRUCTURAL one
+    rejected it: can_parse asked only whether three terms contained a colon, so it
+    could not tell hi/lo from ==N and passed all four forms, while family_mask had
+    no F0 branch at all and fell through to the abort. S5 told the operator the
+    pool was safe and S5D then refused it. One definition removes the possibility.
+    Returns [(feat, thresh) x3] or None - never a guess.
+    """
+    parts = [p.strip() for p in str(sig).split('+')]
+    if len(parts) != 3:
+        return None
+    out = []
+    for p_ in parts:
+        m = _F0_TERM.match(p_)
+        if m is None:
+            return None
+        out.append((m.group(1).strip(), m.group(2).strip()))
+    return out
 
 UNSCOREABLE_FAMILIES = {}
 
@@ -42,7 +70,31 @@ def _pool_mask(pool, label, fam, sig):
     return np.asarray(pool[label], dtype=bool)
 
 
-def family_mask(df, pool, fam, sig, adaptive=None, structural=None):
+def family_mask(df, pool, fam, sig, adaptive=None, structural=None, anchor=None):
+    if fam == 'F1':
+        m = _F1.match(sig)
+        if m is not None:
+            a_, k_, b_ = m.group(1).strip(), int(m.group(2)), m.group(3).strip()
+            for lbl in (a_, b_):
+                if lbl not in pool:
+                    raise SystemExit(f'ABORT [F1] "{lbl}" is not in the condition pool for "{sig}".')
+            if anchor is None:
+                raise SystemExit(
+                    f'ABORT [F1] "{sig}" needs the ST_Flip anchor to rebuild its pair mask, but '
+                    f'family_mask was called without one. Refusing to approximate.')
+            return np.asarray(seq.pair_mask(pool[a_], pool[b_], k_, anchor), dtype=bool)
+    if fam == 'F0':
+        terms = parse_f0(sig)
+        if terms is not None:
+            import portfolio_simulation_engine as _e0
+            if adaptive is None or structural is None:
+                raise SystemExit(
+                    f'ABORT [F0] "{sig}" needs the oracle thresholds to rebuild its triple mask, '
+                    f'but family_mask was called without adaptive/structural.')
+            out = np.ones(len(df), dtype=bool)
+            for f_, t_ in terms:
+                out &= np.asarray(_e0.condition_mask(df, f_, t_, adaptive, structural), dtype=bool)
+            return out
     if fam == 'F6':
         m = _F6.match(sig)
         if m:
@@ -160,7 +212,12 @@ def build_book(df, pool, anchor, book, adaptive=None, structural=None):
         fam = str(b['family']).strip() if 'family' in book.columns else str(b['trigger']).strip()
         sig = str(b['signal_def'])
         if fam == 'F0':
-            ft = [p.strip().rsplit(':', 1) for p in sig.split('+')]
+            ft = parse_f0(sig)
+            if ft is None:
+                raise SystemExit(
+                    f'ABORT [F0] "{sig}" is not three terms of the form V:hi, V:lo or V:==N. '
+                    f'build_book, family_mask and can_parse all use parse_f0, so this cannot be a '
+                    f'disagreement between stages.')
             rows.append({'feat_1': ft[0][0], 'thresh_1': ft[0][1], 'feat_2': ft[1][0],
                          'thresh_2': ft[1][1], 'feat_3': ft[2][0], 'thresh_3': ft[2][1],
                          'direction': b['direction']})
@@ -269,26 +326,42 @@ def grammar_shape(sig):
     return _SHAPE_ID.sub(_r, out)
 
 
-def can_parse(fam, sig):
+def can_parse(fam, sig, pool=None):
     sig = str(sig)
     if fam == 'F0':
-        return len([p for p in sig.split('+') if ':' in p]) == 3
+        return parse_f0(sig) is not None
     if fam == 'F1':
-        return _F1.match(sig) is not None
+        m = _F1.match(sig)
+        if m is None:
+            return False
+        if pool is None:
+            return True
+        return m.group(1).strip() in pool and m.group(3).strip() in pool
     if fam == 'F2':
         return sig.split(':', 1)[-1].strip() == 'any' or _F2.match(sig) is not None
     if fam == 'F3':
-        return _F3.match(sig) is not None
+        m = _F3.match(sig)
+        if m is None:
+            return False
+        return True if pool is None else m.group(1).strip() in pool
     if fam == 'F5':
-        return ':' in sig and ' ' not in sig.strip()
+        if ':' not in sig or ' ' in sig.strip():
+            return False
+        return True if pool is None else sig.strip() in pool
     if fam == 'F6':
         return _F6.match(sig) is not None
     if fam == 'F7':
-        return _F7.match(sig) is not None
+        m = _F7.match(sig)
+        if m is None:
+            return False
+        return True if pool is None else m.group(1).strip() in pool
     if fam == 'F8':
         return _F8.match(sig) is not None
     if fam == 'F9':
-        return _F9.match(sig) is not None
+        m = _F9.match(sig)
+        if m is None:
+            return False
+        return True if pool is None else m.group(1).strip() in pool
     if fam == 'F11':
         return _F11.match(sig) is not None
     if fam == 'F4':
@@ -296,14 +369,14 @@ def can_parse(fam, sig):
     return False
 
 
-def grammar_coverage(pool_df):
+def grammar_coverage(pool_df, pool=None):
     rows = []
     for fam, g in pool_df.groupby('family'):
         shapes = {}
         for sig in g['signal_def'].astype(str):
             shapes.setdefault(grammar_shape(sig), []).append(sig)
         for shape, sigs in sorted(shapes.items(), key=lambda kv: -len(kv[1])):
-            ok = can_parse(fam, sigs[0])
+            ok = can_parse(fam, sigs[0], pool=pool)
             rows.append({'family': fam, 'grammar_shape': shape, 'rows': len(sigs),
                          'example': sigs[0], 'handled': bool(ok),
                          'reason': '' if ok else (UNSCOREABLE_FAMILIES.get(fam)

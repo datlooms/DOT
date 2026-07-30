@@ -264,7 +264,7 @@ def s5_filter(out, input_sha):
     import score_g
     unscoreable = set(score_g.UNSCOREABLE_FAMILIES)
     if 'family' in keep.columns and len(keep):
-        gcov = score_g.grammar_coverage(keep)
+        gcov = score_g.grammar_coverage(keep, pool=pool)
         _write_with_header(os.path.join(results, 'grammar_coverage.csv'), gcov, [
             'DOT S5 GRAMMAR COVERAGE — every DISTINCT signal_def form in the filtered pool',
             'PROPERTY OF THE POOL. Checked BEFORE S8 so an unhandled grammar surfaces in seconds at '
@@ -893,9 +893,10 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
         fc = []
         for _i, cr in g.iterrows():
             try:
-                mk = score_g.family_mask(df, pool, fam, str(cr['signal_def']), ad, st)
+                mk = score_g.family_mask(df, pool, fam, str(cr['signal_def']), ad, st, anchor=anchor)
                 fc.append(int(np.asarray(mk, dtype=bool).sum()))
-            except Exception:
+            except (Exception, SystemExit) as _fe:
+                rl.warn(f'fire-count skip {fam}: {_fe}')
                 continue
         fam_fire_counts[fam] = fc
     per_family = {}
@@ -1370,7 +1371,8 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
                                                      pool[mm.group(3).strip()],
                                                      int(mm.group(2)), anchor), dtype=bool)
                 else:
-                    mk = np.asarray(score_g.family_mask(df, pool, fam, sig, ad, st), dtype=bool)
+                    mk = np.asarray(score_g.family_mask(df, pool, fam, sig, ad, st, anchor=anchor),
+                                    dtype=bool)
             except SystemExit as _e:
                 rl.warn(f'S5D candidate skipped ({fam}): {_e}')
                 skipped += 1
