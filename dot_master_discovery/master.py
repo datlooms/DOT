@@ -250,7 +250,7 @@ def s4_schema(out, input_sha):
     mark_done(out, 'S4', {'input_sha': input_sha})
 
 
-def s5_filter(out, input_sha):
+def s5_filter(out, input_sha, pool):
     results = os.path.join(out, 'results')
     src = os.path.join(results, 'discovery_master.csv')
     if not os.path.exists(src):
@@ -2116,7 +2116,7 @@ def main():
         s4_schema(out, input_sha)
     if (run_all and discover) or only == 'S5':
         print('\n[S5] CANDIDATE FILTER')
-        s5_filter(out, input_sha)
+        s5_filter(out, input_sha, pool)
     if (run_all and discover) or only == 'S6':
         print('\n[S6] FULL-FIELD SCORING (REGEN fresh)')
         s6_regen(out, input_sha)
