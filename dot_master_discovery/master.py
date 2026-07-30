@@ -441,7 +441,7 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
               'nothing to score automatically: the deliverable is fourteen per-family catalogues '
               'holding every VALID signal, and NOTHING in this build chooses which of them to '
               'trade. Scoring happens when YOU compose a book and run it through:')
-        print('      python score_book.py --book <your_book.csv> --data <frame> --out <dir>')
+        print('      python score_book.py --book <your_book.csv> --data <frame> --out <dir>   (item 16, not yet built)')
         print('  That tool (item 16) applies the constraint machinery - TailDep, FailConc, mCVaR, '
               'absolute survival, union coverage - which are SET properties of an assembled book '
               'and have no per-signal value. Every catalogue states a book is UNSCORED until it '
@@ -607,6 +607,15 @@ def run_diagnostic_families(results_dir, workers, input_sha, df=None):
         f13.OUT_CSV = f13_csv
         f13.SHARD_DIR = os.path.join(results_dir, '_f13_shards')
         f13.RESULTS_DIR = results_dir
+        os.makedirs(f13.SHARD_DIR, exist_ok=True)
+        import dot_frame_binding as _fb
+        os.environ['DOT_RESULTS_DIR'] = results_dir
+        _bound = _fb.install_scanner_paths()
+        print(f'  [F13] scanner paths bound in-parent AND at interpreter startup for every spawned '
+              f'worker ({_bound}). F13 hardcodes RESULTS_DIR/OUT_CSV/SHARD_DIR at import against the '
+              f'LEGACY discovery_results/; a parent-side attribute write does not survive spawn, and '
+              f'F13 starts its own Pool, so its workers wrote shards to a directory outside --out '
+              f'that did not exist. Scanners are not editable, so the startup hook is the transport.')
         f13.run(min(workers, 12))
         _f13_arts = [n for n in sorted(os.listdir(results_dir))
                      if n.startswith('results_F13') and n.endswith('.csv')]

@@ -72,3 +72,53 @@ def install_if_configured():
     except Exception as exc:
         raise SystemExit(f'ABORT — frame binding failed in pid {os.getpid()}: '
                          f'{type(exc).__name__}: {exc}')
+
+
+_SCANNER_PATH_MODULES = (
+    ('single_variable_extremes', {
+        'RESULTS_DIR': '',
+        'OUT_CSV': 'results_F13_single_variable_extremes.csv',
+        'SHARD_DIR': '_f13_shards',
+    }),
+)
+
+
+def install_scanner_paths():
+    """THIRD INSTANCE of the parent-only-global class. Closed at startup, not at the call site.
+
+    single_variable_extremes hardcodes RESULTS_DIR/OUT_CSV/SHARD_DIR at import
+    (L90-92) against the LEGACY discovery_results/ directory. master.py reassigns
+    all three, but that is a PARENT-SIDE attribute write and F13 spawns its own
+    Pool: every worker re-imports the module fresh, gets the L90-92 defaults, and
+    process_shard writes shards to a directory that does not exist inside the run
+    tree.
+
+    WHY NOT THE POOL INITIALIZER. Under spawn, `initializer=_init` is pickled by
+    reference and the worker looks _init up on the freshly imported module, so
+    patching _init in the parent does not survive either. The initializer is not
+    reachable as a transport without editing the scanner, and SCANNERS ARE NOT
+    EDITABLE. This hook runs at INTERPRETER STARTUP in every spawned process,
+    before any worker code, driven by DOT_RESULTS_DIR which master already
+    exports - the same mechanism that closed instance one.
+
+    DECIDED - REVERSIBLE. The alternative was to create the legacy directory so
+    the hardcoded path resolves, which is simpler but writes shards OUTSIDE
+    --out and breaks item 1's guarantee that every read and write resolves inside
+    the run tree. Reverting means deleting this function and creating that
+    directory instead.
+    """
+    rd = os.environ.get('DOT_RESULTS_DIR')
+    if not rd:
+        return []
+    done = []
+    for modname, fields in _SCANNER_PATH_MODULES:
+        try:
+            mod = __import__(modname)
+        except Exception:
+            continue
+        for attr, leaf in fields.items():
+            if not hasattr(mod, attr):
+                continue
+            setattr(mod, attr, rd if not leaf else os.path.join(rd, leaf))
+        done.append(modname)
+    return done
