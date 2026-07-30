@@ -848,11 +848,125 @@ def _no_constraint(_d, _ss):
     return True, ''
 
 
+_S5D_ROOT = os.path.dirname(os.path.abspath(__file__))
+_S5D_CTX = {}
+
+
+def _s5d_init(frame_path, scope):
+    """Runs INSIDE each spawned worker. Builds the context once per worker, not per candidate.
+
+    REDUNDANCY REMOVED FIRST, as with the _dy prefix cache: the oracle, the
+    condition pool, the anchor and the conviction frame are IDENTICAL for every
+    candidate, so they are built once per worker and reused across its whole
+    chunk. Only run_portfolio is genuinely per-candidate.
+    """
+    import sys as _s, os as _o
+    _here = _S5D_ROOT
+    for _d in ('engine', 'scanners', 'orchestrator', '.'):
+        _p = _o.path.join(_here, _d)
+        if _p not in _s.path:
+            _s.path.insert(0, _p)
+    import pandas as _pd
+    import dots_thresholds as _dt
+    import portfolio_simulation_engine as _eng
+    import sequential_temporal as _seq
+    import conviction as _C
+    df = _pd.read_csv(frame_path)
+    w = _eng.warmup_floor(df, verbose=False)
+    ad = _dt.compute_adaptive_thresholds(df)
+    st = _dt.compute_structural_gates(df)
+    _S5D_CTX.update({
+        'df': df, 'w': w, 'ad': ad, 'st': st,
+        'pool': _seq.build_condition_pool(df, ad, st, w),
+        'anchor': _seq.anchor_array(df, 'ST_Flip'),
+        'conv': _C.build_conviction(df, True, True, True, d2d_conviction=True, d2d_gap=True),
+        'bar_day': _pd.Series(df['Time'].astype(str).values).str[:10].values,
+    })
+    import numpy as _np
+    _hi = ad.get(('Hurst', 'hi'))
+    _S5D_CTX['gate_ok'] = _np.flatnonzero(
+        (df['Hurst'].values >= _hi) if _hi is not None
+        else _np.ones(len(df), dtype=bool)).astype(_np.int64)
+
+
+def _s5d_score_chunk(payload):
+    """Score a chunk of candidates. Every candidate is INDEPENDENT - a fresh
+    one-row book through run_portfolio - so chunking cannot change a result.
+    Returns (index, rows) so the parent reassembles in ASCENDING INDEX ORDER and
+    the output is identical regardless of which worker finished first."""
+    idx, items = payload
+    import cluster_profiler as cp
+    import catalogue as cat
+    import score_g
+    import portfolio_simulation_engine as engine
+    import numpy as np
+    import pandas as pd
+    c = _S5D_CTX
+    out = []
+    for fam, sig, dr in items:
+        one = pd.DataFrame([{'trigger': fam, 'family': fam, 'direction': dr, 'signal_def': sig}])
+        try:
+            sg = score_g.build_book(c['df'], c['pool'], c['anchor'], one,
+                                    adaptive=c['ad'], structural=c['st'])
+            td = engine.run_portfolio(c['df'], sg, adaptive=c['ad'], structural=c['st'],
+                                      warmup=c['w'], verbose=False, conviction=c['conv'])
+            td = td[~td['signal_name'].isin(cp.GAP_NAMES)]
+        except SystemExit:
+            out.append((fam, sig, dr, None, None, None, None))
+            continue
+        verdict, reason, stx = cat.evaluate_valid(td, c['bar_day'])
+        bars = fold = gated = None
+        if verdict == 'VALID':
+            bars = np.asarray(td['entry_bar'].values, dtype=np.int64)
+            fold = cat.segment_fold_stats(td)
+            gated = cat.gated_arm(td, c['gate_ok'])
+        out.append((fam, sig, dr, verdict, reason, stx, bars, fold, gated))
+    return idx, out
+
+
+def _s5d_score_items(items, fam, workers, frame_path, scope, rl, ctx=None):
+    """Serial when workers<=1 or no frame_path; otherwise chunked across the pool.
+
+    Results are reassembled in ASCENDING CHUNK INDEX, so the emitted catalogue is
+    byte-identical regardless of worker count or completion order.
+    """
+    n = len(items)
+    if n == 0:
+        return []
+    if not workers or workers <= 1 or not frame_path:
+        if ctx is not None:
+            _S5D_CTX.update(ctx)
+        elif frame_path:
+            _s5d_init(frame_path, scope)
+        with rl.Progress(f'S5D {fam} per-candidate scoring (serial)', n) as pg:
+            out = []
+            for it in items:
+                _i, part = _s5d_score_chunk((0, [it]))
+                out.extend(part)
+                pg.step(1)
+            return out
+    import multiprocessing as _mp
+    from concurrent.futures import ProcessPoolExecutor
+    size = max(1, -(-n // (int(workers) * 4)))
+    chunks = [(k, items[i:i + size]) for k, i in enumerate(range(0, n, size))]
+    got = {}
+    with rl.Progress(f'S5D {fam} per-candidate scoring ({workers} workers)', len(chunks)) as pg:
+        with ProcessPoolExecutor(max_workers=min(int(workers), len(chunks)),
+                                 mp_context=_mp.get_context('spawn'),
+                                 initializer=_s5d_init,
+                                 initargs=(frame_path, scope)) as ex:
+            for idx, part in ex.map(_s5d_score_chunk, chunks):
+                got[idx] = part
+                pg.step(1, extra=f'{sum(len(v) for v in got.values())} scored')
+    return [r for k, _c in chunks for r in got[k]]
+
+
 NULL_SEED_BASE = 20260728
 CONCURRENT_STAGES = ('S3', 'S5C', 'S5D', 'S7')
 
 
-def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=None):
+def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=None,
+                  workers=1, frame_path=None, scope='full'):
     import catalogue as cat
     import cluster_profiler as cp
     import conviction as C
@@ -918,28 +1032,22 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
     for fam, g in cands.groupby('family'):
         rows = []
         null_pfs, null_rate = [], 0.0
-        _pg = rl.Progress(f'S5D {fam} per-candidate scoring', len(g))
-        _pg.__enter__()
-        for _i, cr in g.iterrows():
-            _pg.step(1, extra=f'{len(rows)} rows so far')
-            sig = str(cr['signal_def'])
-            dr = str(cr.get('direction', 'LONG')).upper()
-            sid = cat.signal_id(fam, sig, dr)
-            one = pd.DataFrame([{'trigger': fam, 'family': fam, 'direction': dr, 'signal_def': sig}])
-            try:
-                sg = score_g.build_book(df, pool, anchor, one, adaptive=ad, structural=st)
-                td = engine.run_portfolio(df, sg, adaptive=ad, structural=st, warmup=w,
-                                          verbose=False, conviction=conv)
-                td = td[~td['signal_name'].isin(cp.GAP_NAMES)]
-            except SystemExit:
+        items = [(fam, str(cr['signal_def']), str(cr.get('direction', 'LONG')).upper())
+                 for _i, cr in g.iterrows()]
+        scored = _s5d_score_items(items, fam, workers, frame_path, scope, rl,
+                                  ctx={'df': df, 'w': w, 'ad': ad, 'st': st, 'pool': pool,
+                                       'anchor': anchor, 'conv': conv, 'bar_day': bar_day,
+                                       'gate_ok': gate_ok})
+        for _fam, sig, dr, verdict, reason, stx, bars_p, fold_p, gated_p in scored:
+            if verdict is None:
                 continue
-            verdict, reason, stx = cat.evaluate_valid(td, bar_day)
+            sid = cat.signal_id(fam, sig, dr)
             d = 1 if dr == 'LONG' else -1
             row = {'signal_id': sid, 'family': fam, 'signal_def': sig, 'direction': dr,
                    'verdict': verdict, 'reason_code': reason}
             row.update(stx)
             if verdict == 'VALID':
-                bars = np.asarray(td['entry_bar'].values, dtype=np.int64)
+                bars = np.asarray(bars_p, dtype=np.int64)
                 entries_by_id[sid] = bars
                 dirs_by_id[sid] = d
                 fams_by_id[sid] = fam
@@ -950,12 +1058,11 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
                 row['coverage_pct_raw_terrain'] = round(100.0 * len(tch) / max(raw_tot[d], 1), 4)
                 row['coverage_pct_reachable'] = round(100.0 * len(tch_reach) / max(len(reach[d]), 1), 4)
                 row['terrain_cell'] = f'W{W}/K{int(K*100)}/E{int(E*100)}'
-                row.update(cat.segment_fold_stats(td))
-                row.update({f'gated_{k}': v for k, v in cat.gated_arm(td, gate_ok).items()})
+                row.update(fold_p)
+                row.update({f'gated_{k}': v for k, v in gated_p.items()})
                 row['gated_delta_net'] = (round(row['gated_net'] - stx.get('net', 0.0), 2)
                                           if row['gated_net'] != '' else '')
             rows.append(row)
-        _pg.__exit__(None, None, None)
         fr = pd.DataFrame(rows)
         if len(fr):
             N_F = len(fr)
@@ -1248,10 +1355,18 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
                       for nm, g in bk[bk['direction'] == lab].groupby('signal_name')}
 
     def _setval(d, sset):
+        """THE CANARY MUST SCORE ON THE SAME BASIS AS THE SEARCH IT CERTIFIES.
+
+        Item 4's distinct-signal basis is threaded here too: comparing greedy on
+        the distinct basis against an enumerated optimum on the row basis would
+        certify nothing, because the two are different objectives.
+        """
         if not sset:
             return 0.0
         bars = np.concatenate([ent_map[d][x] for x in sset])
-        v, _g = sel.depth_yield_direction(bars, tdays, sel.S_DEFAULT, sel.N_TOLERANCE)
+        ids = np.concatenate([np.full(len(ent_map[d][x]), x, dtype=object) for x in sset])
+        v, _g = sel.depth_yield_direction(bars, tdays, sel.S_DEFAULT, sel.N_TOLERANCE,
+                                          signal_ids_d=ids)
         return v
 
     def _gain(d, selected, cid):
@@ -1408,10 +1523,11 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
         _EMPTY = np.empty(0, dtype=np.int64)
         _prefix = {}
 
-        def _dy_bars(d, bars):
+        def _dy_bars(d, bars, ids):
             if bars.size == 0:
                 return 0.0
-            v, _g = sel.depth_yield_direction(bars, tdays, sel.S_DEFAULT, sel.N_TOLERANCE)
+            v, _g = sel.depth_yield_direction(bars, tdays, sel.S_DEFAULT, sel.N_TOLERANCE,
+                                              signal_ids_d=ids)
             return v
 
         def _prefix_of(d, selected):
@@ -1431,23 +1547,32 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
             if ent is None:
                 bars = (np.concatenate([cand_bars[d][x] for x in selected])
                         if selected else _EMPTY)
-                ent = (bars, _dy_bars(d, bars))
+                ids = (np.concatenate([np.full(len(cand_bars[d][x]), x, dtype=object)
+                                       for x in selected]) if selected
+                       else np.empty(0, dtype=object))
+                ent = (bars, ids, _dy_bars(d, bars, ids))
                 _prefix[key] = ent
             return ent
+
+        def _ids_for(d, keys):
+            return (np.concatenate([np.full(len(cand_bars[d][x]), x, dtype=object) for x in keys])
+                    if keys else np.empty(0, dtype=object))
 
         def _dy(d, sset):
             if not sset:
                 return 0.0
-            return _dy_bars(d, np.concatenate([cand_bars[d][x] for x in sset]))
+            return _dy_bars(d, np.concatenate([cand_bars[d][x] for x in sset]),
+                            _ids_for(d, list(sset)))
 
         def _sel_gain(d, selected, cid):
-            base_bars, base_val = _prefix_of(d, list(selected))
-            return _dy_bars(d, np.concatenate([base_bars, cand_bars[d][cid]])) - base_val
+            base_bars, base_ids, base_val = _prefix_of(d, list(selected))
+            return _dy_bars(d, np.concatenate([base_bars, cand_bars[d][cid]]),
+                            np.concatenate([base_ids, _ids_for(d, [cid])])) - base_val
 
         def _sel_setgain(d, selected, add):
-            base_bars, base_val = _prefix_of(d, list(selected))
-            return _dy_bars(d, np.concatenate([base_bars]
-                                              + [cand_bars[d][x] for x in add])) - base_val
+            base_bars, base_ids, base_val = _prefix_of(d, list(selected))
+            return _dy_bars(d, np.concatenate([base_bars] + [cand_bars[d][x] for x in add]),
+                            np.concatenate([base_ids, _ids_for(d, list(add))])) - base_val
 
         chosen = {}
         stops = {}
@@ -1459,7 +1584,7 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
                 continue
             _bpg = rl.Progress(f'S5B greedy {lab} CELF heap build', len(ids))
             _bpg.__enter__()
-            _spg = rl.Progress(f'S5B greedy {lab} admission', max(len(ids), 1))
+            _spg = rl.Progress(f'S5B greedy {lab} admission', 0)
             _spg.__enter__()
             _last = {'n': 0}
 
@@ -1511,6 +1636,7 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
 
 
 def s5c_walk_forward(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest):
+    import runlog as rl
     import cluster_profiler as cp
     import selection as sel
     import wf_selection as wfs
@@ -2196,7 +2322,10 @@ def main():
     if run_all or only == 'S5D':
         print('\n[S5D] CATALOGUE - fourteen per-family books, every VALID signal')
         with rl.Stage('S5D', 'catalogue emission'):
-            catalogue_state = s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest)
+            catalogue_state = s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha,
+                                            attest, workers=args.workers,
+                                            frame_path=os.environ.get('DOT_FRAME_PATH'),
+                                            scope='full')
     if run_all or only == 'S5B':
         print('\n[S5B] SELECTION LAYER')
         selection_state = s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest)

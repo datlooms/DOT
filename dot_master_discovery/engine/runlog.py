@@ -134,6 +134,7 @@ class Progress(object):
 
     def __init__(self, label, total, min_interval=5.0, heartbeat=60.0):
         self.label = label
+        self.unbounded = not total
         self.total = max(int(total), 1)
         self.done = 0
         self.t0 = time.time()
@@ -165,6 +166,11 @@ class Progress(object):
         rate = self.done / el if el > 0 else 0.0
         eta = (self.total - self.done) / rate if rate > 0 else float('nan')
         pct = 100.0 * self.done / self.total
+        if self.unbounded:
+            print(f'  [step {self.done}] {self.label} | elapsed {_hms(el)} | {rate*60:.1f}/min'
+                  f'{(" | " + extra) if extra else ""} | NO ETA: this loop has no fixed length, '
+                  f'and a fabricated ETA is worse than none', flush=True)
+            return
         eta_s = _hms(eta) if eta == eta else 'forming'
         print(f'  [{self.done}/{self.total} {pct:5.1f}%] {self.label} | elapsed {_hms(el)} '
               f'| ETA {eta_s} | {rate*60:.1f}/min{(" | " + extra) if extra else ""}', flush=True)
@@ -172,7 +178,9 @@ class Progress(object):
     def __exit__(self, *exc):
         self._stop.set()
         el = time.time() - self.t0
-        print(f'  {self.label} complete: {self.done}/{self.total} in {_hms(el)}', flush=True)
+        tot = 'steps' if self.unbounded else f'/{self.total}'
+        print(f'  {self.label} complete: {self.done}{"" if self.unbounded else tot} '
+              f'{"steps" if self.unbounded else ""} in {_hms(el)}', flush=True)
         return False
 
 
