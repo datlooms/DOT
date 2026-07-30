@@ -292,11 +292,51 @@ def same_bar_cohort_table(entries_by_dir, ids_by_dir, families_by_id, max_depth=
     return pd.DataFrame(rows)
 
 
-def dilution_curve(order_keys, entries_by_id, dirs_by_id, ranking_key_name, n_tol=1, depth=3):
+def dilution_curve(order_keys, entries_by_id, dirs_by_id, ranking_key_name, n_tol=1, depth=3,
+                   progress=None):
     """Item 12: admit best-first over the WHOLE catalogue, re-scoring same-bar 3+.
+
+    ONE PASS, NOT n^2. The previous form rebuilt by_bar from the ENTIRE
+    accumulated history at every admission step, so 39,308 steps each walked
+    everything admitted so far - tens of billions of dict operations, twice, and
+    the operator had to kill it. The accumulator is only ever ADDED to, so it is
+    kept across steps and a RUNNING COUNT is incremented only when a bar CROSSES
+    the depth threshold. Each step now costs O(that signal's fire count) and the
+    whole curve costs one pass over the catalogue's entries.
+
+    acc_bars/acc_ids are gone: by_bar IS the accumulator, and a second structure
+    holding the same information is a second definition that can drift.
 
     Emitted under at least two ranking keys because the stop-point differs by
     key, and the gap between the curves is the overfit estimate. Counts only.
+    """
+    rows = []
+    by_bar = {1: {}, -1: {}}
+    ge = {1: 0, -1: 0}
+    for k, sid in enumerate(order_keys, start=1):
+        d = dirs_by_id.get(sid, 1)
+        tgt = by_bar[d]
+        for b in entries_by_id.get(sid, []):
+            s_ = tgt.setdefault(int(b), set())
+            before = len(s_)
+            s_.add(sid)
+            if before < depth <= len(s_):
+                ge[d] += 1
+        rows.append({'admitted': k, 'signal_id': sid, 'ranking_key': ranking_key_name,
+                     'same_bar_ge3_bars': ge[1] + ge[-1], 'tolerance_N': n_tol, 'depth': depth,
+                     'population': 'POOL', 'basis': 'distinct signals per bar, per direction'})
+        if progress is not None:
+            progress.step(1)
+    return pd.DataFrame(rows)
+
+
+def dilution_curve_reference(order_keys, entries_by_id, dirs_by_id, ranking_key_name, n_tol=1,
+                             depth=3):
+    """The ORIGINAL quadratic form, retained ONLY as a parity reference.
+
+    Never called by the pipeline. It exists so the linear rewrite can be proved
+    element-for-element against the shape it replaced rather than against a
+    description of it.
     """
     rows = []
     acc_bars = {1: [], -1: []}
@@ -311,190 +351,11 @@ def dilution_curve(order_keys, entries_by_id, dirs_by_id, ranking_key_name, n_to
         for dd in (1, -1):
             if not acc_bars[dd]:
                 continue
-            by_bar = {}
+            bb = {}
             for b, i in zip(acc_bars[dd], acc_ids[dd]):
-                by_bar.setdefault(int(b), set()).add(i)
-            tot += sum(1 for s in by_bar.values() if len(s) >= depth)
+                bb.setdefault(int(b), set()).add(i)
+            tot += sum(1 for s_ in bb.values() if len(s_) >= depth)
         rows.append({'admitted': k, 'signal_id': sid, 'ranking_key': ranking_key_name,
                      'same_bar_ge3_bars': tot, 'tolerance_N': n_tol, 'depth': depth,
                      'population': 'POOL', 'basis': 'distinct signals per bar, per direction'})
     return pd.DataFrame(rows)
-
-
-NULL_K_DEFAULT = 200
-NULL_K_BY_FAMILY = {'F0': 500}
-NULL_K_ATTEMPT_MULTIPLIER = 60
-
-
-def null_k_for(family, default=None):
-    """F0 needs a larger K, and the remedy is NEVER a wider tolerance.
-
-    F0's candidates are triples - the rarest population in the build - so its
-    fire-rate targets are the hard ones. Measured, hard targets match at ~23.5%,
-    so K=200 yields ~47 in-band and straddles the floor of 50: three independent
-    runs returned 47, 59 and 47, which means a family sitting near the floor
-    prices or blanks ON SEED ALONE. Raising K leaves the matching intact and buys
-    in-band draws by sampling more; widening the tolerance would produce a null
-    matched to a DIFFERENT RARITY than the population it prices, which is the
-    defect this guard exists to prevent, re-entered through the one parameter
-    that looks like a dial. THE TOLERANCE MUST NOT BE TOUCHED. If K must rise far
-    enough that runtime bites, BLANK AND SAY SO.
-    """
-    return int(NULL_K_BY_FAMILY.get(family, default if default else NULL_K_DEFAULT))
-NULL_K_MIN_MEANINGFUL = 50
-NULL_FIRE_TOL = 0.35
-NULL_MAX_ARITY = 3
-
-
-def _fire_count(mask):
-    return int(np.asarray(mask, dtype=bool).sum())
-
-
-def draw_matched_null_masks(pool, target_fire_counts, rng, k=NULL_K_DEFAULT,
-                            tol=NULL_FIRE_TOL, max_arity=NULL_MAX_ARITY, max_tries_per=60):
-    """APPENDIX A's matched null: same vocabulary, FIRE-RATE MATCHED.
-
-    Random conjunctions of 1..max_arity conditions drawn from the SAME
-    post-hygiene vocabulary the family's candidates come from, accepted ONLY
-    when the conjunction's fire count lands within tol of a target sampled from
-    THAT FAMILY'S OWN fire-count distribution.
-
-    THE BAND IS A FILTER, NOT A PREFERENCE. An out-of-band draw is DISCARDED,
-    never kept as a closest miss. Keeping misses made n_null a count of masks
-    rather than a count of MATCHED masks, so the K-floor in null_quality tested
-    the wrong quantity and a null of the wrong rarity was published under a
-    header asserting the search had been priced. Discarding is chosen over a
-    separate matched-fraction gate because it makes the existing K-floor do
-    double duty: after this change n_null IS the matched count, so one threshold
-    guards both quantities and there is no second number to keep in step.
-
-    Fire-rate matching is not decoration. A triple fires far more rarely than any
-    single condition, so a null drawn without matching would be a null for a
-    different rarity than the population it prices - easier or harder, and in
-    either direction the exceedance it produces is not the exceedance Appendix A
-    asks for. Arity varies precisely so the fire rate can be matched, and F0 is
-    the most exposed family because its candidates are triples, the rarest
-    population in the build.
-
-    Returns (matched_masks, attempts_stats). attempts_stats carries the matched
-    fraction so the console line and the catalogue can both report how well the
-    null matched without re-deriving it.
-    """
-    labels = sorted(pool.keys())
-    stats = {'requested_k': int(k), 'draws_attempted': 0, 'matched': 0,
-             'rejected_out_of_band': 0, 'tol': tol,
-             'target_min': '', 'target_max': ''}
-    if not labels or len(target_fire_counts) == 0:
-        stats['matched_fraction'] = 0.0
-        return [], stats
-    targets = np.asarray(target_fire_counts, dtype=float)
-    stats['target_min'] = int(targets.min())
-    stats['target_max'] = int(targets.max())
-    out = []
-    for _i in range(k):
-        want = float(rng.choice(targets))
-        lo, hi = want * (1.0 - tol), want * (1.0 + tol)
-        hit = None
-        for _t in range(max_tries_per):
-            stats['draws_attempted'] += 1
-            arity = int(rng.integers(1, max_arity + 1))
-            picks = [labels[int(rng.integers(0, len(labels)))] for _a in range(arity)]
-            m = np.asarray(pool[picks[0]], dtype=bool).copy()
-            for lb in picks[1:]:
-                m &= np.asarray(pool[lb], dtype=bool)
-            fc = _fire_count(m)
-            if fc == 0:
-                continue
-            if lo <= fc <= hi:
-                hit = {'mask': m, 'conditions': picks, 'fire_count': fc,
-                       'target_fire_count': int(want)}
-                break
-            stats['rejected_out_of_band'] += 1
-        if hit is not None:
-            out.append(hit)
-            stats['matched'] += 1
-    stats['matched_fraction'] = round(stats['matched'] / float(k), 4) if k else 0.0
-    return out, stats
-
-
-def null_quality(n_matched, k_requested, stats=None):
-    """n_matched is now a count of MATCHED draws, so the K-floor does double duty.
-
-    Before the band became a filter this tested a count of masks, and 141 of 200
-    unmatched draws could pass it. A null too small to price a tail must say so
-    rather than emit a confident number - that is the whole argument for
-    pricing_blank, and a wrong number in the pricing column is worse than a
-    blank one.
-    """
-    frac = (stats or {}).get('matched_fraction', None)
-    if n_matched < NULL_K_MIN_MEANINGFUL:
-        why = (f'matched null holds {n_matched} IN-BAND signals (< {NULL_K_MIN_MEANINGFUL}) '
-               f'against a request of {k_requested}')
-        if frac is not None:
-            why += (f'; matched fraction {frac:.1%} at tol +/-{(stats or {}).get("tol", 0):.0%} '
-                    f'for targets {(stats or {}).get("target_min", "?")}..'
-                    f'{(stats or {}).get("target_max", "?")} fires')
-        why += (f'. The exceedance floor is 1/{max(n_matched, 1)} and cannot resolve a tail, so the '
-                f'Appendix A columns are BLANK rather than confidently wrong.')
-        return ('null_too_small', why)
-    return ('', '')
-
-
-def pricing_blank(reason):
-    """Item 8 fallback: the mandated names stay EMPTY rather than carry another quantity."""
-    return {'n_trials_family': '', 'null_valid_rate_family': '',
-            'expected_valid_by_chance_family': '', 'pf_null_p50_family': '',
-            'pf_null_p90_family': '', 'pf_null_p99_family': '',
-            'pf_null_exceedance_pct': '', 'EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF': '',
-            'q_value_BY_family': '', 'pricing_unavailable_reason': reason}
-
-
-MECHANISM_D_LOCKS = {
-    'engine/dots_thresholds.py': '518862bf19fb',
-    'engine/terrain.py': 'dcaecaf7e8e1',
-    'engine/cluster_profiler.py': '070bb2aa7aaa',
-    'scanners/concurrence_profiler.py': '554019e93069',
-}
-
-
-def assert_episode_thresholds_mechanism_d(root, thr, mcol, ecol, k_tag, e_tag):
-    """Item 5's IN-RUN half. Appendix D: the lock is pre-run, this is in-run.
-
-    Two checks. First, the four modules that may legitimately define episodes,
-    clusters or strata are byte-verified against the shas Appendix D fixes as
-    constants of that document - the Developer verifies, he does not record his
-    own baseline. Second, the K and E arrays actually used to build this run's
-    episodes must be per-bar arrays from the oracle sweep, not scalars: a
-    constant broadcast over the span is exactly the local-percentile shape the
-    prohibition targets, and it is invisible to a file lock.
-    """
-    import hashlib
-    import os as _os
-    import numpy as _np
-    drift = []
-    for rel, want in MECHANISM_D_LOCKS.items():
-        p_ = _os.path.join(root, rel)
-        if not _os.path.exists(p_):
-            drift.append(f'{rel} MISSING')
-            continue
-        got = hashlib.sha256(open(p_, 'rb').read()).hexdigest()[:12]
-        if got != want:
-            drift.append(f'{rel} {got} != {want}')
-    if drift:
-        raise SystemExit(
-            'ABORT [item 5] market-object module drift: ' + '; '.join(drift) +
-            '. These four modules are the only ones that may define episodes, clusters or strata. '
-            'Any change requires explicit re-blessing regardless of how the cut is written.')
-    for col, tag, name in ((mcol, k_tag, 'K magnitude'), (ecol, e_tag, 'E efficiency')):
-        arr = thr.get((col, tag))
-        if arr is None:
-            raise SystemExit(f'ABORT [item 5] episode threshold {name} ({col}, {tag}) absent from '
-                             f'the oracle sweep - it did not route through dots_thresholds.')
-        a = _np.asarray(arr)
-        if a.ndim == 0 or a.size <= 1:
-            raise SystemExit(
-                f'ABORT [item 5] episode threshold {name} is a SCALAR. Episode thresholds must be '
-                f'per-bar arrays from mechanism D (rolling, day-refreshed, causal). A constant '
-                f'broadcast over the span is a span-wide cut and the file lock cannot see it.')
-    return {'modules_verified': len(MECHANISM_D_LOCKS), 'k_col': mcol, 'e_col': ecol,
-            'basis': 'mechanism D, rolling-2500, day-refreshed, per-bar arrays'}

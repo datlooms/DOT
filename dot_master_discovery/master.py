@@ -1084,7 +1084,8 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
             if key not in v.columns:
                 continue
             o = v.sort_values(key, ascending=asc)['signal_id'].tolist()
-            dc = cat.dilution_curve(o, entries_by_id, dirs_by_id, key)
+            with rl.Progress(f'S5D dilution curve ({key})', len(o)) as _dpg:
+                dc = cat.dilution_curve(o, entries_by_id, dirs_by_id, key, progress=_dpg)
             _write_with_header(os.path.join(cat_dir, f'dilution_curve_{key}.csv'), dc, [
                 f'DOT item 12 - dilution curve, ranking key = {key}',
                 f'dataset_rows={attest["rows"]}',
@@ -1361,7 +1362,10 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
                         & (df['Volume'].values != 0) & (np.arange(n) >= w))
         cand_bars = {1: {}, -1: {}}
         skipped = 0
+        _spg = rl.Progress('S5B candidate entry masks', len(cands))
+        _spg.__enter__()
         for _i, cr in cands.iterrows():
+            _spg.step(1, extra=f'LONG {len(cand_bars[1])} SHORT {len(cand_bars[-1])}')
             fam = str(cr.get('family', '')).strip()
             sig = str(cr.get('signal_def', ''))
             d = 1 if str(cr.get('direction', 'LONG')).upper() == 'LONG' else -1
@@ -1387,6 +1391,7 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
                 skipped += 1
                 continue
             cand_bars[d][key] = np.flatnonzero(mk & entry_ok_sel).astype(np.int64)
+        _spg.__exit__(None, None, None)
         print(f'  candidate entry masks built: LONG {len(cand_bars[1])} | SHORT {len(cand_bars[-1])}'
               + (f' | {skipped} unparseable skipped' if skipped else ''))
 
