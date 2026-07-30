@@ -419,18 +419,26 @@ def run_f0_chunk(df, adaptive, structural, warmup, kw, lo, hi):
 
 
 def _f0_score_chunk(payload):
-    lo, hi, scope, frame_path = payload
+    """THE PAYLOAD IS THE TRANSPORT. Never a module global.
+
+    This read orch._F0_KEPT_PATH, a module global the PARENT set and the worker
+    never saw: a spawned worker re-imports this module fresh and gets the L433
+    default of None, so open(None) raised in every one of 56 workers on the first
+    production execution of f0_parity_proof. Same class as the frame-binding
+    defect sitecustomize.py exists to fix - a parent-only global that does not
+    survive spawn - and it was missed for exactly one reason: this path had never
+    executed. The payload already crossed the boundary correctly, so it carries
+    the path too and nothing here depends on parent state.
+    """
+    lo, hi, scope, frame_path, kept_path = payload
     import discovery_orchestrator as orch
     df, adaptive, structural, warmup, _kw = orch._worker_context(scope, frame_path, 'F0')
     import pickle as _pk
-    with open(orch._F0_KEPT_PATH, 'rb') as f:
+    with open(kept_path, 'rb') as f:
         kept = _pk.load(f)
     month = pd.Series(df['Time'].values).str[:7].values
     return lo, [f0s.score_survivor(df, row, month, adaptive, structural, warmup)
                 for row in kept[lo:hi]]
-
-
-_F0_KEPT_PATH = None
 
 
 def f0_rows_from_raw(df, adaptive, structural, warmup, raw_survivors, workers=1,
@@ -448,14 +456,13 @@ def f0_rows_from_raw(df, adaptive, structural, warmup, raw_survivors, workers=1,
     A PARITY PROOF AGAINST THE SERIAL RESULT IS MANDATORY and is what
     f0_parity_proof() runs.
     """
-    global _F0_KEPT_PATH
     kept = f0m.deduplicate(list(raw_survivors))
     month = pd.Series(df['Time'].values).str[:7].values
     if workers <= 1 or frame_path is None or results_dir is None or len(kept) < 64:
         return [f0s.score_survivor(df, row, month, adaptive, structural, warmup) for row in kept]
     import pickle as _pk
-    _F0_KEPT_PATH = os.path.join(results_dir, '_f0_kept.pkl')
-    with open(_F0_KEPT_PATH, 'wb') as f:
+    kept_path = os.path.join(results_dir, '_f0_kept.pkl')
+    with open(kept_path, 'wb') as f:
         _pk.dump(kept, f)
     n = len(kept)
     size = max(1, -(-n // (workers * 4)))
@@ -464,7 +471,7 @@ def f0_rows_from_raw(df, adaptive, structural, warmup, raw_survivors, workers=1,
     from concurrent.futures import ProcessPoolExecutor
     import multiprocessing as _mp
     import runlog as _rl
-    payloads = [(lo, hi, scope, frame_path) for lo, hi in bounds]
+    payloads = [(lo, hi, scope, frame_path, kept_path) for lo, hi in bounds]
     with _rl.Progress('F0 re-score', len(payloads)) as pg:
         with ProcessPoolExecutor(max_workers=min(workers, len(payloads)),
                                  mp_context=_mp.get_context('spawn')) as ex:
