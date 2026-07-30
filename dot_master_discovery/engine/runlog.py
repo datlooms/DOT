@@ -181,3 +181,41 @@ def _hms(secs):
         return '?'
     secs = int(secs)
     return f'{secs//3600}:{(secs%3600)//60:02d}:{secs%60:02d}'
+
+
+class Heartbeat(object):
+    """For a stage whose iteration count is not knowable up front.
+
+    A count that moves is worth more than a percentage that lies, and where
+    neither is available a heartbeat is still the difference between "working"
+    and "hung". Item 21 requires the operator never be unable to tell those
+    apart, and three stages have now run silently for long enough that he had to
+    watch CPU to decide.
+    """
+
+    def __init__(self, label, interval=60.0):
+        self.label = label
+        self.interval = interval
+        self._stop = threading.Event()
+        self._t = None
+        self.t0 = None
+
+    def __enter__(self):
+        self.t0 = time.time()
+        print(f'  {self.label}: started', flush=True)
+        self._t = threading.Thread(target=self._beat, daemon=True)
+        self._t.start()
+        return self
+
+    def _beat(self):
+        while not self._stop.wait(self.interval):
+            print(f'  ... {self.label} still running '
+                  f'({(time.time() - self.t0) / 60:.1f} min elapsed)', flush=True)
+
+    def note(self, msg):
+        print(f'  {self.label}: {msg}', flush=True)
+
+    def __exit__(self, *exc):
+        self._stop.set()
+        print(f'  {self.label}: complete in {_hms(time.time() - self.t0)}', flush=True)
+        return False

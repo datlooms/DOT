@@ -692,7 +692,7 @@ def assert_split_shape(splits):
 
 def book_arm_from_valid(df, cands, pool, anchor, ad, st, warmup, splits, build_book_fn,
                         run_portfolio_fn, evaluate_valid_fn, bar_day, conviction=None,
-                        gap_names=()):
+                        gap_names=(), progress_factory=None):
     """Item 17: per split, apply VALID on the TRAINING SEGMENT ALONE, score on TEST.
 
     IT CERTIFIES THE CATALOGUE'S INCLUSION RULE, NOT ANY BOOK. The entities are
@@ -713,7 +713,13 @@ def book_arm_from_valid(df, cands, pool, anchor, ad, st, warmup, splits, build_b
         tr_lo, tr_hi = int(sp['train_first_bar']), int(sp['train_last_bar'])
         te_lo, te_hi = int(sp['test_first_bar']), int(sp['test_last_bar'])
         train_rows, test_rows = [], []
+        _pg = progress_factory(f'S5C split {s_i} VALID pass over training catalogue',
+                               len(cands)) if progress_factory else None
+        if _pg is not None:
+            _pg.__enter__()
         for _i, cr in cands.iterrows():
+            if _pg is not None:
+                _pg.step(1, extra=f'{len(train_rows)} admitted')
             fam = str(cr.get('family', ''))
             sig = str(cr.get('signal_def', ''))
             direction = str(cr.get('direction', 'LONG')).upper()
@@ -737,6 +743,8 @@ def book_arm_from_valid(df, cands, pool, anchor, ad, st, warmup, splits, build_b
             tr_t = tr_t.copy(); tr_t['signal_name'] = name
             te_t = te_t.copy(); te_t['signal_name'] = name
             train_rows.append(tr_t); test_rows.append(te_t)
+        if _pg is not None:
+            _pg.__exit__(None, None, None)
         if not train_rows:
             out.append({'split': s_i, 'rate': float('nan'), 'k': 0, 'n_traded': 0,
                         'entities': 0, 'note': 'VALID admitted no signal on this training segment'})

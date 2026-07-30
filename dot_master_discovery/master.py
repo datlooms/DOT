@@ -1427,8 +1427,26 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
                 chosen[d] = []
                 stops[d] = 'no candidates in this direction'
                 continue
+            _bpg = rl.Progress(f'S5B greedy {lab} CELF heap build', len(ids))
+            _bpg.__enter__()
+            _spg = rl.Progress(f'S5B greedy {lab} admission', max(len(ids), 1))
+            _spg.__enter__()
+            _last = {'n': 0}
+
+            def _on_step(stp, nsel, nheap, _lab=lab):
+                _spg.done = stp
+                _spg.step(0, extra=f'selected {nsel} | heap remaining {nheap}')
+
+            def _on_escape(stp, nsel, nrem, _lab=lab):
+                print(f'    S5B greedy {_lab}: PLATEAU at step {stp} (selected {nsel}) - '
+                      f'attempting size-2 escape over {nrem} remaining, sampling up to '
+                      f'{sel.PAIR_SAMPLE_K} pairs', flush=True)
+
             picked, reason, log, meta = sel.greedy_direction(
-                d, ids, _sel_gain, _no_constraint, set_gain_fn=_sel_setgain)
+                d, ids, _sel_gain, _no_constraint, set_gain_fn=_sel_setgain,
+                on_build=lambda i: _bpg.step(1), on_step=_on_step, on_escape=_on_escape)
+            _bpg.__exit__(None, None, None)
+            _spg.__exit__(None, None, None)
             chosen[d] = picked
             stops[d] = reason
             print(f'    {lab}: selected {len(picked)} of {len(ids)} candidates | '
@@ -1711,7 +1729,8 @@ def s5c_walk_forward(df, ad, st, w, pool, anchor, book_file, out, input_sha, att
                                       score_g.build_book, engine.run_portfolio,
                                       cat2.evaluate_valid,
                                       pd.Series(df['Time'].astype(str).values).str[:10].values,
-                                      conviction=conv_wf, gap_names=cp.GAP_NAMES)
+                                      conviction=conv_wf, gap_names=cp.GAP_NAMES,
+                                      progress_factory=rl.Progress)
         book_rates = [a_['rate'] for a_ in arm]
         for a_ in arm:
             print(f'    split {a_["split"]}: VALID admitted {a_["entities"]} on train, '
@@ -2159,17 +2178,21 @@ def main():
         import score_g
         bk = book_file if book_file else os.path.join(_ENGINE, 'book50_signals.csv')
         sigs = score_g.build_book(df, pool, anchor, pd.read_csv(bk))
-        contenders = s7_contenders(df, ad, st, w, sigs, out, input_sha)
+        with rl.Heartbeat('S7 six portfolio scores'):
+            contenders = s7_contenders(df, ad, st, w, sigs, out, input_sha)
     if run_all or only == 'S8':
         print('\n[S8] COMMITTED-SYSTEM SCORE')
-        committed = s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha)
+        with rl.Heartbeat('S8 committed-book scoring'):
+            committed = s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha)
     if run_all or only == 'S8B':
         print('\n[S8B] CLUSTER-PARTICIPATION PROFILE')
-        profile = s8b_cluster_profile(df, ad, st, w, pool, anchor, book_file, committed, out, input_sha, attest)
+        with rl.Heartbeat('S8B cluster basis profiling'):
+            profile = s8b_cluster_profile(df, ad, st, w, pool, anchor, book_file, committed, out, input_sha, attest)
     if run_all or only == 'S9':
         print('\n[S9] REPORT & SPLIT')
         with rl.Stage('S9', 'report'):
-            s9_report(out, attest, contenders, committed, sacred, args.market_label, input_sha, profile, evidence, selection_state)
+            with rl.Heartbeat('S9 report assembly'):
+                s9_report(out, attest, contenders, committed, sacred, args.market_label, input_sha, profile, evidence, selection_state)
     rl.print_timing_table(concurrent_stages=CONCURRENT_STAGES)
 
     print('\n' + '═' * 68)

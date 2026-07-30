@@ -610,7 +610,19 @@ def _best_pair_addition(direction, selected, remaining, set_gain_fn, constraint_
 
 def greedy_direction(direction, candidate_ids, gain_fn, constraint_fn,
                      eps=MARGINAL_GAIN_EPS, max_steps=None, set_gain_fn=None,
-                     seed=PAIR_SAMPLE_SEED):
+                     seed=PAIR_SAMPLE_SEED, on_build=None, on_step=None, on_escape=None):
+    """on_build/on_step/on_escape are OPTIONAL observers and change nothing.
+
+    They are pure callbacks with no return value and no effect on the heap, the
+    selected set, the rng or the stop reason. Default None means the function is
+    byte-for-byte the search it was before, which is the guarantee that matters:
+    this is the search the operator's whole book depends on.
+
+    The admission loop has NO FIXED LENGTH - it re-evaluates stale heap tops and
+    can escape plateaus by pair addition - so on_step reports steps completed,
+    selected-set size and heap remaining rather than a percentage. A count that
+    moves is worth more than a percentage that lies.
+    """
     rng = np.random.default_rng(seed)
     if set_gain_fn is None:
         def set_gain_fn(d, sel_set, add):
@@ -623,8 +635,10 @@ def greedy_direction(direction, candidate_ids, gain_fn, constraint_fn,
     selected = []
     log = []
     heap = []
-    for cid in candidate_ids:
+    for _bi, cid in enumerate(candidate_ids, start=1):
         heap.append([-gain_fn(direction, selected, cid), cid, 0])
+        if on_build is not None:
+            on_build(_bi)
     heap.sort()
     step = 0
     pair_escapes = 0
@@ -633,6 +647,8 @@ def greedy_direction(direction, candidate_ids, gain_fn, constraint_fn,
         if max_steps is not None and step >= max_steps:
             stop_reason = 'max_steps reached (safety bound, not a target)'
             break
+        if on_step is not None:
+            on_step(step, len(selected), len(heap))
         top = heap[0]
         if top[2] != step:
             top[0] = -gain_fn(direction, selected, top[1])
@@ -643,6 +659,8 @@ def greedy_direction(direction, candidate_ids, gain_fn, constraint_fn,
         cid = top[1]
         if gain <= eps:
             remaining = [h[1] for h in heap]
+            if on_escape is not None:
+                on_escape(step, len(selected), len(remaining))
             pair, pgain, mode, total = _best_pair_addition(direction, selected, remaining,
                                                            set_gain_fn, constraint_fn, rng)
             if pair is not None and pgain > eps:
