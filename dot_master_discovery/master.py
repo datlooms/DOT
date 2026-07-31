@@ -1617,16 +1617,28 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
             stops[d] = reason
             print(f'    {lab}: selected {len(picked)} of {len(ids)} candidates | '
                   f'pair escapes {meta["pair_escapes"]} | stop: {reason[:80]}')
+            if not picked:
+                print(f'    {lab}: SELECTING ZERO IS THE OBJECTIVE\'S SHAPE, NOT AN ERROR. '
+                      f'DepthYield counts runs of >= {sel.S_DEFAULT} DISTINCT signals, so it is '
+                      f'IDENTICALLY ZERO for any set smaller than {sel.S_DEFAULT}: with k signals '
+                      f'the deepest reachable run is k. Greedy adds one at a time and the '
+                      f'lookahead-2 rule adds at most two, so every first move scores exactly 0.0 '
+                      f'and the search halts at the origin. NOTHING DOWNSTREAM DEPENDS ON THIS: no '
+                      f'artifact is empty, no catalogue row is lost, and item 12\'s dilution curve '
+                      f'builds its OWN ordering in S5D from the VALID catalogue.')
         admitted = {lab: list(chosen[d]) for d, lab in ((1, 'LONG'), (-1, 'SHORT'))}
-        print(f'  ADMISSION ORDER retained IN MEMORY ONLY for item 12\'s dilution curve: '
+        print(f'  ADMISSION ORDER retained IN MEMORY ONLY: '
               f'LONG {len(admitted["LONG"])} / SHORT {len(admitted["SHORT"])}. '
-              f'NO selected_book.csv is written. Item 15: the catalogue is emitted from VALID, '
-              f'never from an argmax, so no argmax output is persisted anywhere. greedy_direction '
-              f'survives as the dilution-curve admission loop and nothing else consumes it.')
+              f'NO selected_book.csv is written - item 15: the catalogue is emitted from VALID, '
+              f'never from an argmax, so no argmax output is persisted anywhere. '
+              f'IT DOES NOT FEED ITEM 12: the dilution curve builds its OWN ordering in S5D by '
+              f'sorting the VALID catalogue under each ranking key, and reads nothing from S5B. '
+              f'Nothing consumes this order except this line.')
         report_lines.append(
-            f'ADMISSION ORDER computed in memory for the dilution curve from {len(cands)} '
-            f'candidates (LONG {len(chosen[1])} / SHORT {len(chosen[-1])}). NO selected book is '
-            f'written: item 15 forbids emitting a catalogue from an argmax.')
+            f'ADMISSION ORDER computed in memory from {len(cands)} candidates '
+            f'(LONG {len(chosen[1])} / SHORT {len(chosen[-1])}). It does NOT feed item 12: the '
+            f'dilution curve builds its own ordering in S5D from the VALID catalogue. NO selected '
+            f'book is written: item 15 forbids emitting a catalogue from an argmax.')
     if not exercised:
         report_lines.append('SELECTION SEARCH NOT RUN: no candidates.csv on this run, so the '
                             'objective and per-direction greedy were not exercised. The constraint '
