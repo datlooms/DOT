@@ -1857,7 +1857,10 @@ def s5c_walk_forward(df, ad, st, w, pool, anchor, book_file, out, input_sha, att
         wfs.write_attestation(out, rec)
         g = wfs.TestSegmentGuard(s['split_index'], s['test_first_bar'], s['test_last_bar'])
         guards.append(g)
-        nf, ns = wfs.score_null_arm(df, pool_keys, ad, st, w, s, g, engine.run_portfolio)
+        nf, ns = wfs.score_null_arm(df, pool_keys, ad, st, w, s, g, engine.run_portfolio,
+                                    workers=int(os.environ.get('DOT_WORKERS', '1')),
+                                    frame_path=os.environ.get('DOT_FRAME_PATH'),
+                                    progress_factory=rl.Progress)
         null_frames.append(nf)
         null_summary.append(ns)
     nulls = pd.concat(null_frames, ignore_index=True) if null_frames else pd.DataFrame()

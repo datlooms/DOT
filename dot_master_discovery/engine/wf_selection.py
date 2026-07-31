@@ -416,9 +416,130 @@ def bar_mask(n_bars, first_bar, last_bar, warmup):
     return m
 
 
+_NULL_CTX = {}
+
+
+def _null_init(frame_path, warmup):
+    """Runs INSIDE each spawned worker. THE HOIST.
+
+    REDUNDANCY READ: both null loops call run_portfolio with the SAME df,
+    adaptive, structural and warmup - only the signal row and the mask window
+    vary. All four invariants are built ONCE per worker here. The mask is rebuilt
+    from (lo, hi) rather than shipped, so no large array crosses the boundary.
+    """
+    import sys as _s
+    for _d in ('engine', 'scanners', 'orchestrator', '.'):
+        _p = os.path.join(_WF_ROOT, _d)
+        if _p not in _s.path:
+            _s.path.insert(0, _p)
+    import pandas as _pd
+    import dots_thresholds as _dt
+    df = _pd.read_csv(frame_path)
+    _NULL_CTX.update({'df': df, 'w': warmup,
+                      'ad': _dt.compute_adaptive_thresholds(df),
+                      'st': _dt.compute_structural_gates(df)})
+
+
+def _null_chunk(payload):
+    """Score a chunk of null signals. Returns FLAGS ONLY, never a DataFrame."""
+    idx, rows, lo, hi = payload
+    import pandas as _pd
+    import numpy as _np
+    import portfolio_simulation_engine as _eng
+    c = _NULL_CTX
+    n = len(c['df'])
+    mask = bar_mask(n, lo, hi, c['w'])
+    out = []
+    for rd in rows:
+        one = _pd.DataFrame([rd])
+        td = _eng.run_portfolio(c['df'], one, mask_window=mask, adaptive=c['ad'],
+                                structural=c['st'], warmup=c['w'], verbose=False)
+        pnl = td['pnl'].values if len(td) else _np.array([])
+        f = persistence_flags(pnl)
+        out.append((int(len(pnl)), round(f['net'], 1), round(f['PF'], 3),
+                    round(f['WR'], 1), bool(f['passes'])))
+    return idx, out
+
+
+def _null_score_rows(row_dicts, lo, hi, df, adaptive, structural, warmup, run_portfolio,
+                     workers, frame_path, progress_factory, label):
+    """ONE implementation, two entry points - the pattern proven on C1.
+
+    The serial body is a closure reachable from the top and from the except, so
+    the fallback cannot drift from the primary path.
+    """
+    n = len(row_dicts)
+    results = [None] * n
+
+    def _run_serial(pg):
+        mask = bar_mask(len(df), lo, hi, warmup)
+        for k, rd in enumerate(row_dicts):
+            one = pd.DataFrame([rd])
+            td = run_portfolio(df, one, mask_window=mask, adaptive=adaptive,
+                               structural=structural, warmup=warmup, verbose=False)
+            pnl = td['pnl'].values if len(td) else np.array([])
+            f = persistence_flags(pnl)
+            results[k] = (int(len(pnl)), round(f['net'], 1), round(f['PF'], 3),
+                          round(f['WR'], 1), bool(f['passes']))
+            if pg is not None:
+                pg.step(1)
+
+    want_pool = bool(workers and workers > 1 and frame_path and n >= 32)
+    used = 'serial'
+    if want_pool:
+        import multiprocessing as _mp
+        from concurrent.futures import ProcessPoolExecutor
+        from concurrent.futures.process import BrokenProcessPool
+        size = max(1, -(-n // (int(workers) * 4)))
+        chunks = [(k, row_dicts[i:i + size], lo, hi)
+                  for k, i in enumerate(range(0, n, size))]
+        pg = progress_factory(f'{label} ({workers} workers)', len(chunks)) if progress_factory else None
+        if pg is not None:
+            pg.__enter__()
+        try:
+            got = {}
+            with ProcessPoolExecutor(max_workers=min(int(workers), len(chunks)),
+                                     mp_context=_mp.get_context('spawn'),
+                                     initializer=_null_init,
+                                     initargs=(frame_path, warmup)) as ex:
+                for idx, part in ex.map(_null_chunk, chunks):
+                    got[idx] = part
+                    if pg is not None:
+                        pg.step(1)
+            w_ = 0
+            for k, _rows, _lo, _hi in chunks:
+                for rec in got[k]:
+                    results[w_] = rec
+                    w_ += 1
+            used = f'pool({workers})'
+        except (BrokenProcessPool, OSError, MemoryError, Exception) as exc:
+            results = [None] * n
+            print(f'  {label}: pool failed ({type(exc).__name__}: {str(exc)[:80]}) - FALLING BACK '
+                  f'TO SERIAL. The parallel path is an OPTIMISATION and must never cost a run.',
+                  flush=True)
+            used = f'serial (pool fell back: {type(exc).__name__})'
+            if pg is not None:
+                pg.__exit__(None, None, None)
+            pg = progress_factory(f'{label} (serial fallback)', n) if progress_factory else None
+            if pg is not None:
+                pg.__enter__()
+            _run_serial(pg)
+        if pg is not None:
+            pg.__exit__(None, None, None)
+    else:
+        pg = progress_factory(f'{label} (serial)', n) if progress_factory else None
+        if pg is not None:
+            pg.__enter__()
+        _run_serial(pg)
+        if pg is not None:
+            pg.__exit__(None, None, None)
+    return results, used
+
+
 def score_null_arm(df, pool_keys, adaptive, structural, warmup, split, guard, run_portfolio,
                    target=NULL_TARGET_QUALIFIERS, floor=NULL_FLOOR_QUALIFIERS,
-                   cap=NULL_TRIPLES_CAP, gen_batch=NULL_GEN_BATCH, seed=NULL_SEED):
+                   cap=NULL_TRIPLES_CAP, gen_batch=NULL_GEN_BATCH, seed=NULL_SEED,
+                   workers=1, frame_path=None, progress_factory=None):
     split_seed = seed + int(split['split_index'])
     rng = np.random.default_rng(split_seed)
     n = len(df)
@@ -437,16 +558,17 @@ def score_null_arm(df, pool_keys, adaptive, structural, warmup, split, guard, ru
             break
         sig_batch = triples_to_signals(triples, rng)
         batches += 1
+        rowd = [sig_batch.iloc[i].to_dict() for i in range(len(sig_batch))]
+        flags, _u = _null_score_rows(rowd, 0, int(split['train_last_bar']), df, adaptive,
+                                     structural, warmup, run_portfolio, workers, frame_path,
+                                     progress_factory,
+                                     f"S5C null arm split {split['split_index']} TRAIN batch "
+                                     f"{batches}")
         for i in range(len(sig_batch)):
-            one = sig_batch.iloc[[i]]
-            td = run_portfolio(df, one, mask_window=train_mask, adaptive=adaptive,
-                               structural=structural, warmup=warmup, verbose=False)
-            pnl = td['pnl'].values if len(td) else np.array([])
-            tr = persistence_flags(pnl)
-            records.append({'entity': f'NULL_{generated + i:05d}', 'row': one,
-                            'train_trades': int(len(pnl)), 'train_net': round(tr['net'], 1),
-                            'train_PF': round(tr['PF'], 3), 'train_WR': round(tr['WR'], 1),
-                            'train_passes': tr['passes']})
+            tt, tn, tpf, twr, tps = flags[i]
+            records.append({'entity': f'NULL_{generated + i:05d}', 'row': sig_batch.iloc[[i]],
+                            'train_trades': tt, 'train_net': tn, 'train_PF': tpf,
+                            'train_WR': twr, 'train_passes': tps})
         generated += len(sig_batch)
     qualifiers = [r for r in records if r['train_passes']]
     test_slice = guard.touch(df)
@@ -455,11 +577,14 @@ def score_null_arm(df, pool_keys, adaptive, structural, warmup, split, guard, ru
     test_mask = bar_mask(n, test_lo, test_hi, warmup)
     rows = []
     persisted = 0
-    for r in qualifiers:
-        td = run_portfolio(df, r['row'], mask_window=test_mask, adaptive=adaptive,
-                           structural=structural, warmup=warmup, verbose=False)
-        pnl = td['pnl'].values if len(td) else np.array([])
-        te = persistence_flags(pnl)
+    qrowd = [q['row'].iloc[0].to_dict() for q in qualifiers]
+    qflags, _u2 = _null_score_rows(qrowd, test_lo, test_hi, df, adaptive, structural, warmup,
+                                   run_portfolio, workers, frame_path, progress_factory,
+                                   f"S5C null arm split {split['split_index']} QUALIFIERS")
+    for _qi, r in enumerate(qualifiers):
+        te = {'net': qflags[_qi][1], 'PF': qflags[_qi][2], 'WR': qflags[_qi][3],
+              'passes': qflags[_qi][4]}
+        pnl = np.zeros(qflags[_qi][0])
         if te['passes']:
             persisted += 1
         rows.append({'split_index': split['split_index'], 'entity': r['entity'],
