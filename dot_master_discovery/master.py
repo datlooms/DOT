@@ -1209,9 +1209,17 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
     _write_with_header(os.path.join(cat_dir, 'unclaimed_reachable.csv'), uf, [
         'DOT item 6 - REACHABLE episodes no catalogue signal touches - PROPERTY OF THE MARKET',
         f'dataset_rows={attest["rows"]} terrain cell W={W} K=p{int(K*100)} E=p{int(E*100)}',
-        'n_conditions_firing vs n_valid_triples_touching separates a SEARCH gap (many conditions '
-        'fire, no valid triple lands) from a GRAMMAR gap (few fire). Without both the set shows what '
-        'is unoccupied but not why.'])
+        'n_conditions_firing vs n_valid_triples_touching was intended to separate a SEARCH gap '
+        '(many conditions fire, no valid triple lands) from a GRAMMAR gap (few fire).',
+        'n_valid_triples_touching IS ZERO ON EVERY ROW AND THAT IS A MEASURED VALUE, NOT A '
+        'DEFAULT - but it is also TAUTOLOGICAL and carries no diagnostic information. An episode '
+        'appears in this file precisely because NO VALID SIGNAL TOUCHES IT (unclaimed = reachable '
+        'minus every episode claimed by any VALID signal, F0 included), so the count of VALID F0 '
+        'triples touching it can only ever be 0. Verified by join: 192 distinct episodes are '
+        'touched by the 1,818 VALID F0 rows, 2,092 episodes are unclaimed, INTERSECTION = 0.',
+        'THE SURVIVING DIAGNOSTIC IS n_conditions_firing. Separating SEARCH from GRAMMAR properly '
+        'needs the count of F0 triples that were SCANNED AND REJECTED over each episode, which '
+        'the scan does not currently record - that is a change to S5D, not to this file.'])
     print(f'  UNCLAIMED REACHABLE: {len(uf)} episodes '
           f'(UP {int((uf["direction"] == "UP").sum()) if len(uf) else 0} / '
           f'DOWN {int((uf["direction"] == "DOWN").sum()) if len(uf) else 0})')
@@ -1966,6 +1974,22 @@ def s5c_walk_forward(df, ad, st, w, pool, anchor, book_file, out, input_sha, att
                                       workers=int(os.environ.get('DOT_WORKERS', '1')),
                                       frame_path=os.environ.get('DOT_FRAME_PATH'))
         book_rates = [a_['rate'] for a_ in arm]
+        _bent = getattr(wfs.book_arm_from_valid, 'last_entities', None)
+        if _bent is not None and len(_bent):
+            _write_with_header(os.path.join(out, 'wf_book_arm_entities.csv'), _bent, [
+                'DOT S5C BOOK ARM per-entity record - one row per (split, signal)',
+                f'dataset_rows={attest["rows"]} input_sha={input_sha}',
+                'Mirrors wf_null_arm_entities.csv so both arms read the same way. The aggregate '
+                'counts alone cannot separate DILUTION (later-admitted signals are weaker) from '
+                'REGIME (the later window is harder): that needs to know WHICH signals were '
+                'admitted when, and whether a signal first admitted at a later split persisted '
+                'better or worse than one admitted early. This file carries that.',
+                'admitted=True on every row: a signal appears here only if VALID admitted it on '
+                'that split\'s TRAINING segment. traded_on_test distinguishes silence from '
+                'failure - the n_traded denominator counts only signals that fired on test.',
+                'PROPERTY OF THE BOOK ARM. It is a MEASUREMENT, not a pass criterion.'])
+            print(f'  wf_book_arm_entities.csv: {len(_bent)} rows across '
+                  f'{_bent["split_index"].nunique()} splits')
         for a_ in arm:
             print(f'    split {a_["split"]}: VALID admitted {a_["entities"]} on train, '
                   f'{a_["k"]}/{a_["n_traded"]} persisted on test -> rate '

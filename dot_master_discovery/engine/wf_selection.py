@@ -330,6 +330,8 @@ def entity_persistence(train_trades, test_trades, key='signal_name'):
         tr = persistence_flags(train_trades[train_trades[key] == name]['pnl'].values)
         te = persistence_flags(test_trades[test_trades[key] == name]['pnl'].values)
         rows.append({'entity': name,
+                     'train_trades': int(len(train_trades[train_trades[key] == name])),
+                     'test_trades': int(len(test_trades[test_trades[key] == name])),
                      'train_net': round(tr['net'], 1), 'train_PF': round(tr['PF'], 3), 'train_WR': round(tr['WR'], 1),
                      'test_net': round(te['net'], 1), 'test_PF': round(te['PF'], 3), 'test_WR': round(te['WR'], 1),
                      'train_passes': tr['passes'], 'test_passes': te['passes'],
@@ -1014,6 +1016,7 @@ def book_arm_from_valid(df, cands, pool, anchor, ad, st, warmup, splits, build_b
             'VALID and Appendix A requires the null to run the IDENTICAL predicate, so a divergence '
             'in even one clause breaks the thing this stage exists to certify.')
 
+    entity_rows = []
     scored = _score_catalogue_once(df, cands, pool, anchor, ad, st, warmup, build_book_fn,
                                    run_portfolio_fn, conviction, gap_names, progress_factory,
                                    workers=workers, frame_path=frame_path)
@@ -1040,6 +1043,20 @@ def book_arm_from_valid(df, cands, pool, anchor, ad, st, warmup, splits, build_b
         tef = pd.concat(test_rows, ignore_index=True)
         frame = entity_persistence(trf, tef)
         rate, k, n = persistence_rate(frame)
+        for _j, fr_ in frame.iterrows():
+            sid = str(fr_.get('entity', ''))
+            parts = sid.split('|', 2)
+            entity_rows.append({
+                'split_index': int(sp.get('split_index', s_i)), 'signal_id': sid,
+                'family': parts[0] if parts else '', 'direction': parts[2] if len(parts) > 2 else '',
+                'train_trades': fr_.get('train_trades', ''), 'train_net': fr_.get('train_net', ''),
+                'train_PF': fr_.get('train_PF', ''), 'train_WR': fr_.get('train_WR', ''),
+                'test_trades': fr_.get('test_trades', ''), 'test_net': fr_.get('test_net', ''),
+                'test_PF': fr_.get('test_PF', ''), 'test_WR': fr_.get('test_WR', ''),
+                'admitted': True,
+                'traded_on_test': bool(fr_.get('test_traded', False)),
+                'persisted': bool(fr_.get('persists', False))})
         out.append({'split': s_i, 'rate': rate, 'k': k, 'n_traded': n,
                     'entities': int(len(frame)), 'note': ''})
+    book_arm_from_valid.last_entities = pd.DataFrame(entity_rows)
     return out
