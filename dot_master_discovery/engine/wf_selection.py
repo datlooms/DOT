@@ -690,6 +690,55 @@ def assert_split_shape(splits):
     return True
 
 
+def _slice_rec(rec, mask, name):
+    return pd.DataFrame({'signal_name': name,
+                         'entry_bar': rec['entry_bar'][mask],
+                         'exit_time': rec['exit_time'][mask],
+                         'pnl': rec['pnl'][mask]})
+
+
+def _score_catalogue_once(df, cands, pool, anchor, ad, st, warmup, build_book_fn,
+                          run_portfolio_fn, conviction, gap_names, progress_factory):
+    """REDUNDANCY REMOVED: score each candidate ONCE, not once per split.
+
+    run_portfolio was called on the FULL FRAME inside the split loop, so every
+    candidate was scored three times and produced the IDENTICAL trade frame each
+    time - only the bar-range slice differed. On the real pool that is 39,308 x 3
+    = 117,924 portfolio runs where 39,308 suffice: a 3x saving before any
+    parallelism, and larger than parallelism would have given on the redundant
+    version. Only the compact arrays the downstream needs are retained, so the
+    cache does not hold 39,308 DataFrames.
+    """
+    scored = {}
+    _pg = progress_factory('S5C scoring catalogue ONCE (was once per split)',
+                           len(cands)) if progress_factory else None
+    if _pg is not None:
+        _pg.__enter__()
+    for _i, cr in cands.iterrows():
+        if _pg is not None:
+            _pg.step(1, extra=f'{len(scored)} scored')
+        fam = str(cr.get('family', ''))
+        sig = str(cr.get('signal_def', ''))
+        direction = str(cr.get('direction', 'LONG')).upper()
+        one = pd.DataFrame([{'trigger': fam, 'family': fam, 'direction': direction,
+                             'signal_def': sig}])
+        try:
+            sg = build_book_fn(df, pool, anchor, one, adaptive=ad, structural=st)
+            td = run_portfolio_fn(df, sg, adaptive=ad, structural=st, warmup=warmup,
+                                  verbose=False, conviction=conviction)
+        except SystemExit:
+            continue
+        if len(gap_names):
+            td = td[~td['signal_name'].isin(gap_names)]
+        scored[f'{fam}|{sig}|{direction}'] = {
+            'entry_bar': np.asarray(td['entry_bar'].values, dtype=np.int64),
+            'exit_time': np.asarray(td['exit_time'].astype(str).values, dtype=object),
+            'pnl': np.asarray(td['pnl'].values, dtype=float)}
+    if _pg is not None:
+        _pg.__exit__(None, None, None)
+    return scored
+
+
 def book_arm_from_valid(df, cands, pool, anchor, ad, st, warmup, splits, build_book_fn,
                         run_portfolio_fn, evaluate_valid_fn, bar_day, conviction=None,
                         gap_names=(), progress_factory=None):
@@ -708,43 +757,24 @@ def book_arm_from_valid(df, cands, pool, anchor, ad, st, warmup, splits, build_b
             'V3b VARIANT while the catalogue and the null apply the specified one. Item 17 certifies '
             'VALID and Appendix A requires the null to run the IDENTICAL predicate, so a divergence '
             'in even one clause breaks the thing this stage exists to certify.')
+
+    scored = _score_catalogue_once(df, cands, pool, anchor, ad, st, warmup, build_book_fn,
+                                   run_portfolio_fn, conviction, gap_names, progress_factory)
     out = []
     for s_i, sp in enumerate(splits):
         tr_lo, tr_hi = int(sp['train_first_bar']), int(sp['train_last_bar'])
         te_lo, te_hi = int(sp['test_first_bar']), int(sp['test_last_bar'])
         train_rows, test_rows = [], []
-        _pg = progress_factory(f'S5C split {s_i} VALID pass over training catalogue',
-                               len(cands)) if progress_factory else None
-        if _pg is not None:
-            _pg.__enter__()
-        for _i, cr in cands.iterrows():
-            if _pg is not None:
-                _pg.step(1, extra=f'{len(train_rows)} admitted')
-            fam = str(cr.get('family', ''))
-            sig = str(cr.get('signal_def', ''))
-            direction = str(cr.get('direction', 'LONG')).upper()
-            one = pd.DataFrame([{'trigger': fam, 'family': fam, 'direction': direction,
-                                 'signal_def': sig}])
-            try:
-                sg = build_book_fn(df, pool, anchor, one, adaptive=ad, structural=st)
-                td = run_portfolio_fn(df, sg, adaptive=ad, structural=st, warmup=warmup,
-                                      verbose=False, conviction=conviction)
-            except SystemExit:
-                continue
-            if len(gap_names):
-                td = td[~td['signal_name'].isin(gap_names)]
-            eb = np.asarray(td['entry_bar'].values, dtype=np.int64)
-            tr_t = td[(eb >= tr_lo) & (eb <= tr_hi)]
-            te_t = td[(eb >= te_lo) & (eb <= te_hi)]
+        for name, rec in scored.items():
+            eb = rec['entry_bar']
+            trm = (eb >= tr_lo) & (eb <= tr_hi)
+            tem = (eb >= te_lo) & (eb <= te_hi)
+            tr_t = _slice_rec(rec, trm, name)
             verdict, _reason, _stats = evaluate_valid_fn(tr_t, bar_day)
             if verdict != 'VALID':
                 continue
-            name = f'{fam}|{sig}|{direction}'
-            tr_t = tr_t.copy(); tr_t['signal_name'] = name
-            te_t = te_t.copy(); te_t['signal_name'] = name
-            train_rows.append(tr_t); test_rows.append(te_t)
-        if _pg is not None:
-            _pg.__exit__(None, None, None)
+            train_rows.append(tr_t)
+            test_rows.append(_slice_rec(rec, tem, name))
         if not train_rows:
             out.append({'split': s_i, 'rate': float('nan'), 'k': 0, 'n_traded': 0,
                         'entities': 0, 'note': 'VALID admitted no signal on this training segment'})

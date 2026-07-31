@@ -569,7 +569,7 @@ def lexicographic_rank(candidates):
     return tier, feasible
 
 
-PAIR_EXHAUSTIVE_MAX = 20000
+PAIR_EXHAUSTIVE_MAX = 5000
 PAIR_SAMPLE_K = 5000
 PAIR_SAMPLE_SEED = 20260724
 _PAIR_CTX = {}

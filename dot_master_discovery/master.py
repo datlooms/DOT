@@ -398,6 +398,7 @@ def _score(df, sigs, ad, st, w, conv, want_trades=False):
 
 def s7_contenders(df, ad, st, w, sigs, out, input_sha):
     import conviction as C
+    import runlog as rl
     contenders = os.path.join(out, 'contenders')
     os.makedirs(contenders, exist_ok=True)
     variants = [
@@ -409,8 +410,13 @@ def s7_contenders(df, ad, st, w, sigs, out, input_sha):
         ('C5', 'sizing variant (conviction-off, gaps-on)', C.build_conviction(df, False, False, True, d2d_conviction=False, d2d_gap=True)),
     ]
     rows, prev = [], 0
+    _sc = {}
+    with rl.Progress('S7 six portfolio scores', len(variants)) as _p7:
+        for cid, label, conv in variants:
+            _sc[cid] = _score(df, sigs, ad, st, w, conv)
+            _p7.step(1, extra=cid)
     for cid, label, conv in variants:
-        r = _score(df, sigs, ad, st, w, conv)
+        r = _sc[cid]
         r['id'] = cid
         r['contender'] = label
         r['delta'] = r['net'] - prev if cid != 'C5' else r['net'] - rows[0]['net']
@@ -732,6 +738,7 @@ def s2b_terrain(df, w, out, input_sha, attest):
 
 # ── S3B PER-FAMILY EVIDENCE REVIEW (spec A.1-A.5) + D2D GATE MEASUREMENT (spec E.1) ──
 def s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest):
+    import runlog as rl
     import cluster_profiler as cp
     import family_evidence as fe
     import portfolio_simulation_engine as engine
@@ -755,13 +762,17 @@ def s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha, 
     d2d_orig = df['D2D_Trend_Dir'].values.copy()
     d2d_rows = []
     executed = None
+    _p6 = rl.Progress('S3B D2D variants', len(variants))
+    _p6.__enter__()
     for vname, vcol, vdesc in variants:
+        _p6.step(1, extra=vname)
         df['D2D_Trend_Dir'] = vcol
         try:
             td = engine.run_portfolio(df, sigs, adaptive=ad, structural=st, warmup=w,
                                       verbose=False, conviction=conv)
         finally:
             df['D2D_Trend_Dir'] = d2d_orig
+            _p6.__exit__(None, None, None)
         if vname == 'baseline_gate_on':
             executed = td
         bkv = td[~td['signal_name'].isin(cp.GAP_NAMES)]
