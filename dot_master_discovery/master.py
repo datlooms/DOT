@@ -866,6 +866,7 @@ def run_diagnostic_families(results_dir, workers, input_sha, df=None):
               f'{", ".join(produced) if produced else "NONE"}')
         print('  [F12] provenance stamped on THOSE FILES ONLY — never by pattern match on whatever '
               'happens to be on disk, which would launder a stale artifact from another dataset')
+    emit_regime_labels(df, results_dir, out, input_sha)
 
 
 _TERRAIN = {}
@@ -936,6 +937,57 @@ def s2b_terrain(df, w, out, input_sha, attest):
 
 
 # ── S3B PER-FAMILY EVIDENCE REVIEW (spec A.1-A.5) + D2D GATE MEASUREMENT (spec E.1) ──
+def emit_regime_labels(df, results_dir, out, input_sha):
+    """Derive regime_labels.csv from concurrence_depth_bars.csv. NO F12 RE-RUN.
+
+    THE LABELS ARE NOT DISCARDED. compute_regime_labels() puts lab_desc and
+    lab_causal into ctx, and F12 ALREADY WRITES BOTH PER BAR to
+    concurrence_depth_bars.csv as the columns `regime` (= lab_desc) and
+    `regime_causal` (= lab_causal), keyed on Time. The regime axis has been
+    measurable all along.
+
+    What that file lacks is a BAR INDEX to join on and any statement of which
+    column is which, so this emits a companion carrying both. It reads the
+    existing artifact, so it costs seconds and does NOT re-run F12 - 35:50 last
+    time - and touches nothing upstream.
+
+    concurrence_profiler.py is one of Appendix D's byte-locked modules and is NOT
+    edited: this reads its output, it does not change how that output is made.
+    """
+    src = os.path.join(results_dir, 'concurrence_depth_bars.csv')
+    if not os.path.exists(src):
+        print('  regime_labels.csv NOT written: concurrence_depth_bars.csv is absent, so F12 has '
+              'not produced the per-bar labels yet.')
+        return None
+    d = pd.read_csv(src, comment='#')
+    idx = {str(t): i for i, t in enumerate(df['Time'].astype(str).values)}
+    lab = pd.DataFrame({
+        'bar_index': [idx.get(str(t), -1) for t in d['Time'].astype(str).values],
+        'time': d['Time'].astype(str).values,
+        'lab_causal': d['regime_causal'].values,
+        'lab_desc': d['regime'].values})
+    n_causal = int(len([x for x in pd.unique(lab['lab_causal']) if x >= 0]))
+    n_desc = int(len(pd.unique(lab['lab_desc'])))
+    unlabelled = int((lab['lab_causal'] == -1).sum())
+    _write_with_header(os.path.join(out, 'regime_labels.csv'), lab, [
+        'DOT per-bar REGIME LABELS - derived from F12 concurrence_depth_bars.csv, not recomputed',
+        'rows=%d of %d frame bars (%.1f%%); the shortfall is pre-warmup bars F12 does not label'
+        % (len(lab), len(df), 100.0 * len(lab) / max(len(df), 1)),
+        'n_causal=%d clusters | n_desc=%d clusters | lab_causal == -1 on %d burn-in bars'
+        % (n_causal, n_desc, unlabelled),
+        'lab_causal is FORWARD-ONLY (burn-in fit, no future information) and is THE ONLY LABEL '
+        'THAT MAY GATE AN ENTRY.',
+        'lab_desc is FULL-SAMPLE and DESCRIPTIVE ONLY. IT MUST NEVER GATE ANYTHING: it is fitted '
+        'over the whole span including bars after the entry it would label, so using it to select '
+        'or filter is look-ahead.',
+        'Join on bar_index (entry_bar) or on time. This exists because '
+        'concurrence_depth_bars.csv carries the same two label columns keyed only on Time, with '
+        'no bar index and no statement of which column is causal.'])
+    print('  regime_labels.csv: %d rows | n_causal=%d n_desc=%d | %d burn-in bars unlabelled'
+          % (len(lab), n_causal, n_desc, unlabelled))
+    return {'rows': len(lab), 'n_causal': n_causal, 'n_desc': n_desc}
+
+
 def s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest):
     import runlog as rl
     import cluster_profiler as cp
