@@ -777,6 +777,13 @@ def s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha, 
     d2d_orig = df['D2D_Trend_Dir'].values.copy()
     d2d_rows = []
     executed = None
+    # ITEM 6 CLOSED ON THE RECORD - DO NOT PARALLELISE THIS LOOP.
+    # Each iteration assigns df['D2D_Trend_Dir'] = vcol on the SHARED frame and FrameGuard
+    # restores it afterwards, so the four variants are a sequential dependency on mutable
+    # shared state, not independent work. Distributing them would need a private frame per
+    # worker for four iterations - the cost of the copy exceeds the work. This is a measured
+    # structural reason, recorded here so no future turn re-opens it and no future reader
+    # wonders why one loop in the package is deliberately serial.
     _p6 = rl.Progress('S3B D2D variants', len(variants))
     _p6.__enter__()
     for vname, vcol, vdesc in variants:
@@ -1944,7 +1951,9 @@ def s5c_walk_forward(df, ad, st, w, pool, anchor, book_file, out, input_sha, att
                                       cat2.evaluate_valid,
                                       pd.Series(df['Time'].astype(str).values).str[:10].values,
                                       conviction=conv_wf, gap_names=cp.GAP_NAMES,
-                                      progress_factory=rl.Progress)
+                                      progress_factory=rl.Progress,
+                                      workers=int(os.environ.get('DOT_WORKERS', '1')),
+                                      frame_path=os.environ.get('DOT_FRAME_PATH'))
         book_rates = [a_['rate'] for a_ in arm]
         for a_ in arm:
             print(f'    split {a_["split"]}: VALID admitted {a_["entities"]} on train, '

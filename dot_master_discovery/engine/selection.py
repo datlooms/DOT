@@ -704,6 +704,13 @@ def greedy_direction(direction, candidate_ids, gain_fn, constraint_fn,
             return g
     selected = []
     log = []
+    # ITEM 2 CLOSED ON MEASUREMENT - DO NOT PARALLELISE THIS HEAP BUILD.
+    # The calls ARE independent, but measured at 1.000 ms/candidate on full-frame bar counts
+    # the whole build is ~20.1s at 20,077 candidates, while a spawned worker costs ~40s of
+    # frame+oracle startup EACH: 14 workers is ~560s of startup against 20.1s of work.
+    # REDUNDANCY READ: with selected=[] the prefix is empty, so each call is one depth_yield
+    # over a single candidate's bars - nothing is recomputed across iterations and there is no
+    # invariant to hoist. Closed on evidence, not deferred.
     heap = []
     for _bi, cid in enumerate(candidate_ids, start=1):
         heap.append([-gain_fn(direction, selected, cid), cid, 0])

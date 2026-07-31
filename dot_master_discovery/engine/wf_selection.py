@@ -44,6 +44,7 @@ import math
 import os
 import time
 
+import os
 import numpy as np
 import pandas as pd
 
@@ -690,6 +691,77 @@ def assert_split_shape(splits):
     return True
 
 
+_WF_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_WF_CTX = {}
+
+
+def _wf_init(frame_path):
+    """Runs INSIDE each spawned worker. THE HOIST IS THE POINT.
+
+    REDUNDANCY READ FIRST: build_book_fn and run_portfolio_fn are called once per
+    candidate with the SAME df, pool, anchor, adaptive, structural, warmup and
+    conviction. None of that varies per candidate, so all of it is built ONCE per
+    worker here and reused across its whole chunk. Only the one-row book and the
+    portfolio run are genuinely per-candidate. That is the same hoist that gave
+    2x on the _dy prefix cache and 3x on scoring the catalogue once instead of
+    once per split.
+    """
+    import sys as _s
+    for _d in ('engine', 'scanners', 'orchestrator', '.'):
+        _p = os.path.join(_WF_ROOT, _d)
+        if _p not in _s.path:
+            _s.path.insert(0, _p)
+    import pandas as _pd
+    import dots_thresholds as _dt
+    import portfolio_simulation_engine as _eng
+    import sequential_temporal as _seq
+    import conviction as _C
+    df = _pd.read_csv(frame_path)
+    w = _eng.warmup_floor(df, verbose=False)
+    ad = _dt.compute_adaptive_thresholds(df)
+    st = _dt.compute_structural_gates(df)
+    _WF_CTX.update({'df': df, 'w': w, 'ad': ad, 'st': st,
+                    'pool': _seq.build_condition_pool(df, ad, st, w),
+                    'anchor': _seq.anchor_array(df, 'ST_Flip'),
+                    'conv': _C.build_conviction(df, True, True, True, d2d_conviction=True,
+                                                d2d_gap=True)})
+
+
+def _wf_score_chunk(payload):
+    """Return ONLY the three arrays the caller keeps, never the DataFrame.
+
+    The serial loop already discards td and retains entry_bar/exit_time/pnl, so
+    the worker performs the identical reduction. Returning the frame is what
+    defeated the first S5D attempt; there is no round-trip here to get wrong.
+    Results carry their chunk index so the parent can merge deterministically.
+    """
+    idx, items, gap_names = payload
+    import numpy as _np
+    import pandas as _pd
+    import score_g as _sg
+    import portfolio_simulation_engine as _eng
+    c = _WF_CTX
+    out = []
+    for fam, sig, direction in items:
+        one = _pd.DataFrame([{'trigger': fam, 'family': fam, 'direction': direction,
+                              'signal_def': sig}])
+        try:
+            sg = _sg.build_book(c['df'], c['pool'], c['anchor'], one,
+                                adaptive=c['ad'], structural=c['st'])
+            td = _eng.run_portfolio(c['df'], sg, adaptive=c['ad'], structural=c['st'],
+                                    warmup=c['w'], verbose=False, conviction=c['conv'])
+        except SystemExit as _e:
+            out.append((f'{fam}|{sig}|{direction}', None, None, None, str(_e)[:120]))
+            continue
+        if len(gap_names):
+            td = td[~td['signal_name'].isin(gap_names)]
+        out.append((f'{fam}|{sig}|{direction}',
+                    _np.asarray(td['entry_bar'].values, dtype=_np.int64),
+                    _np.asarray(td['exit_time'].astype(str).values, dtype=object),
+                    _np.asarray(td['pnl'].values, dtype=float), None))
+    return idx, out
+
+
 def _slice_rec(rec, mask, name):
     return pd.DataFrame({'signal_name': name,
                          'entry_bar': rec['entry_bar'][mask],
@@ -698,7 +770,8 @@ def _slice_rec(rec, mask, name):
 
 
 def _score_catalogue_once(df, cands, pool, anchor, ad, st, warmup, build_book_fn,
-                          run_portfolio_fn, conviction, gap_names, progress_factory):
+                          run_portfolio_fn, conviction, gap_names, progress_factory,
+                          workers=1, frame_path=None):
     """REDUNDANCY REMOVED: score each candidate ONCE, not once per split.
 
     run_portfolio was called on the FULL FRAME inside the split loop, so every
@@ -709,39 +782,63 @@ def _score_catalogue_once(df, cands, pool, anchor, ad, st, warmup, build_book_fn
     version. Only the compact arrays the downstream needs are retained, so the
     cache does not hold 39,308 DataFrames.
     """
+    items = [(str(cr.get('family', '')), str(cr.get('signal_def', '')),
+              str(cr.get('direction', 'LONG')).upper()) for _i, cr in cands.iterrows()]
     scored = {}
-    _pg = progress_factory('S5C scoring catalogue ONCE (was once per split)',
-                           len(cands)) if progress_factory else None
+    skipped = []
+    n = len(items)
+    use_pool = bool(workers and workers > 1 and frame_path and n >= 32)
+    label = (f'S5C scoring catalogue ONCE ({workers} workers)' if use_pool
+             else 'S5C scoring catalogue ONCE (serial)')
+    _pg = progress_factory(label, n if not use_pool else 0) if progress_factory else None
     if _pg is not None:
         _pg.__enter__()
-    for _i, cr in cands.iterrows():
-        if _pg is not None:
-            _pg.step(1, extra=f'{len(scored)} scored')
-        fam = str(cr.get('family', ''))
-        sig = str(cr.get('signal_def', ''))
-        direction = str(cr.get('direction', 'LONG')).upper()
-        one = pd.DataFrame([{'trigger': fam, 'family': fam, 'direction': direction,
-                             'signal_def': sig}])
-        try:
-            sg = build_book_fn(df, pool, anchor, one, adaptive=ad, structural=st)
-            td = run_portfolio_fn(df, sg, adaptive=ad, structural=st, warmup=warmup,
-                                  verbose=False, conviction=conviction)
-        except SystemExit:
-            continue
-        if len(gap_names):
-            td = td[~td['signal_name'].isin(gap_names)]
-        scored[f'{fam}|{sig}|{direction}'] = {
-            'entry_bar': np.asarray(td['entry_bar'].values, dtype=np.int64),
-            'exit_time': np.asarray(td['exit_time'].astype(str).values, dtype=object),
-            'pnl': np.asarray(td['pnl'].values, dtype=float)}
+    if not use_pool:
+        _WF_CTX.update({'df': df, 'w': warmup, 'ad': ad, 'st': st, 'pool': pool,
+                        'anchor': anchor, 'conv': conviction})
+        for it in items:
+            _i2, part = _wf_score_chunk((0, [it], gap_names))
+            for key, eb, et, pn, err in part:
+                if err is not None:
+                    skipped.append((key, err))
+                else:
+                    scored[key] = {'entry_bar': eb, 'exit_time': et, 'pnl': pn}
+            if _pg is not None:
+                _pg.step(1, extra=f'{len(scored)} scored')
+    else:
+        import multiprocessing as _mp
+        from concurrent.futures import ProcessPoolExecutor
+        size = max(1, -(-n // (int(workers) * 4)))
+        chunks = [(k, items[i:i + size], gap_names)
+                  for k, i in enumerate(range(0, n, size))]
+        got = {}
+        with ProcessPoolExecutor(max_workers=min(int(workers), len(chunks)),
+                                 mp_context=_mp.get_context('spawn'),
+                                 initializer=_wf_init, initargs=(frame_path,)) as ex:
+            for idx, part in ex.map(_wf_score_chunk, chunks):
+                got[idx] = part
+                if _pg is not None:
+                    _pg.step(1, extra=f'chunk {idx + 1}/{len(chunks)}')
+        for k, _c, _g in chunks:
+            for key, eb, et, pn, err in got[k]:
+                if err is not None:
+                    skipped.append((key, err))
+                else:
+                    scored[key] = {'entry_bar': eb, 'exit_time': et, 'pnl': pn}
     if _pg is not None:
         _pg.__exit__(None, None, None)
+    print(f'  S5C catalogue scored: {len(scored)} of {n} candidates'
+          + (f' | {len(skipped)} SKIPPED (build_book could not reconstruct the mask): '
+             f'{sorted(set(e for _k, e in skipped))[:2]}' if skipped else
+             ' | 0 skipped')
+          + '. A silently smaller population is the failure shape this project has met most '
+            'often, so the count is printed whether or not any were dropped.', flush=True)
     return scored
 
 
 def book_arm_from_valid(df, cands, pool, anchor, ad, st, warmup, splits, build_book_fn,
                         run_portfolio_fn, evaluate_valid_fn, bar_day, conviction=None,
-                        gap_names=(), progress_factory=None):
+                        gap_names=(), progress_factory=None, workers=1, frame_path=None):
     """Item 17: per split, apply VALID on the TRAINING SEGMENT ALONE, score on TEST.
 
     IT CERTIFIES THE CATALOGUE'S INCLUSION RULE, NOT ANY BOOK. The entities are
@@ -759,7 +856,8 @@ def book_arm_from_valid(df, cands, pool, anchor, ad, st, warmup, splits, build_b
             'in even one clause breaks the thing this stage exists to certify.')
 
     scored = _score_catalogue_once(df, cands, pool, anchor, ad, st, warmup, build_book_fn,
-                                   run_portfolio_fn, conviction, gap_names, progress_factory)
+                                   run_portfolio_fn, conviction, gap_names, progress_factory,
+                                   workers=workers, frame_path=frame_path)
     out = []
     for s_i, sp in enumerate(splits):
         tr_lo, tr_hi = int(sp['train_first_bar']), int(sp['train_last_bar'])
