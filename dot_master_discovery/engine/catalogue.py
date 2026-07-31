@@ -538,3 +538,157 @@ def assert_episode_thresholds_mechanism_d(root, thr, mcol, ecol, k_tag, e_tag):
                 f'broadcast over the span is a span-wide cut and the file lock cannot see it.')
     return {'modules_verified': len(MECHANISM_D_LOCKS), 'k_col': mcol, 'e_col': ecol,
             'basis': 'mechanism D, rolling-2500, day-refreshed, per-bar arrays'}
+
+
+SESSION_KEYS = ('overnight', 'europe_premkt', 'preopen', 'ny_open', 'morning',
+                'lunch_lull', 'preclose', 'postclose')
+_SESSION_SLUG = {'overnight': 'overnight', 'europe/pre-mkt': 'europe_premkt',
+                 'pre-open': 'preopen', 'ny-open': 'ny_open', 'morning': 'morning',
+                 'lunch-lull': 'lunch_lull', 'pre-close': 'preclose', 'post-close': 'postclose'}
+
+VAR_STRUCTURE = {
+    'ADX_Rising': 'TREND_EXHAUSTION',
+    'ADX_Value': 'MOMENTUM_IGNITION',
+    'AT_Lookback_ST': 'BREAKOUT_EXPANSION',
+    'AT_Regime_LT': 'MOMENTUM_IGNITION',
+    'AT_Regime_ST': 'PRICE_ACTION',
+    'AT_Slope_ST': 'TREND_CONTINUATION',
+    'Bar_Range': 'BREAKOUT_EXPANSION',
+    'Bars_Since_Flip': 'STRUCTURAL_ENTRY',
+    'Body_Size': 'MOMENTUM_IGNITION',
+    'D2D_ATR': 'BREAKOUT_EXPANSION',
+    'D2D_ATR_MA': 'BREAKOUT_EXPANSION',
+    'D2D_DirStep': 'TREND_CONTINUATION',
+    'D2D_Dynamic_Sensitivity': 'STRUCTURAL_ENTRY',
+    'D2D_Signal': 'STRUCTURAL_ENTRY',
+    'DailyOpen_Side': 'STRUCTURAL_ENTRY',
+    'EMA_Oscillator': 'MOMENTUM_IGNITION',
+    'Efficiency_Ratio': 'MOMENTUM_IGNITION',
+    'KAMA_Dist': 'MOMENTUM_IGNITION',
+    'Micro_AutoCorr': 'TREND_CONTINUATION',
+    'Micro_BarEntropy': 'MOMENTUM_IGNITION',
+    'Micro_CSSpread': 'TREND_CONTINUATION',
+    'Micro_Entropy': 'PRICE_ACTION',
+    'Micro_HLAsymmetry': 'TREND_CONTINUATION',
+    'Micro_Hurst': 'MOMENTUM_IGNITION',
+    'Micro_IBSP': 'MOMENTUM_IGNITION',
+    'Micro_Lambda': 'MOMENTUM_IGNITION',
+    'Micro_LogReturn': 'MOMENTUM_IGNITION',
+    'Micro_MicroGap': 'TREND_CONTINUATION',
+    'Micro_MomoTransfer': 'MOMENTUM_IGNITION',
+    'Micro_OrderFlowDelta': 'TREND_CONTINUATION',
+    'Micro_RangeAccel': 'MOMENTUM_IGNITION',
+    'Micro_RangeVelocity': 'TREND_CONTINUATION',
+    'Micro_Rejection': 'TREND_CONTINUATION',
+    'Micro_RollProxy': 'MOMENTUM_IGNITION',
+    'Micro_ThrustEff': 'TREND_CONTINUATION',
+    'Micro_TickIntensity': 'BREAKOUT_EXPANSION',
+    'Micro_VPIN': 'MOMENTUM_IGNITION',
+    'Micro_VolAccel': 'MOMENTUM_IGNITION',
+    'Micro_VolOfVol': 'BREAKOUT_EXPANSION',
+    'Micro_WickImbalance': 'MOMENTUM_IGNITION',
+    'Momentum_Value': 'TREND_CONTINUATION',
+    'OBV_Macd': 'MOMENTUM_IGNITION',
+    'OBVf_DirStepCount': 'MOMENTUM_IGNITION',
+    'OR_High_Side': 'MOMENTUM_IGNITION',
+    'OR_Low_Side': 'PRICE_ACTION',
+    'PoC_Side': 'TREND_CONTINUATION',
+    'PrevDay_High_Side': 'MOMENTUM_IGNITION',
+    'PrevDay_Low_Dist_ATR': 'STRUCTURAL_ENTRY',
+    'PrevDay_Low_Side': 'TREND_CONTINUATION',
+    'RangeOsc_State': 'TREND_CONTINUATION',
+    'Round_500_Dist_ATR': 'STRUCTURAL_ENTRY',
+    'ST_Flip_Event': 'MOMENTUM_IGNITION',
+    'Session_Low_Dist_ATR': 'TREND_CONTINUATION',
+    'Slope_Accel_LT': 'TREND_CONTINUATION',
+    'Slope_EMA_ST': 'TREND_CONTINUATION',
+    'Sqz_State': 'TREND_CONTINUATION',
+    'Sqz_Val': 'TREND_CONTINUATION',
+    'Upper_Wick': 'TREND_CONTINUATION',
+    'VAH_Side': 'STRUCTURAL_ENTRY',
+    'VAL_Side': 'MOMENTUM_IGNITION',
+    'VWAP_Dist_ATR': 'STRUCTURAL_ENTRY',
+    'VWAP_Side': 'STRUCTURAL_ENTRY',
+    'VWAP_Sigma': 'MOMENTUM_IGNITION',
+    'VWAP_Z': 'MOMENTUM_IGNITION',
+    'Volume': 'MOMENTUM_IGNITION',
+    'Volume_Avg_10': 'STRUCTURAL_ENTRY',
+    'Volume_Ratio_10': 'VOLUME_CONFIRMED',
+    'WeeklyOpen_Side': 'MOMENTUM_IGNITION',
+}
+
+
+def structure_of(signal_def):
+    """PRIMARY and SECONDARY market structure for a signal_def.
+
+    VAR_STRUCTURE IS DERIVED, NOT INVENTED: every entry is the majority vote of
+    the structures BOOK-50's own dictionary rows assign to signals containing
+    that variable, read from the 'Pattern (variables + thresholds)' column of
+    DOT_signal_dictionary.xlsx across all 50 rows. Deriving a mapping from the
+    category LABELS instead is how s4_unify and s6_regenerate were invented for
+    functions that did not exist.
+
+    PRIMARY is the structure with the most variables in the triple; ties break
+    on the FIRST variable's structure, so the rule is deterministic and does not
+    depend on dict ordering. A variable no BOOK-50 signal uses returns UNMAPPED
+    rather than being forced into the nearest category.
+    """
+    import re as _re
+    vs = _re.findall(r'([A-Za-z_][A-Za-z0-9_]*)\s*:', str(signal_def))
+    hits = [VAR_STRUCTURE.get(v) for v in vs]
+    named = [h for h in hits if h]
+    if not named:
+        return 'UNMAPPED', ''
+    counts = {}
+    for h in named:
+        counts[h] = counts.get(h, 0) + 1
+    top = max(counts.values())
+    lead = [h for h in hits if h and counts[h] == top]
+    primary = lead[0]
+    rest = [h for h in named if h != primary]
+    secondary = rest[0] if rest else ''
+    return primary, secondary
+
+
+def session_profile(entry_bars, est_hour, session_of):
+    """Share of a signal's entries in each of the eight terrain sessions.
+
+    Uses terrain.session_of, THE SAME MAPPING terrain_hour_profile.csv uses. It
+    is passed in rather than reimplemented so the two files cannot disagree.
+    """
+    import numpy as _np
+    out = {f'session_{k}_pct': 0.0 for k in SESSION_KEYS}
+    b = _np.asarray(entry_bars, dtype=_np.int64)
+    if b.size == 0:
+        return out, ''
+    counts = {}
+    for h in _np.asarray(est_hour)[b]:
+        slug = _SESSION_SLUG.get(session_of(int(h)), 'overnight')
+        counts[slug] = counts.get(slug, 0) + 1
+    for k, v in counts.items():
+        out[f'session_{k}_pct'] = round(100.0 * v / b.size, 3)
+    modal = max(counts, key=lambda k: (counts[k], k)) if counts else ''
+    return out, modal
+
+
+def regime_profile(entry_bars, lab_causal):
+    """Share of entries in each CAUSAL regime. lab_desc is never used here.
+
+    lab_desc is full-sample and would characterise a tradeable signal using bars
+    after the entry, which is look-ahead. Bars where lab_causal == -1 are burn-in
+    and are reported as their own share rather than dropped.
+    """
+    import numpy as _np
+    out = {'regime_causal_0_pct': 0.0, 'regime_causal_1_pct': 0.0, 'regime_burnin_pct': 0.0}
+    b = _np.asarray(entry_bars, dtype=_np.int64)
+    if b.size == 0 or lab_causal is None:
+        return out, ''
+    lab = _np.asarray(lab_causal)
+    v = lab[_np.clip(b, 0, len(lab) - 1)]
+    n = float(len(v))
+    c0 = int((v == 0).sum()); c1 = int((v == 1).sum()); cb = int((v < 0).sum())
+    out['regime_causal_0_pct'] = round(100.0 * c0 / n, 3)
+    out['regime_causal_1_pct'] = round(100.0 * c1 / n, 3)
+    out['regime_burnin_pct'] = round(100.0 * cb / n, 3)
+    modal = {'regime_causal_0': c0, 'regime_causal_1': c1, 'regime_burnin': cb}
+    return out, max(modal, key=lambda k: (modal[k], k))

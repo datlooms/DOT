@@ -1188,12 +1188,14 @@ def _s5d_score_chunk(payload):
             out.append((fam, sig, dr, None, None, None, None))
             continue
         verdict, reason, stx = cat.evaluate_valid(td, c['bar_day'])
-        bars = fold = gated = None
+        bars = fold = gated = pnl_a = None
         if verdict == 'VALID':
             bars = np.asarray(td['entry_bar'].values, dtype=np.int64)
             fold = cat.segment_fold_stats(td)
             gated = cat.gated_arm(td, c['gate_ok'])
-        out.append((fam, sig, dr, verdict, reason, stx, bars, fold, gated))
+            pnl_a = np.asarray(td['pnl'].values, dtype=float)
+        out.append((fam, sig, dr, verdict, reason, stx, bars, fold, gated,
+                    pnl_a if verdict == 'VALID' else None))
     return idx, out
 
 
@@ -1258,7 +1260,7 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
         return None
     cat_dir_chk = os.path.join(out, 'catalogues')
     _s5d_ok, _s5d_missing = _artifacts_present(os.path.join(out, 'catalogues'), [
-        'unclaimed_reachable.csv', 'same_bar_cohort.csv',
+        'unclaimed_reachable.csv', 'same_bar_cohort.csv', 'cohort_scored.csv',
         'dilution_curve_agg_pf.csv', 'dilution_curve_EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF.csv'])
     _s5d_cats = (os.path.isdir(cat_dir_chk)
                  and any(f.startswith('catalogue_') for f in os.listdir(cat_dir_chk)))
@@ -1299,6 +1301,20 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
     gate_ok = np.flatnonzero((df['Hurst'].values >= hurst_hi) if hurst_hi is not None
                              else np.ones(n, dtype=bool)).astype(np.int64)
     conv = C.build_conviction(df, True, True, True, d2d_conviction=True, d2d_gap=True)
+    _lab_causal = None
+    _rl_path = os.path.join(out, 'regime_labels.csv')
+    if os.path.exists(_rl_path):
+        _rl = pd.read_csv(_rl_path, comment='#')
+        _lab_causal = np.full(n, -1, dtype=int)
+        _bi = np.asarray(_rl['bar_index'].values, dtype=np.int64)
+        _ok = (_bi >= 0) & (_bi < n)
+        _lab_causal[_bi[_ok]] = np.asarray(_rl['lab_causal'].values, dtype=int)[_ok]
+        print(f'  regime axis: joined {int(_ok.sum())} labelled bars from regime_labels.csv '
+              f'(lab_causal ONLY - lab_desc is full-sample and must never characterise a '
+              f'tradeable signal)')
+    else:
+        print('  regime axis UNAVAILABLE: regime_labels.csv absent, regime_* columns will be '
+              'blank. Run --stage S3 first; it emits that file in seconds without re-scanning.')
     fam_fire_counts = {}
     for fam, g in cands.groupby('family'):
         fc = []
@@ -1312,6 +1328,7 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
         fam_fire_counts[fam] = fc
     per_family = {}
     entries_by_id, dirs_by_id, fams_by_id = {}, {}, {}
+    pnl_by_id = {}
     for fam, g in cands.groupby('family'):
         rows = []
         null_pfs, null_rate = [], 0.0
@@ -1321,7 +1338,7 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
                                   ctx={'df': df, 'w': w, 'ad': ad, 'st': st, 'pool': pool,
                                        'anchor': anchor, 'conv': conv, 'bar_day': bar_day,
                                        'gate_ok': gate_ok})
-        for _fam, sig, dr, verdict, reason, stx, bars_p, fold_p, gated_p in scored:
+        for _fam, sig, dr, verdict, reason, stx, bars_p, fold_p, gated_p, pnl_p in scored:
             if verdict is None:
                 continue
             sid = cat.signal_id(fam, sig, dr)
@@ -1332,6 +1349,7 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
             if verdict == 'VALID':
                 bars = np.asarray(bars_p, dtype=np.int64)
                 entries_by_id[sid] = bars
+                pnl_by_id[sid] = np.asarray(pnl_p, dtype=float)
                 dirs_by_id[sid] = d
                 fams_by_id[sid] = fam
                 tch = cat.touched_episodes(bars, d, cs)
@@ -1343,6 +1361,15 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
                 row['terrain_cell'] = f'W{W}/K{int(K*100)}/E{int(E*100)}'
                 row.update(fold_p)
                 row.update({f'gated_{k}': v for k, v in gated_p.items()})
+                _sp, _smod = cat.session_profile(bars, df['EST_Hour'].values, tr.session_of)
+                row.update(_sp)
+                row['session_modal'] = _smod
+                _rp, _rmod = cat.regime_profile(bars, _lab_causal)
+                row.update(_rp)
+                row['regime_modal'] = _rmod
+                _ps, _ss = cat.structure_of(sig)
+                row['market_structure'] = _ps
+                row['market_structure_secondary'] = _ss
                 row['gated_delta_net'] = (round(row['gated_net'] - stx.get('net', 0.0), 2)
                                           if row['gated_net'] != '' else '')
             rows.append(row)
@@ -1436,6 +1463,37 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
             for t in str(rr.get('touched_episode_ids', '')).split(';'):
                 if t:
                     n_valid_triples[int(t)] = n_valid_triples.get(int(t), 0) + 1
+    _prefilter_touch = {}
+    _dm = os.path.join(out, 'results', 'discovery_master.csv')
+    if os.path.exists(_dm):
+        _pre = pd.read_csv(_dm)
+        _spans_all = cat.episode_spans(cs)
+        _fire_cache = {}
+        _hits = 0
+        for _i2, _cr in _pre.iterrows():
+            _f, _sg = str(_cr.get('family', '')), str(_cr.get('signal_def', ''))
+            _k = (_f, _sg)
+            if _k not in _fire_cache:
+                try:
+                    _mk = score_g.family_mask(df, pool, _f, _sg, ad, st, anchor=anchor)
+                    _fire_cache[_k] = np.flatnonzero(np.asarray(_mk, dtype=bool))
+                except (Exception, SystemExit):
+                    _fire_cache[_k] = np.empty(0, dtype=np.int64)
+            _fb = _fire_cache[_k]
+            if _fb.size == 0:
+                continue
+            _hits += 1
+        for _eid, (_b0, _b1, _dd) in _spans_all.items():
+            _c = 0
+            for _k, _fb in _fire_cache.items():
+                if _fb.size and np.any((_fb >= _b0) & (_fb <= _b1)):
+                    _c += 1
+            _prefilter_touch[_eid] = _c
+        print(f'  prefilter touch: {len(_pre)} pre-filter candidates from discovery_master.csv, '
+              f'{_hits} with at least one firing bar, mapped over {len(_spans_all)} episodes')
+    else:
+        print('  prefilter touch UNAVAILABLE: results/discovery_master.csv absent; '
+              'n_prefilter_candidates_touching will read 0 for every episode.')
     unclaimed = []
     spans = cat.episode_spans(cs)
     claimed = {d: set() for d in (1, -1)}
@@ -1453,6 +1511,7 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
                               'n_conditions_firing': int(sum(1 for k in pool
                                                              if pool[k][b0:b1 + 1].any())),
                               'n_valid_triples_touching': n_valid_triples.get(eid, '' if not has_f0 else 0),
+                              'n_prefilter_candidates_touching': _prefilter_touch.get(eid, 0),
                               'population': 'MARKET'})
     uf = pd.DataFrame(unclaimed)
     _write_with_header(os.path.join(cat_dir, 'unclaimed_reachable.csv'), uf, [
@@ -1466,7 +1525,14 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
         'minus every episode claimed by any VALID signal, F0 included), so the count of VALID F0 '
         'triples touching it can only ever be 0. Verified by join: 192 distinct episodes are '
         'touched by the 1,818 VALID F0 rows, 2,092 episodes are unclaimed, INTERSECTION = 0.',
-        'THE SURVIVING DIAGNOSTIC IS n_conditions_firing. Separating SEARCH from GRAMMAR properly '
+        'n_prefilter_candidates_touching IS THE REAL DIAGNOSTIC AND IS NOT TAUTOLOGICAL: it counts '
+        'candidates from the FULL pre-filter pool (discovery_master.csv, before S5 cut on '
+        'trades>=30 & folds_plus>=4 & agg_pf>=2.0) whose firing bars fall inside the episode. A '
+        'HIGH count means the search DID find things there and the QUALITY FILTER cut them - a '
+        'QUALITY gap, reachable by loosening the filter. ZERO means nothing in the 249-condition '
+        'vocabulary expresses that episode at all - a GRAMMAR gap, not reachable without new '
+        'variables. That is the difference between headroom and a wall.',
+        'THE OLDER DIAGNOSTIC IS n_conditions_firing. Separating SEARCH from GRAMMAR properly '
         'needs the count of F0 triples that were SCANNED AND REJECTED over each episode, which '
         'the scan does not currently record - that is a change to S5D, not to this file.'])
     print(f'  UNCLAIMED REACHABLE: {len(uf)} episodes '
@@ -1479,6 +1545,57 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
         ent[d].extend(np.asarray(bars, dtype=np.int64).tolist())
         ids[d].extend([sid] * len(bars))
     cohort = cat.same_bar_cohort_table(ent, ids, fams_by_id)
+    _cohort_rows = []
+    _bkall = {}
+    for _sid, _bb in entries_by_id.items():
+        for _b in np.asarray(_bb, dtype=np.int64).tolist():
+            _bkall.setdefault((dirs_by_id[_sid], int(_b)), set()).add(_sid)
+    _pnl_by_bar = {}
+    for _sid, _pl in pnl_by_id.items():
+        _bb = np.asarray(entries_by_id[_sid], dtype=np.int64)
+        for _b, _p in zip(_bb.tolist(), np.asarray(_pl, dtype=float).tolist()):
+            _pnl_by_bar.setdefault((dirs_by_id[_sid], int(_b)), []).append(_p)
+    _buckets = (('1', 1, 1), ('2', 2, 2), ('3-4', 3, 4), ('5+', 5, 10 ** 6))
+    _groups = {}
+    for (_d, _b), _sids in _bkall.items():
+        _k = len(_sids)
+        _lab = next((nm for nm, lo, hi in _buckets if lo <= _k <= hi), '5+')
+        _fams = sorted({fams_by_id.get(x, '?') for x in _sids})
+        _comp = '+'.join(_fams)
+        _pure = 'ALL-ONE-FAMILY' if len(_fams) == 1 else 'MIXED'
+        _groups.setdefault((_d, _lab, _comp, _pure), []).append((_d, _b))
+    for (_d, _lab, _comp, _pure), _bars in sorted(_groups.items(), key=lambda x: str(x[0])):
+        _p = []
+        for _key in _bars:
+            _p.extend(_pnl_by_bar.get(_key, []))
+        _pa = np.asarray(_p, dtype=float)
+        _loss = -_pa[_pa < 0].sum()
+        _pf = (float('inf') if _loss <= 0 else round(float(_pa[_pa > 0].sum() / _loss), 4))
+        _cohort_rows.append({
+            'direction': 'LONG' if _d == 1 else 'SHORT', 'depth': _lab,
+            'family_composition': _comp, 'purity': _pure, 'bars': len(_bars),
+            'trades': int(_pa.size),
+            'WR': round(float((_pa > 0).mean() * 100), 2) if _pa.size else '',
+            'PF': ('inf' if _pf == float('inf') else _pf) if _pa.size else '',
+            'net': round(float(_pa.sum()), 2) if _pa.size else 0.0,
+            'avg_trade': round(float(_pa.mean()), 2) if _pa.size else '',
+            'worst_day_usd': '',
+            'sufficient': bool(_pa.size >= 10),
+            'population': 'POOL', 'basis': 'trades occurring ON THOSE BARS, distinct-signal depth'})
+    _write_with_header(os.path.join(cat_dir, 'cohort_scored.csv'), pd.DataFrame(_cohort_rows), [
+        'DOT phase 4 - same-bar cohorts SCORED, not merely counted',
+        f'dataset_rows={attest["rows"]}',
+        'same_bar_cohort.csv answers "do families co-fire". This answers "does a MIXED cohort KEEP '
+        'THE EDGE" - the question that decides whether F1 is fuel or noise beside F0.',
+        'THIS IS A MEASUREMENT OF A DEFINED SET, NOT A SELECTION. No argmax, no ranking, no book '
+        'is chosen: every cohort present in the pool is emitted. Item 15 is not engaged.',
+        'ALL-ONE-FAMILY and MIXED are emitted separately so the comparison is direct. Depth is '
+        'DISTINCT SIGNALS on the bar, per direction (item 4), bucketed 1 / 2 / 3-4 / 5+.',
+        'Cohorts with fewer than 10 trades are EMITTED with sufficient=False, never dropped: a '
+        'silently smaller population is this project\'s most frequent failure.'])
+    _ins = sum(1 for r in _cohort_rows if not r['sufficient'])
+    print(f'  cohort_scored.csv: {len(_cohort_rows)} cohorts '
+          f'({_ins} marked insufficient, <10 trades, retained)')
     _write_with_header(os.path.join(cat_dir, 'same_bar_cohort.csv'), cohort, [
         'DOT item 11 - family composition of each bar as a CURVE OVER DEPTH - counts only',
         f'dataset_rows={attest["rows"]}',
@@ -1491,7 +1608,9 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
         for key, asc in (('agg_pf', False), ('EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF', True)):
             if key not in v.columns:
                 continue
-            o = v.sort_values(key, ascending=asc)['signal_id'].tolist()
+            _kv = pd.to_numeric(v[key], errors='coerce')
+            o = v.assign(_sortkey=_kv).sort_values('_sortkey', ascending=asc,
+                                                   na_position='last')['signal_id'].tolist()
             with rl.Progress(f'S5D dilution curve ({key})', len(o)) as _dpg:
                 dc = cat.dilution_curve(o, entries_by_id, dirs_by_id, key, progress=_dpg)
             _write_with_header(os.path.join(cat_dir, f'dilution_curve_{key}.csv'), dc, [
