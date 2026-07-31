@@ -374,6 +374,7 @@ def s2_pool(df, ad, st):
 def s3_discovery(out, workers, input_sha, scope, df=None, ad=None, st=None, w=None, limit=0):
     results = os.path.join(out, 'results')
     os.makedirs(results, exist_ok=True)
+    emit_regime_labels(df, os.path.join(out, 'results'), out, input_sha)
     _res = os.path.join(out, 'results')
     _fam_csvs = sorted(glob.glob(os.path.join(_res, 'results_F*.csv'))) if os.path.isdir(_res) else []
     _fam_csvs = [f for f in _fam_csvs if '_part' not in os.path.basename(f) and '_c0' not in
@@ -866,7 +867,6 @@ def run_diagnostic_families(results_dir, workers, input_sha, df=None):
               f'{", ".join(produced) if produced else "NONE"}')
         print('  [F12] provenance stamped on THOSE FILES ONLY — never by pattern match on whatever '
               'happens to be on disk, which would launder a stale artifact from another dataset')
-    emit_regime_labels(df, results_dir, out, input_sha)
 
 
 _TERRAIN = {}
