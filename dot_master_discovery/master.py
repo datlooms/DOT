@@ -2404,14 +2404,16 @@ def main():
             evidence = s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest)
     if (run_all and discover) or only == 'S4':
         print('\n[S4] SCHEMA UNIFY')
-        s4_schema(out, input_sha)
+        with rl.Stage('S4', 'schema unify'):
+            s4_schema(out, input_sha)
     if (run_all and discover) or only == 'S5':
         print('\n[S5] CANDIDATE FILTER')
         with rl.Stage('S5', 'candidate filter'):
             s5_filter(out, input_sha, pool)
     if (run_all and discover) or only == 'S6':
         print('\n[S6] FULL-FIELD SCORING (REGEN fresh)')
-        s6_regen(out, input_sha)
+        with rl.Stage('S6', 'full-field scoring regen'):
+            s6_regen(out, input_sha)
     if run_all or only == 'S5D':
         print('\n[S5D] CATALOGUE - fourteen per-family books, every VALID signal')
         with rl.Stage('S5D', 'catalogue emission'):
