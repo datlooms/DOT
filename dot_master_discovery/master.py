@@ -1199,6 +1199,124 @@ def _s5d_score_chunk(payload):
     return idx, out
 
 
+_PF_CTX = {}
+
+
+def _pf_init(frame_path):
+    """Build the oracle, pool and anchor ONCE per worker, not once per definition."""
+    import sys as _s
+    for _d in ('engine', 'scanners', 'orchestrator', '.'):
+        _p = os.path.join(_S5D_ROOT, _d)
+        if _p not in _s.path:
+            _s.path.insert(0, _p)
+    import pandas as _pd
+    import dots_thresholds as _dt
+    import portfolio_simulation_engine as _eng
+    import sequential_temporal as _seq
+    df = _pd.read_csv(frame_path)
+    w = _eng.warmup_floor(df, verbose=False)
+    ad = _dt.compute_adaptive_thresholds(df)
+    st = _dt.compute_structural_gates(df)
+    _PF_CTX.update({'df': df, 'ad': ad, 'st': st,
+                    'pool': _seq.build_condition_pool(df, ad, st, w),
+                    'anchor': _seq.anchor_array(df, 'ST_Flip')})
+
+
+def _pf_touch_one(fam, sig, df, pool, ad, st, anchor, lo_s, hi_s, n_eps):
+    """Episodes touched by ONE definition, VECTORISED over all spans at once.
+
+    The original tested every episode against every definition with np.any over
+    the whole fire array: 7,490 x 311,013 = 2.33 BILLION array scans, and that -
+    not the mask build, measured at 3.4 minutes total - is where the operator's
+    46 minutes went. searchsorted over span starts replaces the episode loop
+    entirely, so the cost per definition stops depending on the episode count.
+    """
+    import score_g as _sg
+    try:
+        mk = _sg.family_mask(df, pool, fam, sig, ad, st, anchor=anchor)
+        fb = np.flatnonzero(np.asarray(mk, dtype=bool))
+    except (Exception, SystemExit):
+        return None
+    if fb.size == 0:
+        return None
+    idx = np.searchsorted(lo_s, fb, side='right') - 1
+    idx = idx[idx >= 0]
+    if idx.size == 0:
+        return np.zeros(0, dtype=np.int64)
+    keep = fb[np.searchsorted(lo_s, fb, side='right') - 1 >= 0]
+    ok = keep <= hi_s[idx]
+    return np.unique(idx[ok])
+
+
+def _pf_chunk(payload):
+    c = _PF_CTX
+    i, items, lo_s, hi_s, n_eps = payload
+    hits = 0
+    acc = np.zeros(n_eps, dtype=np.int64)
+    for fam, sig in items:
+        r = _pf_touch_one(fam, sig, c['df'], c['pool'], c['ad'], c['st'], c['anchor'],
+                          lo_s, hi_s, n_eps)
+        if r is None:
+            continue
+        hits += 1
+        if r.size:
+            acc[r] += 1
+    return i, acc, hits
+
+
+def _prefilter_counts(keys, df, pool, ad, st, anchor, lo_s, hi_s, order, n_eps, workers,
+                      frame_path, rl):
+    """Serial or pooled, with the same try/except fallback pattern as S5C."""
+    n = len(keys)
+    acc = np.zeros(n_eps, dtype=np.int64)
+    hits = [0]
+
+    def _run_serial(pg):
+        for fam, sig in keys:
+            r = _pf_touch_one(fam, sig, df, pool, ad, st, anchor, lo_s, hi_s, n_eps)
+            if r is not None:
+                hits[0] += 1
+                if r.size:
+                    acc[r] += 1
+            if pg is not None:
+                pg.step(1)
+
+    use_pool = bool(workers and workers > 1 and frame_path and n >= 256)
+    if use_pool:
+        import multiprocessing as _mp
+        from concurrent.futures import ProcessPoolExecutor
+        from concurrent.futures.process import BrokenProcessPool
+        size = max(1, -(-n // (int(workers) * 4)))
+        chunks = [(k, keys[i:i + size], lo_s, hi_s, n_eps)
+                  for k, i in enumerate(range(0, n, size))]
+        with rl.Progress(f'S5D prefilter touch ({workers} workers)', len(chunks)) as pg:
+            try:
+                with ProcessPoolExecutor(max_workers=min(int(workers), len(chunks)),
+                                         mp_context=_mp.get_context('spawn'),
+                                         initializer=_pf_init,
+                                         initargs=(frame_path,)) as ex:
+                    for _i3, a3, h3 in ex.map(_pf_chunk, chunks):
+                        acc += a3
+                        hits[0] += h3
+                        pg.step(1)
+                out = np.zeros(n_eps, dtype=np.int64)
+                out[order] = acc
+                return out, hits[0]
+            except (BrokenProcessPool, OSError, MemoryError, Exception) as exc:
+                acc[:] = 0
+                hits[0] = 0
+                print(f'  S5D prefilter touch: pool failed ({type(exc).__name__}: '
+                      f'{str(exc)[:70]}) - FALLING BACK TO SERIAL.', flush=True)
+        with rl.Progress('S5D prefilter touch (serial fallback)', n) as pg:
+            _run_serial(pg)
+    else:
+        with rl.Progress('S5D prefilter touch (serial)', n) as pg:
+            _run_serial(pg)
+    out = np.zeros(n_eps, dtype=np.int64)
+    out[order] = acc
+    return out, hits[0]
+
+
 def _s5d_score_items(items, fam, workers, frame_path, scope, rl, ctx=None):
     """Serial when workers<=1 or no frame_path; otherwise chunked across the pool.
 
@@ -1467,30 +1585,29 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
     _dm = os.path.join(out, 'results', 'discovery_master.csv')
     if os.path.exists(_dm):
         _pre = pd.read_csv(_dm)
+        _pre.columns = [str(c).strip('\ufeff') for c in _pre.columns]
         _spans_all = cat.episode_spans(cs)
-        _fire_cache = {}
+        _eids = sorted(_spans_all)
+        _lo = np.array([_spans_all[e][0] for e in _eids], dtype=np.int64)
+        _hi = np.array([_spans_all[e][1] for e in _eids], dtype=np.int64)
+        _order = np.argsort(_lo, kind='stable')
+        _lo_s, _hi_s = _lo[_order], _hi[_order]
+        _keys = list(dict.fromkeys(zip(_pre['family'].astype(str),
+                                       _pre['signal_def'].astype(str))))
+        print(f'  prefilter touch: {len(_pre)} pre-filter rows -> {len(_keys)} DISTINCT '
+              f'definitions (deduped BEFORE any mask is built; the loop shrinks by '
+              f'{len(_pre) / max(len(_keys), 1):.2f}x on its own)')
+        _counts = np.zeros(len(_eids), dtype=np.int64)
         _hits = 0
-        for _i2, _cr in _pre.iterrows():
-            _f, _sg = str(_cr.get('family', '')), str(_cr.get('signal_def', ''))
-            _k = (_f, _sg)
-            if _k not in _fire_cache:
-                try:
-                    _mk = score_g.family_mask(df, pool, _f, _sg, ad, st, anchor=anchor)
-                    _fire_cache[_k] = np.flatnonzero(np.asarray(_mk, dtype=bool))
-                except (Exception, SystemExit):
-                    _fire_cache[_k] = np.empty(0, dtype=np.int64)
-            _fb = _fire_cache[_k]
-            if _fb.size == 0:
-                continue
-            _hits += 1
-        for _eid, (_b0, _b1, _dd) in _spans_all.items():
-            _c = 0
-            for _k, _fb in _fire_cache.items():
-                if _fb.size and np.any((_fb >= _b0) & (_fb <= _b1)):
-                    _c += 1
-            _prefilter_touch[_eid] = _c
-        print(f'  prefilter touch: {len(_pre)} pre-filter candidates from discovery_master.csv, '
-              f'{_hits} with at least one firing bar, mapped over {len(_spans_all)} episodes')
+        _wk = int(os.environ.get('DOT_WORKERS', '1'))
+        _fp = os.environ.get('DOT_FRAME_PATH')
+        _built = _prefilter_counts(_keys, df, pool, ad, st, anchor, _lo_s, _hi_s,
+                                   _order, len(_eids), _wk, _fp, rl)
+        _counts, _hits = _built
+        for _k2, _e in enumerate(_eids):
+            _prefilter_touch[_e] = int(_counts[_k2])
+        print(f'  prefilter touch: {_hits} definitions with at least one firing bar, '
+              f'mapped over {len(_eids)} episodes')
     else:
         print('  prefilter touch UNAVAILABLE: results/discovery_master.csv absent; '
               'n_prefilter_candidates_touching will read 0 for every episode.')
