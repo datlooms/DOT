@@ -533,6 +533,8 @@ def _null_score_rows(row_dicts, lo, hi, df, adaptive, structural, warmup, run_po
         _run_serial(pg)
         if pg is not None:
             pg.__exit__(None, None, None)
+    if progress_factory is not None:
+        print(f'  {label}: ran via {used} - {n} signals', flush=True)
     return results, used
 
 
@@ -984,6 +986,7 @@ def _score_catalogue_once(df, cands, pool, anchor, ad, st, warmup, build_book_fn
         _run_serial(pg)
         if pg is not None:
             pg.__exit__(None, None, None)
+    print(f'  S5C scoring: ran via {used} - {len(scored)} of {n} candidates', flush=True)
     print(f'  S5C catalogue scored via {used}: {len(scored)} of {n} candidates'
           + (f' | {len(skipped)} SKIPPED (build_book could not reconstruct the mask): '
              f'{sorted(set(e for _k, e in skipped))[:2]}' if skipped else ' | 0 skipped')

@@ -465,7 +465,7 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
               'nothing to score automatically: the deliverable is fourteen per-family catalogues '
               'holding every VALID signal, and NOTHING in this build chooses which of them to '
               'trade. Scoring happens when YOU compose a book and run it through:')
-        print('      python score_book.py --book <your_book.csv> --data <frame> --out <dir>   (item 16, not yet built)')
+        print('      python score_book.py --book <your_book.csv> --data <frame> --out <dir>')
         print('  That tool (item 16) applies the constraint machinery - TailDep, FailConc, mCVaR, '
               'absolute survival, union coverage - which are SET properties of an assembled book '
               'and have no per-signal value. Every catalogue states a book is UNSCORED until it '
@@ -991,6 +991,7 @@ def _s5d_score_items(items, fam, workers, frame_path, scope, rl, ctx=None):
             for idx, part in ex.map(_s5d_score_chunk, chunks):
                 got[idx] = part
                 pg.step(1, extra=f'{sum(len(v) for v in got.values())} scored')
+    print(f'  S5D {fam}: ran via pool({workers}) - {n} candidates', flush=True)
     return [r for k, _c in chunks for r in got[k]]
 
 
@@ -1640,14 +1641,18 @@ def s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest
             print(f'    {lab}: selected {len(picked)} of {len(ids)} candidates | '
                   f'pair escapes {meta["pair_escapes"]} | stop: {reason[:80]}')
             if not picked:
-                print(f'    {lab}: SELECTING ZERO IS THE OBJECTIVE\'S SHAPE, NOT AN ERROR. '
-                      f'DepthYield counts runs of >= {sel.S_DEFAULT} DISTINCT signals, so it is '
-                      f'IDENTICALLY ZERO for any set smaller than {sel.S_DEFAULT}: with k signals '
-                      f'the deepest reachable run is k. Greedy adds one at a time and the '
-                      f'lookahead-2 rule adds at most two, so every first move scores exactly 0.0 '
-                      f'and the search halts at the origin. NOTHING DOWNSTREAM DEPENDS ON THIS: no '
-                      f'artifact is empty, no catalogue row is lost, and item 12\'s dilution curve '
-                      f'builds its OWN ordering in S5D from the VALID catalogue.')
+                # EXPECTED, NOT AN ERROR, AND NOTHING CONSUMES THE RESULT.
+                # DepthYield counts runs of >= S_DEFAULT DISTINCT signals, so it is identically
+                # zero for any set smaller than S_DEFAULT: with k signals the deepest reachable
+                # run is k. Greedy adds one at a time and the lookahead-2 rule at most two, so
+                # every first move scores exactly 0.0 and the search halts at the origin.
+                # DECISION RECORDED, DO NOT RE-OPEN: the greedy stays and there is no tiered
+                # bootstrap. A bootstrap would restore a gradient for a consumer that does not
+                # exist - item 12's dilution curve builds its OWN ordering in S5D by sorting the
+                # VALID catalogue under each ranking key - and would make the canary undefined
+                # rather than stale (0 of 666 pairs, 0 of 7,770 triples, first non-zero at k=5).
+                print(f'    {lab}: zero selected - EXPECTED (objective is 0 below '
+                      f'S={sel.S_DEFAULT} distinct signals) and consumed by nothing.')
         admitted = {lab: list(chosen[d]) for d, lab in ((1, 'LONG'), (-1, 'SHORT'))}
         print(f'  ADMISSION ORDER retained IN MEMORY ONLY: '
               f'LONG {len(admitted["LONG"])} / SHORT {len(admitted["SHORT"])}. '
@@ -1724,7 +1729,10 @@ def s5c_walk_forward(df, ad, st, w, pool, anchor, book_file, out, input_sha, att
           f'real run happens.')
     if not splits:
         print('  S5C: the floor admits no valid split; walk-forward is not executable on this dataset.')
-        mark_done(out, 'S5C', {'input_sha': input_sha, 'splits': 0})
+        print('  S5C NOT MARKED DONE - no splits were derived. CHOSEN: do not mark, rather than '
+              'embedding the floor parameters in the marker. A marker that encodes its own '
+              'invalidation conditions is a SECOND place the floor is defined; not marking costs '
+              'a re-derivation of seconds and cannot go stale when the floor changes in code.')
         return None
     sp = pd.DataFrame(splits)
     sp['total_post_warmup_days'] = meta['total_post_warmup_days']
@@ -2285,6 +2293,7 @@ def resolve_book(book):
 
 def main():
     import runlog as rl
+    _t_start = time.time()
     for _stream in (sys.stdout, sys.stderr):
         try:
             _stream.reconfigure(encoding='utf-8', errors='replace')
@@ -2330,9 +2339,11 @@ def main():
         df, attest, input_sha = s0_ingest(data_dir, out)
     bind_ingested_frame_permanently(df, input_sha, os.path.join(out, 'results'))
     print('\n[S1] ADAPTIVE THRESHOLDS (oracle)')
-    ad, st = s1_thresholds(df)
+    with rl.Stage('S1', 'adaptive thresholds'):
+        ad, st = s1_thresholds(df)
     print('\n[S2] POOL & ANCHORS')
-    pool, anchor, w = s2_pool(df, ad, st)
+    with rl.Stage('S2', 'pool & anchors'):
+        pool, anchor, w = s2_pool(df, ad, st)
 
     if args.parity:
         import discovery_orchestrator as orch
@@ -2384,17 +2395,20 @@ def main():
         print('  Run `python master.py` (no --book) or `--stage S3` for the full 1–2 day discovery.')
     if (run_all and discover) or only == 'S3':
         print('\n[S3] FAMILY DISCOVERY (long-pole; delegates to ratified orchestrator)')
-        s3_discovery(out, args.workers, input_sha, 'full', df=df, ad=ad, st=st, w=w,
-                     limit=args.s3_limit)
+        with rl.Stage('S3', 'family discovery'):
+            s3_discovery(out, args.workers, input_sha, 'full', df=df, ad=ad, st=st, w=w,
+                         limit=args.s3_limit)
     if run_all or only == 'S3B':
         print('\n[S3B] PER-FAMILY EVIDENCE REVIEW + D2D GATE MEASUREMENT')
-        evidence = s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest)
+        with rl.Stage('S3B', 'family evidence + D2D'):
+            evidence = s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest)
     if (run_all and discover) or only == 'S4':
         print('\n[S4] SCHEMA UNIFY')
         s4_schema(out, input_sha)
     if (run_all and discover) or only == 'S5':
         print('\n[S5] CANDIDATE FILTER')
-        s5_filter(out, input_sha, pool)
+        with rl.Stage('S5', 'candidate filter'):
+            s5_filter(out, input_sha, pool)
     if (run_all and discover) or only == 'S6':
         print('\n[S6] FULL-FIELD SCORING (REGEN fresh)')
         s6_regen(out, input_sha)
@@ -2407,31 +2421,42 @@ def main():
                                             scope='full')
     if run_all or only == 'S5B':
         print('\n[S5B] SELECTION LAYER')
-        selection_state = s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest)
+        with rl.Stage('S5B', 'selection layer'):
+            selection_state = s5b_selection(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest)
     if run_all or only == 'S5C':
         print('\n[S5C] WALK-FORWARD ON THE SELECTION PROCESS')
-        wf_state = s5c_walk_forward(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest)
+        with rl.Stage('S5C', 'walk-forward'):
+            wf_state = s5c_walk_forward(df, ad, st, w, pool, anchor, book_file, out, input_sha, attest)
     if run_all or only == 'S7':
         print('\n[S7] CONTENDER HEAD-TO-HEAD')
         import score_g
         bk = book_file if book_file else os.path.join(_ENGINE, 'book50_signals.csv')
         sigs = score_g.build_book(df, pool, anchor, pd.read_csv(bk))
         with rl.Heartbeat('S7 six portfolio scores'):
-            contenders = s7_contenders(df, ad, st, w, sigs, out, input_sha)
+            with rl.Stage('S7', 'contenders'):
+                contenders = s7_contenders(df, ad, st, w, sigs, out, input_sha)
     if run_all or only == 'S8':
         print('\n[S8] COMMITTED-SYSTEM SCORE')
         with rl.Heartbeat('S8 committed-book scoring'):
-            committed = s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha)
+            with rl.Stage('S8', 'committed scoring'):
+                committed = s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha)
     if run_all or only == 'S8B':
         print('\n[S8B] CLUSTER-PARTICIPATION PROFILE')
         with rl.Heartbeat('S8B cluster basis profiling'):
-            profile = s8b_cluster_profile(df, ad, st, w, pool, anchor, book_file, committed, out, input_sha, attest)
+            with rl.Stage('S8B', 'cluster profile'):
+                profile = s8b_cluster_profile(df, ad, st, w, pool, anchor, book_file, committed, out, input_sha, attest)
     if run_all or only == 'S9':
         print('\n[S9] REPORT & SPLIT')
         with rl.Stage('S9', 'report'):
             with rl.Heartbeat('S9 report assembly'):
                 s9_report(out, attest, contenders, committed, sacred, args.market_label, input_sha, profile, evidence, selection_state)
     rl.print_timing_table(concurrent_stages=CONCURRENT_STAGES)
+    _rows, _tot = rl.timing_table()
+    _wall = time.time() - _t_start
+    print(f'  TIMING TABLE TOTAL {_tot:.2f}s vs MASTER COMPLETE wall clock {_wall:.2f}s '
+          f'| unaccounted {_wall - _tot:.2f}s ({100.0 * (_wall - _tot) / max(_wall, 1e-9):.1f}%). '
+          f'Anything unaccounted is work outside a stage wrapper - banner, sacred verify, frame '
+          f'binding, argument parsing.')
 
     print('\n' + '═' * 68)
     print(f'MASTER COMPLETE in {_hms(time.time() - t0)} | out: {out}')
