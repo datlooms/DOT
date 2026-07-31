@@ -302,8 +302,14 @@ def s5_filter(out, input_sha, pool):
             print(f'  THE POOL IS NOT THE FULL FOURTEEN: {_u} {_v} discovered and reported but '
                   f'cannot enter a selected book. Stated so the operator is never told a book spans '
                   f'families it does not.')
-    keep.to_csv(os.path.join(results, 'candidates.csv'), index=False, lineterminator='\n',
-                encoding='utf-8')
+    _cand_path = os.path.join(results, 'candidates.csv')
+    keep.to_csv(_cand_path, index=False, lineterminator='\n', encoding='utf-8')
+    import discovery_orchestrator as _orch
+    _orch.stamp_provenance(_cand_path, input_sha)
+    print(f'  candidates.csv stamped for input_sha {input_sha}. WITHOUT THIS STAMP S5C\'s '
+          f'provenance gate reads "no provenance stamp", _pool_ok is False, the book arm is '
+          f'skipped and item 17 reports UNEVALUABLE with the null arm sitting there fully '
+          f'measured. F13 and F12 stamp their outputs; S5 did not.')
     print(f'  filter (trades≥30 & folds_plus≥4 & agg_pf≥2.0): {len(keep)}/{n_total} candidates '
           f'scoreable by S8')
     mark_done(out, 'S5', {'input_sha': input_sha, 'candidates': int(len(keep))})
