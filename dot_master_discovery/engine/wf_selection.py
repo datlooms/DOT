@@ -787,50 +787,81 @@ def _score_catalogue_once(df, cands, pool, anchor, ad, st, warmup, build_book_fn
     scored = {}
     skipped = []
     n = len(items)
-    use_pool = bool(workers and workers > 1 and frame_path and n >= 32)
-    label = (f'S5C scoring catalogue ONCE ({workers} workers)' if use_pool
-             else 'S5C scoring catalogue ONCE (serial)')
-    _pg = progress_factory(label, n if not use_pool else 0) if progress_factory else None
-    if _pg is not None:
-        _pg.__enter__()
-    if not use_pool:
+
+    def _absorb(part):
+        for key, eb, et, pn, err in part:
+            if err is not None:
+                skipped.append((key, err))
+            else:
+                scored[key] = {'entry_bar': eb, 'exit_time': et, 'pnl': pn}
+
+    def _run_serial(pg):
+        """THE ONE SERIAL IMPLEMENTATION. Reachable from the top and from the except.
+
+        Factored into a callable rather than duplicated so the fallback cannot
+        drift from the primary path: there is a single body, two entry points.
+        """
         _WF_CTX.update({'df': df, 'w': warmup, 'ad': ad, 'st': st, 'pool': pool,
                         'anchor': anchor, 'conv': conviction})
         for it in items:
             _i2, part = _wf_score_chunk((0, [it], gap_names))
-            for key, eb, et, pn, err in part:
-                if err is not None:
-                    skipped.append((key, err))
-                else:
-                    scored[key] = {'entry_bar': eb, 'exit_time': et, 'pnl': pn}
-            if _pg is not None:
-                _pg.step(1, extra=f'{len(scored)} scored')
-    else:
+            _absorb(part)
+            if pg is not None:
+                pg.step(1, extra=f'{len(scored)} scored')
+
+    want_pool = bool(workers and workers > 1 and frame_path and n >= 32)
+    used = 'serial'
+    if want_pool:
         import multiprocessing as _mp
         from concurrent.futures import ProcessPoolExecutor
+        from concurrent.futures.process import BrokenProcessPool
         size = max(1, -(-n // (int(workers) * 4)))
-        chunks = [(k, items[i:i + size], gap_names)
-                  for k, i in enumerate(range(0, n, size))]
-        got = {}
-        with ProcessPoolExecutor(max_workers=min(int(workers), len(chunks)),
-                                 mp_context=_mp.get_context('spawn'),
-                                 initializer=_wf_init, initargs=(frame_path,)) as ex:
-            for idx, part in ex.map(_wf_score_chunk, chunks):
-                got[idx] = part
-                if _pg is not None:
-                    _pg.step(1, extra=f'chunk {idx + 1}/{len(chunks)}')
-        for k, _c, _g in chunks:
-            for key, eb, et, pn, err in got[k]:
-                if err is not None:
-                    skipped.append((key, err))
-                else:
-                    scored[key] = {'entry_bar': eb, 'exit_time': et, 'pnl': pn}
-    if _pg is not None:
-        _pg.__exit__(None, None, None)
-    print(f'  S5C catalogue scored: {len(scored)} of {n} candidates'
+        chunks = [(k, items[i:i + size], gap_names) for k, i in enumerate(range(0, n, size))]
+        pg = progress_factory(f'S5C scoring catalogue ONCE ({workers} workers)',
+                              len(chunks)) if progress_factory else None
+        if pg is not None:
+            pg.__enter__()
+        try:
+            got = {}
+            with ProcessPoolExecutor(max_workers=min(int(workers), len(chunks)),
+                                     mp_context=_mp.get_context('spawn'),
+                                     initializer=_wf_init, initargs=(frame_path,)) as ex:
+                for idx, part in ex.map(_wf_score_chunk, chunks):
+                    got[idx] = part
+                    if pg is not None:
+                        pg.step(1, extra=f'chunk {idx + 1}/{len(chunks)}')
+            for k, _c, _g in chunks:
+                _absorb(got[k])
+            used = f'pool({workers})'
+        except (BrokenProcessPool, OSError, MemoryError, Exception) as exc:
+            scored.clear()
+            del skipped[:]
+            print(f'  S5C scoring: pool failed ({type(exc).__name__}: {str(exc)[:90]}) - '
+                  f'FALLING BACK TO SERIAL. The parallel path is an OPTIMISATION and must never '
+                  f'cost a run: it had never executed anywhere before this, and an unexercised '
+                  f'path firing for the first time mid-run after hours of work is how '
+                  f'_F0_KEPT_PATH and F13 SHARD_DIR both bit.', flush=True)
+            used = f'serial (pool fell back: {type(exc).__name__})'
+            if pg is not None:
+                pg.__exit__(None, None, None)
+            pg = (progress_factory('S5C scoring catalogue ONCE (serial fallback)', n)
+                  if progress_factory else None)
+            if pg is not None:
+                pg.__enter__()
+            _run_serial(pg)
+        if pg is not None:
+            pg.__exit__(None, None, None)
+    else:
+        pg = progress_factory('S5C scoring catalogue ONCE (serial)',
+                              n) if progress_factory else None
+        if pg is not None:
+            pg.__enter__()
+        _run_serial(pg)
+        if pg is not None:
+            pg.__exit__(None, None, None)
+    print(f'  S5C catalogue scored via {used}: {len(scored)} of {n} candidates'
           + (f' | {len(skipped)} SKIPPED (build_book could not reconstruct the mask): '
-             f'{sorted(set(e for _k, e in skipped))[:2]}' if skipped else
-             ' | 0 skipped')
+             f'{sorted(set(e for _k, e in skipped))[:2]}' if skipped else ' | 0 skipped')
           + '. A silently smaller population is the failure shape this project has met most '
             'often, so the count is printed whether or not any were dropped.', flush=True)
     return scored
