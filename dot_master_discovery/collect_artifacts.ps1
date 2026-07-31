@@ -1,3 +1,19 @@
+# =============================================================================
+# SUPERSEDED - this logic now runs automatically as STAGE S10 in master.py.
+#
+#   python master.py --data data --workers 14 --out discovery\full
+#
+# S10 (master.py, s10_collect) is a direct port of this script and is the
+# reference implementation it came from. Differences, all deliberate:
+#   * splits at 26 MB, not 28, and tests the size BEFORE writing the line -
+#     this script tested after, so its parts landed over their own limit;
+#   * the destination follows --out instead of a hardcoded absolute path;
+#   * the destination is cleared each run so stale parts cannot accumulate.
+#
+# THIS FILE IS KEPT, NOT DELETED: it is the reference the port was made from,
+# and it still works standalone if S10 ever fails.
+# =============================================================================
+
 # Collects every DOT analysis artifact into one flat folder, then splits
 # anything over 28 MB into part_N files with the header repeated.
 

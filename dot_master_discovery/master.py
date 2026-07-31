@@ -4,6 +4,8 @@ import hashlib
 import json
 import math
 import os
+import shutil
+import re
 import warnings
 
 warnings.filterwarnings('ignore', message='DataFrame is highly fragmented')
@@ -39,7 +41,7 @@ FOLD_BASIS_NOTE = ('folds and OOS are PROPORTIONAL, never calendar. The loaded p
 OOS_MONTHS = ['2026.05', '2026.06']
 OOS_LEGACY_NOTE = 'LEGACY DIAGNOSTIC, STALE: fixed calendar months, neither out-of-sample nor segment-relative on a stitched series; not a selection input (spec B.1). oos_rel_* are the data-relative counterpart.'
 OOS_REL_N_MONTHS = 2
-STAGES = ['S0', 'S1', 'S2', 'S2B', 'S3', 'S3B', 'S4', 'S5', 'S5D', 'S6', 'S5B', 'S5C', 'S7', 'S8', 'S8B', 'S9']
+STAGES = ['S0', 'S1', 'S2', 'S2B', 'S3', 'S3B', 'S4', 'S5', 'S5D', 'S6', 'S5B', 'S5C', 'S7', 'S8', 'S8B', 'S9', 'S10']
 FAMILIES = [
     ('F0', 'triple_convergence_and_d2ddir', 'committed'),
     ('F1', 'sequential_temporal', 'committed'),
@@ -91,6 +93,165 @@ def mark_done(out, key, meta):
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(meta, f)
     os.replace(tmp, done_path(out, key))
+
+
+COLLECT_EXTS = ('.csv', '.md', '.txt', '.jsonl')
+COLLECT_TARGET_MB = 26
+COLLECT_CEILING_MB = 30
+_COLLECT_SKIP_NAME = re.compile(
+    r'(_c\d{4}\.(csv|pkl|done|cand)$)|(\.done$)|(\.cand$)|(\.provenance$)'
+    r'|(^_frame_.*\.csv$)|(^_s3_frame.*\.csv$)|(^shard_\d+\.csv$)|(^_f0_kept\.pkl$)')
+_COLLECT_SKIP_DIR = ('_f13_shards', '.markers', 'data_for_analysis', '__pycache__')
+
+
+def _split_oversized(path, target_bytes):
+    """Close the writer BEFORE a line that would breach. CSV header on EVERY part.
+
+    The PowerShell original wrote the line and THEN tested the size, so every
+    part landed a few bytes over its own limit - measured at 17 bytes over on the
+    operator's tree. Testing first is the fix, and the target is 26 MB against a
+    30 MB ceiling so a long final line cannot push a part over.
+
+    A HEADERLESS FRAGMENT IS THE MOST EXPENSIVE DEFECT THIS PROJECT HAS HAD -
+    split_tree() produced them and a later stage read the pieces as whole files.
+    Every CSV part therefore repeats the header and opens standalone.
+    """
+    base, ext = os.path.splitext(os.path.basename(path))
+    d = os.path.dirname(path)
+    parts = []
+    with open(path, 'r', encoding='utf-8', errors='replace', newline='') as r:
+        header = r.readline() if ext.lower() == '.csv' else None
+        idx, w, written = 1, None, 0
+        for line in r:
+            if w is None:
+                op = os.path.join(d, f'{base}_part_{idx}{ext}')
+                w = open(op, 'w', encoding='utf-8', newline='')
+                parts.append(op)
+                written = 0
+                if header:
+                    w.write(header)
+                    written += len(header.encode('utf-8'))
+            nb = len(line.encode('utf-8'))
+            if written + nb > target_bytes and written > (len(header.encode('utf-8')) if header else 0):
+                w.close()
+                idx += 1
+                op = os.path.join(d, f'{base}_part_{idx}{ext}')
+                w = open(op, 'w', encoding='utf-8', newline='')
+                parts.append(op)
+                written = 0
+                if header:
+                    w.write(header)
+                    written += len(header.encode('utf-8'))
+            w.write(line)
+            written += nb
+        if w is not None:
+            w.close()
+    os.remove(path)
+    return parts
+
+
+def s10_collect(out, data_dir, input_sha):
+    """S10 - collect every analysis artifact into ONE FLAT FOLDER, split for upload.
+
+    Ported from collect_artifacts.ps1, which is proven on the operator's tree.
+    DIFFERENCES FROM THE POWERSHELL, ALL DELIBERATE:
+      1. splits at 26 MB not 28, and tests the size BEFORE writing the line -
+         the original tested after and its parts came out over their own limit;
+      2. destination is <out>/data_for_analysis rather than a hardcoded absolute
+         path, so it follows --out;
+      3. the destination is CLEARED on each run (chosen over overwrite-in-place)
+         so a second run cannot leave stale parts from a previous split beside
+         the new ones - overwrite alone would keep _part_5 when the file later
+         needs only four;
+      4. it walks and excludes BY PATTERN, never a file list, so any artifact
+         added later is collected without editing this function.
+    COPY ONLY. Nothing outside data_for_analysis is created, modified or removed.
+    """
+    dst = os.path.join(out, 'data_for_analysis')
+    if os.path.isdir(dst):
+        for f in os.listdir(dst):
+            fp = os.path.join(dst, f)
+            if os.path.isfile(fp):
+                os.remove(fp)
+    os.makedirs(dst, exist_ok=True)
+    roots = [r for r in (out, data_dir) if r and os.path.isdir(r)]
+    copied, skipped, seen = 0, 0, {}
+    for root in roots:
+        for dp, dirs, files in os.walk(root):
+            dirs[:] = [d for d in dirs if d not in _COLLECT_SKIP_DIR]
+            for nm in sorted(files):
+                if _COLLECT_SKIP_NAME.search(nm) or os.path.splitext(nm)[1].lower() not in COLLECT_EXTS:
+                    skipped += 1
+                    continue
+                tgt = nm
+                if tgt in seen:
+                    tgt = f'{os.path.basename(dp)}__{nm}'
+                seen[tgt] = 1
+                shutil.copy2(os.path.join(dp, nm), os.path.join(dst, tgt))
+                copied += 1
+    tb = COLLECT_TARGET_MB * 1024 * 1024
+    big = sorted([f for f in os.listdir(dst)
+                  if os.path.getsize(os.path.join(dst, f)) > tb],
+                 key=lambda f: -os.path.getsize(os.path.join(dst, f)))
+    nparts = 0
+    for f in big:
+        fp = os.path.join(dst, f)
+        mb = os.path.getsize(fp) / 1048576.0
+        pr = _split_oversized(fp, tb)
+        nparts += len(pr)
+        print(f'    split {f} ({mb:.1f} MB) -> {len(pr)} parts')
+    allf = sorted(os.listdir(dst))
+    sizes = {f: os.path.getsize(os.path.join(dst, f)) for f in allf}
+    total = sum(sizes.values()) / 1048576.0
+    largest = max(sizes.values()) / 1048576.0 if sizes else 0.0
+    over = [f for f, z in sizes.items() if z > COLLECT_CEILING_MB * 1024 * 1024]
+    print(f'  S10 COLLECT: {len(allf)} files, {total:.1f} MB -> {dst}')
+    print(f'    copied {copied} | skipped {skipped} (chunks, markers, provenance, shards, temporaries)')
+    print(f'    split {len(big)} files -> {nparts} parts | largest {largest:.1f} MB | '
+          f'ALL UNDER {COLLECT_CEILING_MB} MB: {"yes" if not over else "NO"}')
+    if over:
+        for f in over:
+            print(f'      STILL OVER THE CEILING: {f} {sizes[f] / 1048576.0:.1f} MB')
+    missed = _collect_coverage_check(out, allf)
+    print(f'    artifacts written by the pipeline but NOT collected: '
+          f'{missed if missed else "none"}')
+    mark_done(out, 'S10', {'input_sha': input_sha, 'files': len(allf),
+                           'total_mb': round(total, 1)})
+    return {'files': len(allf), 'total_mb': round(total, 1), 'over': over, 'missed': missed}
+
+
+def _collect_coverage_check(out, collected):
+    """Every artifact the pipeline WRITES, checked against what S10 COLLECTED.
+
+    A collector that silently misses a new file is the same class as a gate that
+    does not check every deliverable. This scans the package source for write
+    targets rather than trusting a list.
+    """
+    names = set()
+    for sub in ('.', 'engine', 'scanners', 'orchestrator'):
+        d = os.path.join(_HERE, sub)
+        if not os.path.isdir(d):
+            continue
+        for fn in os.listdir(d):
+            if not fn.endswith('.py'):
+                continue
+            try:
+                txt = open(os.path.join(d, fn), encoding='utf-8', errors='replace').read()
+            except OSError:
+                continue
+            for m in re.finditer(r"['\"]([A-Za-z0-9_]+\.(?:csv|md|txt|jsonl))['\"]", txt):
+                names.add(m.group(1))
+    present = set()
+    for c in collected:
+        present.add(c)
+        b = re.sub(r'_part_\d+(\.[a-z]+)$', r'\1', c)
+        present.add(b)
+        present.add(b.split('__')[-1])
+    on_disk = set()
+    for dp, dirs, files in os.walk(out):
+        dirs[:] = [d for d in dirs if d not in _COLLECT_SKIP_DIR]
+        on_disk.update(files)
+    return sorted((names & on_disk) - present)
 
 
 def _artifacts_present(out, names):
@@ -2533,6 +2694,10 @@ def main():
         with rl.Stage('S9', 'report'):
             with rl.Heartbeat('S9 report assembly'):
                 s9_report(out, attest, contenders, committed, sacred, args.market_label, input_sha, profile, evidence, selection_state)
+    if run_all or only == 'S10':
+        print('\n[S10] COLLECT - every analysis artifact into one flat folder, split for upload')
+        with rl.Stage('S10', 'collect & split for upload'):
+            s10_collect(out, data_dir, input_sha)
     rl.print_timing_table(concurrent_stages=CONCURRENT_STAGES)
     _rows, _tot = rl.timing_table()
     _wall = time.time() - _t_start
