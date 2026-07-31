@@ -1684,9 +1684,29 @@ def s5c_walk_forward(df, ad, st, w, pool, anchor, book_file, out, input_sha, att
     oracle_sha = sha12(os.path.join(_ENGINE, 'dots_thresholds.py'))
     print(f'  oracle dots_thresholds.py sha256 : {oracle_sha}')
     print(f'  dataset: {attest["rows"]:,} rows | {attest["range"]}')
-    if is_done(out, 'S5C', input_sha) and os.path.exists(os.path.join(out, 'wf_splits.csv')):
-        print('  S5C already complete for this input (checkpoint) — resuming past it.')
-        return None
+    _pc_path = os.path.join(out, 'wf_pass_criterion.csv')
+    if is_done(out, 'S5C', input_sha):
+        _crit_ok = False
+        _why_gate = 'wf_pass_criterion.csv absent'
+        if os.path.exists(_pc_path):
+            try:
+                _pcprev = pd.read_csv(_pc_path, comment='#')
+                _v = str(_pcprev['verdict'].iloc[0]) if 'verdict' in _pcprev.columns else ''
+                _sr = (int(_pcprev['splits_with_ratio'].iloc[0])
+                       if 'splits_with_ratio' in _pcprev.columns else 0)
+                _crit_ok = (_v.upper() not in ('UNEVALUABLE', '')) and _sr > 0
+                _why_gate = f'verdict={_v} splits_with_ratio={_sr}'
+            except Exception as _e:
+                _why_gate = f'wf_pass_criterion.csv unreadable: {type(_e).__name__}'
+        if _crit_ok:
+            print(f'  S5C resumed from marker: the criterion EXISTS and is evaluable '
+                  f'({_why_gate}) — skipping.')
+            return None
+        print(f'  S5C marker present but THE DELIVERABLE IS NOT THERE ({_why_gate}) — RE-RUNNING. '
+              f'The old gate checked wf_splits.csv, which is written BEFORE the book arm runs, so '
+              f'it proved the stage STARTED, not that it produced a criterion. A previous run '
+              f'marked S5C done on the UNEVALUABLE path and this stage would have skipped forever '
+              f'for this input_sha.')
     n0 = len(df)
     wfs.assert_no_row_deletion(df, n0)
     splits, day_tbl, meta = wfs.derive_splits(df, w)
@@ -1965,7 +1985,16 @@ def s5c_walk_forward(df, ad, st, w, pool, anchor, book_file, out, input_sha, att
               ' | '.join(f"split {int(r['split_index'])} {r['persisted']}/{r['train_qualifiers']}"
                          f"={r['null_persistence_rate']}" for _i, r in nsum.iterrows()))
     print(f'  attestation records {len(trail)} (repeat groups {len(repeats)}) | pass criterion: {verdict["verdict"]}')
-    mark_done(out, 'S5C', {'input_sha': input_sha, 'splits': len(splits)})
+    _verd = str(verdict.get('verdict', '')).upper()
+    _nrat = int(verdict.get('splits_with_ratio', 0) or 0)
+    if _pool_ok and _verd not in ('UNEVALUABLE', '') and _nrat > 0:
+        mark_done(out, 'S5C', {'input_sha': input_sha, 'splits': len(splits),
+                               'verdict': _verd, 'splits_with_ratio': _nrat})
+    else:
+        print(f'  S5C NOT MARKED DONE — verdict {_verd or "(none)"}, splits_with_ratio {_nrat}, '
+              f'pool_ok {_pool_ok}. A stage that did not produce its deliverable must not claim it '
+              f'did: the marker would skip it permanently for this input_sha and the run would '
+              f'finish reporting a pass criterion that was never computed.')
     return {'splits': sp, 'segments': seg, 'rejection': rej, 'pass': pc, 'trail': trail,
             'repeats': repeats, 'meta': meta, 'null_summary': nsum}
 
