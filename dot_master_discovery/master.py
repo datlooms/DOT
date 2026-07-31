@@ -93,6 +93,29 @@ def mark_done(out, key, meta):
     os.replace(tmp, done_path(out, key))
 
 
+def _artifacts_present(out, names):
+    """A gate must verify EVERY deliverable, not one of them.
+
+    A stage whose gate checks a single artifact will skip while another of its
+    outputs is missing - which is exactly what happened when
+    wf_book_arm_entities.csv was added to S5C after the marker had been written:
+    the criterion was evaluable, the gate was satisfied, and the new file never
+    appeared. Returns (all_ok, missing_names).
+    """
+    missing = []
+    for nm in names:
+        p_ = os.path.join(out, nm)
+        if not os.path.exists(p_):
+            missing.append(nm)
+            continue
+        try:
+            if os.path.getsize(p_) == 0:
+                missing.append(nm + ' (empty)')
+        except OSError:
+            missing.append(nm + ' (unreadable)')
+    return (not missing), missing
+
+
 def is_done(out, key, input_sha):
     p = done_path(out, key)
     if not os.path.exists(p):
@@ -763,7 +786,11 @@ def s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha, 
     oracle_sha = sha12(os.path.join(_ENGINE, 'dots_thresholds.py'))
     print(f'  oracle dots_thresholds.py sha256 : {oracle_sha}')
     print(f'  dataset: {attest["rows"]:,} rows | {attest["range"]}')
-    if is_done(out, 'S3B', input_sha) and os.path.exists(os.path.join(out, 'family_evidence.csv')):
+    _s3b_ok, _s3b_missing = _artifacts_present(out, ['family_evidence.csv',
+                                                     'cross_family_cofiring.csv'])
+    if is_done(out, 'S3B', input_sha) and not _s3b_ok:
+        print(f'  S3B marker present but deliverables missing {_s3b_missing} - RE-RUNNING.')
+    if is_done(out, 'S3B', input_sha) and _s3b_ok:
         print('  S3B already complete for this input (checkpoint) — resuming past it.')
         return None
     bk_path = book_file if book_file else os.path.join(_ENGINE, 'book50_signals.csv')
@@ -1017,8 +1044,17 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
         print('  CATALOGUE: no candidates.csv - S3/S4/S5 have not produced a pool. NOT marking done.')
         return None
     cat_dir_chk = os.path.join(out, 'catalogues')
-    if is_done(out, 'S5D', input_sha) and os.path.isdir(cat_dir_chk) and \
-            any(f.startswith('catalogue_') for f in os.listdir(cat_dir_chk)):
+    _s5d_ok, _s5d_missing = _artifacts_present(os.path.join(out, 'catalogues'), [
+        'unclaimed_reachable.csv', 'same_bar_cohort.csv',
+        'dilution_curve_agg_pf.csv', 'dilution_curve_EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF.csv'])
+    _s5d_cats = (os.path.isdir(cat_dir_chk)
+                 and any(f.startswith('catalogue_') for f in os.listdir(cat_dir_chk)))
+    if is_done(out, 'S5D', input_sha) and not (_s5d_cats and _s5d_ok):
+        print(f'  S5D marker present but deliverables missing '
+              f'{_s5d_missing + ([] if _s5d_cats else ["catalogue_*.csv"])} - RE-RUNNING. The '
+              f'gate previously checked only that the catalogue directory was non-empty, which '
+              f'cannot tell a complete emission from one that died after the first family.')
+    if is_done(out, 'S5D', input_sha) and _s5d_cats and _s5d_ok:
         have = sorted(f for f in os.listdir(cat_dir_chk) if f.startswith('catalogue_'))
         print(f'  S5D already complete for this input_sha - {len(have)} catalogues on disk, '
               f'RESUMING PAST IT. The per-candidate scoring loop is the longest single-threaded '
@@ -1718,15 +1754,30 @@ def s5c_walk_forward(df, ad, st, w, pool, anchor, book_file, out, input_sha, att
                 _why_gate = f'verdict={_v} splits_with_ratio={_sr}'
             except Exception as _e:
                 _why_gate = f'wf_pass_criterion.csv unreadable: {type(_e).__name__}'
-        if _crit_ok:
+        _ent_path = os.path.join(out, 'wf_book_arm_entities.csv')
+        _ent_ok = False
+        if os.path.exists(_ent_path):
+            try:
+                _ent_ok = len(pd.read_csv(_ent_path, comment='#')) > 0
+            except Exception:
+                _ent_ok = False
+        if _crit_ok and _ent_ok:
             print(f'  S5C resumed from marker: the criterion EXISTS and is evaluable '
-                  f'({_why_gate}) — skipping.')
+                  f'({_why_gate}) AND wf_book_arm_entities.csv is present and non-empty '
+                  f'— skipping.')
             return None
-        print(f'  S5C marker present but THE DELIVERABLE IS NOT THERE ({_why_gate}) — RE-RUNNING. '
-              f'The old gate checked wf_splits.csv, which is written BEFORE the book arm runs, so '
-              f'it proved the stage STARTED, not that it produced a criterion. A previous run '
-              f'marked S5C done on the UNEVALUABLE path and this stage would have skipped forever '
-              f'for this input_sha.')
+        if _crit_ok and not _ent_ok:
+            print('  S5C marker present and criterion evaluable, but wf_book_arm_entities.csv is '
+                  'absent/empty - RE-RUNNING. A gate that does not check EVERY deliverable will '
+                  'skip while an output is missing: this file was added to the stage after the '
+                  'marker was written, so the criterion alone cannot tell a complete run from an '
+                  'incomplete one.')
+        if not _crit_ok:
+            print(f'  S5C marker present but THE DELIVERABLE IS NOT THERE ({_why_gate}) — RE-RUNNING. '
+                  f'The old gate checked wf_splits.csv, which is written BEFORE the book arm runs, so '
+                  f'it proved the stage STARTED, not that it produced a criterion. A previous run '
+                  f'marked S5C done on the UNEVALUABLE path and this stage would have skipped forever '
+                  f'for this input_sha.')
     n0 = len(df)
     wfs.assert_no_row_deletion(df, n0)
     splits, day_tbl, meta = wfs.derive_splits(df, w)
@@ -2066,7 +2117,13 @@ def s8b_cluster_profile(df, ad, st, w, pool, anchor, book_file, committed, out, 
     oracle_sha = sha12(os.path.join(_ENGINE, 'dots_thresholds.py'))
     print(f'  oracle dots_thresholds.py sha256 : {oracle_sha}')
     print(f'  dataset: {attest["rows"]:,} rows | {attest["range"]}')
-    if is_done(out, 'S8B', input_sha) and os.path.exists(os.path.join(out, 'cluster_participation_profile.csv')):
+    _s8b_ok, _s8b_missing = _artifacts_present(out, [
+        'cluster_participation_profile.csv', 'cluster_basis_summary.csv',
+        'reach_D01_directional_baseline.csv', 'reach_D02_D2_coverage.csv',
+        'reach_D02_book_depth_structure.csv', 'reach_D0_missed_decomposition.csv'])
+    if is_done(out, 'S8B', input_sha) and not _s8b_ok:
+        print(f'  S8B marker present but deliverables missing {_s8b_missing} - RE-RUNNING.')
+    if is_done(out, 'S8B', input_sha) and _s8b_ok:
         print('  S8B already complete for this input (checkpoint) — resuming past it.')
         return None
     if committed is not None and 'executed' in committed:
