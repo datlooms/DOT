@@ -442,7 +442,7 @@ def _f0_score_chunk(payload):
 
 
 def f0_rows_from_raw(df, adaptive, structural, warmup, raw_survivors, workers=1,
-                     scope='full', frame_path=None, results_dir=None):
+                     scope='full', frame_path=None, results_dir=None, kept=None):
     """Item 19: the RE-SCORE parallelises. THE DEDUP DOES NOT.
 
     deduplicate() is a global greedy pass against a running keep-set: each
@@ -456,7 +456,7 @@ def f0_rows_from_raw(df, adaptive, structural, warmup, raw_survivors, workers=1,
     A PARITY PROOF AGAINST THE SERIAL RESULT IS MANDATORY and is what
     f0_parity_proof() runs.
     """
-    kept = f0m.deduplicate(list(raw_survivors))
+    kept = f0m.deduplicate(list(raw_survivors)) if kept is None else kept
     month = pd.Series(df['Time'].values).str[:7].values
     if workers <= 1 or frame_path is None or results_dir is None or len(kept) < 64:
         return [f0s.score_survivor(df, row, month, adaptive, structural, warmup) for row in kept]
@@ -545,8 +545,10 @@ def f0_parity_proof(df, adaptive, structural, warmup, raw_survivors, workers, sc
     dtype-sensitive and NaN-aware, which is what covers float accumulation,
     ordering and chunk boundaries.
     """
+    kept_shared = f0m.deduplicate(list(raw_survivors))
     par = f0_rows_from_raw(df, adaptive, structural, warmup, raw_survivors, workers=workers,
-                           scope=scope, frame_path=frame_path, results_dir=results_dir)
+                           scope=scope, frame_path=frame_path, results_dir=results_dir,
+                           kept=kept_shared)
     att = _parity_attest_path(results_dir)
     key = f'{input_sha}|{_f0_code_sha()}'
     if input_sha and os.path.exists(att):
@@ -558,7 +560,7 @@ def f0_parity_proof(df, adaptive, structural, warmup, raw_survivors, workers, sc
                   f'chunking or the reassembly against an unchanged dataset, and the proof exists '
                   f'to certify CODE.', flush=True)
             return True, par
-    kept = f0m.deduplicate(list(raw_survivors))
+    kept = kept_shared
     n = min(int(F0_PARITY_SAMPLE), len(kept))
     idx = _stratified_indices(len(kept), n, workers)
     month = pd.Series(df['Time'].values).str[:7].values

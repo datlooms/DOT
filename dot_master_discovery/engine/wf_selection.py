@@ -324,18 +324,44 @@ def persistence_flags(pnl):
             'passes': bool(net > 0 and pf >= PERSIST_MIN_PF and wr >= PERSIST_MIN_WR)}
 
 
+def _pnl_by_entity(frame, key):
+    """One pass over the frame instead of one scan per entity.
+
+    entity_persistence filtered the WHOLE concatenated frame SIX TIMES for every
+    entity - train x3, test x3 - so cost grew with entities x rows. Measured:
+    3.76 ms/entity at 400 entities, 8.41 ms/entity at 1,200. That is quadratic,
+    and at 39,308 entities across three splits it extrapolates to ~540 minutes,
+    which is the operator's unexplained 1h46m block plus the rest of S5C.
+
+    A single groupby produces the same per-entity arrays in one pass. Same
+    arithmetic, same order (the caller still iterates sorted names), so the
+    emitted rows are unchanged.
+    """
+    if not len(frame):
+        return {}
+    out = {}
+    for nm, idx in frame.groupby(key, sort=False).indices.items():
+        out[nm] = frame['pnl'].values[idx]
+    return out
+
+
 def entity_persistence(train_trades, test_trades, key='signal_name'):
     rows = []
+    _tr_map = _pnl_by_entity(train_trades, key)
+    _te_map = _pnl_by_entity(test_trades, key)
+    _empty = np.empty(0, dtype=float)
     for name in sorted(set(train_trades[key].tolist()) | set(test_trades[key].tolist())):
-        tr = persistence_flags(train_trades[train_trades[key] == name]['pnl'].values)
-        te = persistence_flags(test_trades[test_trades[key] == name]['pnl'].values)
+        _trp = _tr_map.get(name, _empty)
+        _tep = _te_map.get(name, _empty)
+        tr = persistence_flags(_trp)
+        te = persistence_flags(_tep)
         rows.append({'entity': name,
-                     'train_trades': int(len(train_trades[train_trades[key] == name])),
-                     'test_trades': int(len(test_trades[test_trades[key] == name])),
+                     'train_trades': int(len(_trp)),
+                     'test_trades': int(len(_tep)),
                      'train_net': round(tr['net'], 1), 'train_PF': round(tr['PF'], 3), 'train_WR': round(tr['WR'], 1),
                      'test_net': round(te['net'], 1), 'test_PF': round(te['PF'], 3), 'test_WR': round(te['WR'], 1),
                      'train_passes': tr['passes'], 'test_passes': te['passes'],
-                     'test_traded': bool(len(test_trades[test_trades[key] == name]) > 0),
+                     'test_traded': bool(len(_tep) > 0),
                      'persists': bool(tr['passes'] and te['passes'])})
     return pd.DataFrame(rows)
 
@@ -1039,7 +1065,13 @@ def book_arm_from_valid(df, cands, pool, anchor, ad, st, warmup, splits, build_b
         tr_lo, tr_hi = int(sp['train_first_bar']), int(sp['train_last_bar'])
         te_lo, te_hi = int(sp['test_first_bar']), int(sp['test_last_bar'])
         train_rows, test_rows = [], []
+        _vpg = progress_factory(f'S5C split {s_i} VALID + persist over {len(scored)} candidates',
+                                len(scored)) if progress_factory else None
+        if _vpg is not None:
+            _vpg.__enter__()
         for name, rec in scored.items():
+            if _vpg is not None:
+                _vpg.step(1, extra=f'{len(train_rows)} admitted')
             eb = rec['entry_bar']
             trm = (eb >= tr_lo) & (eb <= tr_hi)
             tem = (eb >= te_lo) & (eb <= te_hi)
@@ -1049,6 +1081,8 @@ def book_arm_from_valid(df, cands, pool, anchor, ad, st, warmup, splits, build_b
                 continue
             train_rows.append(tr_t)
             test_rows.append(_slice_rec(rec, tem, name))
+        if _vpg is not None:
+            _vpg.__exit__(None, None, None)
         if not train_rows:
             out.append({'split': s_i, 'rate': float('nan'), 'k': 0, 'n_traded': 0,
                         'entities': 0, 'note': 'VALID admitted no signal on this training segment'})
