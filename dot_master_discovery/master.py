@@ -1364,6 +1364,26 @@ def _s5d_score_items(items, fam, workers, frame_path, scope, rl, ctx=None):
 
 
 NULL_SEED_BASE = 20260728
+
+
+def _family_seed(fam):
+    """DETERMINISTIC per-family seed. NEVER Python's hash().
+
+    abs(hash(fam)) was used here. Python randomises str hashing PER PROCESS
+    unless PYTHONHASHSEED is fixed, so every run drew a different seed for the
+    same family from the same nominal NULL_SEED_BASE: F0 seeded 20284991,
+    20330271 and 20266910 on three consecutive interpreters. That moved the
+    matched null - and with it EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF, the pricing
+    column the operator separates a real edge from a chance row on. Between two
+    runs of identical code on byte-identical candidates, F0's rows priced under
+    1.0 went 221 -> 778.
+
+    A blake2b digest of the family name is stable across processes, machines and
+    Python versions, so the same family always draws the same null.
+    """
+    import hashlib as _h
+    d = _h.blake2b(str(fam).encode('utf-8'), digest_size=8).digest()
+    return NULL_SEED_BASE + int.from_bytes(d, 'big') % 100000
 CONCURRENT_STAGES = ('S3', 'S5C', 'S5D', 'S7')
 
 
@@ -1502,7 +1522,7 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
         fr = pd.DataFrame(rows)
         if len(fr):
             N_F = len(fr)
-            rng = np.random.default_rng(NULL_SEED_BASE + abs(hash(fam)) % 100000)
+            rng = np.random.default_rng(_family_seed(fam))
             fire_targets = [c for c in fam_fire_counts.get(fam, []) if c > 0]
             fam_k = cat.null_k_for(fam, null_k)
             drawn, nstats = cat.draw_matched_null_masks(pool, fire_targets, rng, k=fam_k)
@@ -3001,6 +3021,19 @@ def main():
           f'| unaccounted {_wall - _tot:.2f}s ({100.0 * (_wall - _tot) / max(_wall, 1e-9):.1f}%). '
           f'Anything unaccounted is work outside a stage wrapper - banner, sacred verify, frame '
           f'binding, argument parsing.')
+    _dfa = os.path.join(out, 'data_for_analysis')
+    _log = os.path.join(out, 'run_log.txt')
+    if os.path.isdir(_dfa) and os.path.exists(_log):
+        try:
+            for _h in getattr(rl, '_LOG_FH', None) and [rl._LOG_FH] or []:
+                _h.flush()
+        except Exception:
+            pass
+        shutil.copy2(_log, os.path.join(_dfa, 'run_log.txt'))
+        print(f'  run_log.txt RE-COPIED into data_for_analysis after the timing table. S10 runs '
+              f'BEFORE the run ends, so the copy it made stopped at S9 and could never contain '
+              f'S10 itself, the stage timing table or MASTER COMPLETE - the one artifact needed '
+              f'to size the next parallelism pass.')
 
     print('\n' + '═' * 68)
     print(f'MASTER COMPLETE in {_hms(time.time() - t0)} | out: {out}')

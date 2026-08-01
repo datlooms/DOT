@@ -916,6 +916,13 @@ def _score_catalogue_once(df, cands, pool, anchor, ad, st, warmup, build_book_fn
     scored = {}
     skipped = []
     n = len(items)
+    _seen = {}
+    collapsed = []
+    for _f, _sg, _d in items:
+        _k = f'{_f}|{_sg}|{_d}'
+        _seen[_k] = _seen.get(_k, 0) + 1
+        if _seen[_k] == 2:
+            collapsed.append(_k)
 
     def _absorb(part):
         for key, eb, et, pn, err in part:
@@ -989,7 +996,14 @@ def _score_catalogue_once(df, cands, pool, anchor, ad, st, warmup, build_book_fn
         if pg is not None:
             pg.__exit__(None, None, None)
     print(f'  S5C scoring: ran via {used} - {len(scored)} of {n} candidates', flush=True)
-    print(f'  S5C catalogue scored via {used}: {len(scored)} of {n} candidates'
+    if collapsed:
+        print(f'  S5C: {len(collapsed)} DUPLICATE signal_id(s) in the candidate pool collapsed to '
+              f'one entry each - `scored` is keyed on family|signal_def|direction, so a repeated '
+              f'key OVERWRITES rather than adds. This is why the count reads {len(scored)} of {n} '
+              f'while skipped is 0: nothing was skipped, one row was absorbed. Duplicates: '
+              f'{collapsed[:3]}', flush=True)
+    print(f'  S5C catalogue scored via {used}: {len(scored)} of {n} candidates '
+          f'({len(collapsed)} absorbed as duplicate signal_id)'
           + (f' | {len(skipped)} SKIPPED (build_book could not reconstruct the mask): '
              f'{sorted(set(e for _k, e in skipped))[:2]}' if skipped else ' | 0 skipped')
           + '. A silently smaller population is the failure shape this project has met most '
