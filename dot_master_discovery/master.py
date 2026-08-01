@@ -374,7 +374,6 @@ def s2_pool(df, ad, st):
 def s3_discovery(out, workers, input_sha, scope, df=None, ad=None, st=None, w=None, limit=0):
     results = os.path.join(out, 'results')
     os.makedirs(results, exist_ok=True)
-    emit_regime_labels(df, os.path.join(out, 'results'), out, input_sha)
     _res = os.path.join(out, 'results')
     _fam_csvs = sorted(glob.glob(os.path.join(_res, 'results_F*.csv'))) if os.path.isdir(_res) else []
     _fam_csvs = [f for f in _fam_csvs if '_part' not in os.path.basename(f) and '_c0' not in
@@ -382,6 +381,7 @@ def s3_discovery(out, workers, input_sha, scope, df=None, ad=None, st=None, w=No
     if is_done(out, 'S3', input_sha) and _fam_csvs:
         print(f'  S3 resumed from marker: {len(_fam_csvs)} per-family result CSVs present on disk '
               f'- skipping the scan.')
+        emit_regime_labels(df, results, out, input_sha)
         return
     if is_done(out, 'S3', input_sha) and not _fam_csvs:
         print('  S3 marker present but NO per-family result CSVs on disk - RE-RUNNING. A gate that '
@@ -413,6 +413,7 @@ def s3_discovery(out, workers, input_sha, scope, df=None, ad=None, st=None, w=No
                      frame_path=frame_path, input_sha=input_sha, limit=limit)
     run_diagnostic_families(results, workers, input_sha, df=df)
     orch.verify_diagnostic_outputs(results, input_sha)
+    emit_regime_labels(df, results, out, input_sha)
     if frame_path is not None and os.path.exists(frame_path):
         os.remove(frame_path)
         print(f'  worker frame {os.path.basename(frame_path)} removed on S3 completion')
@@ -956,8 +957,15 @@ def emit_regime_labels(df, results_dir, out, input_sha):
     """
     src = os.path.join(results_dir, 'concurrence_depth_bars.csv')
     if not os.path.exists(src):
-        print('  regime_labels.csv NOT written: concurrence_depth_bars.csv is absent, so F12 has '
-              'not produced the per-bar labels yet.')
+        print('  *** regime_labels.csv NOT WRITTEN ***', flush=True)
+        print(f'      source absent: {src}', flush=True)
+        print('      F12 has not produced the per-bar labels, so there is nothing to derive from. '
+              'CONSEQUENCE: S5D\'s catalogue regime columns (regime_causal_0_pct, '
+              'regime_causal_1_pct, regime_burnin_pct, regime_modal) WILL BE BLANK, and the '
+              'operator loses one of the four balance axes - direction x structure x session x '
+              'REGIME - with no error anywhere downstream. This branch used to write nothing and '
+              'say nothing, which is how a cold run lost the file silently while every resumed '
+              'run passed.', flush=True)
         return None
     d = pd.read_csv(src, comment='#')
     idx = {str(t): i for i, t in enumerate(df['Time'].astype(str).values)}
