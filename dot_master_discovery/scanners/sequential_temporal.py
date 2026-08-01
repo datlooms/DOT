@@ -106,9 +106,10 @@ def score_candidate(df, seq, direction, month, adaptive, structural, warmup):
         return None
     fold_rows = []
     fold_trades = []
+    entry_month = (pd.Series(full['entry_time'].astype(str).values).str[:7].values
+                   if len(full) else np.empty(0, dtype=object))
     for label, mkey in wf.FOLDS:
-        td = engine.run_portfolio(df, sig, mask_window=(month == mkey), adaptive=adaptive,
-                                  structural=structural, warmup=warmup, verbose=False)
+        td = full[entry_month == mkey]
         fold_rows.append(wf.fold_metrics(td, label))
         if len(td):
             fold_trades.append(td)
