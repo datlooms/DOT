@@ -842,6 +842,10 @@ def _bounds_for(fam, kw):
     return _chunk_bounds(n_units), n_units
 
 
+CHUNK_RETRY_PASSES = 3
+CHUNK_RETRY_BACKOFF_S = 2.0
+
+
 def _chunk_paths(fam, script, idx):
     csv = os.path.join(RESULTS_DIR, f"results_{fam}_{script}_c{idx:04d}.csv")
     done = os.path.join(RESULTS_DIR, f"results_{fam}_{script}_c{idx:04d}.done")
@@ -1317,29 +1321,65 @@ def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=Non
                   'chunked family. One missing F1 chunk once triggered a full 1,713,630-candidate '
                   'single-process re-search (~17 days at the measured rate); the resume path did '
                   'the same work in 5m23s.', flush=True)
-            requeue = []
-            for fam, script, _n, bounds in plan:
-                for i in incomplete.get(fam, []):
-                    lo, hi = bounds[i]
-                    requeue.append((fam, script, scope, RESULTS_DIR, frame_path, i, lo, hi))
-            if requeue and frame_path is not None:
+            script_of = {p0: p1 for p0, p1, _a, _b in plan}
+            bounds_of = {p0: p3 for p0, _p1, _a, p3 in plan}
+            still = dict(incomplete)
+            for _pass in range(1, CHUNK_RETRY_PASSES + 1):
+                requeue = []
+                for f, ix in still.items():
+                    for i in ix:
+                        lo, hi = bounds_of[f][i]
+                        requeue.append((f, script_of[f], scope, RESULTS_DIR, frame_path,
+                                        i, lo, hi))
+                if not requeue or frame_path is None:
+                    break
+                print(f'  RETRY PASS {_pass}/{CHUNK_RETRY_PASSES}: re-queueing '
+                      f'{len(requeue)} chunk(s) {dict((f, ix[:8]) for f, ix in still.items())}',
+                      flush=True)
                 from concurrent.futures import ProcessPoolExecutor as _PPE
                 import multiprocessing as _mp3
                 nw2 = min(workers, len(requeue))
-                with _PPE(max_workers=nw2, mp_context=_mp3.get_context('spawn')) as ex2:
-                    for _r in ex2.map(_chunk_worker, requeue):
-                        pass
-            script_of = {p0: p1 for p0, p1, _a, _b in plan}
-            still = {}
-            for f, ix in incomplete.items():
-                left = [i for i in ix if not chunk_is_complete(f, script_of[f], i)]
-                if left:
-                    still[f] = left
+                try:
+                    with _PPE(max_workers=nw2, mp_context=_mp3.get_context('spawn')) as ex2:
+                        for _r in ex2.map(_chunk_worker, requeue):
+                            pass
+                except Exception as _re:
+                    print(f'    retry pass {_pass} pool error: {type(_re).__name__}: '
+                          f'{str(_re)[:90]}', flush=True)
+                nxt = {}
+                for f, ix in still.items():
+                    left = [i for i in ix if not chunk_is_complete(f, script_of[f], i)]
+                    if left:
+                        nxt[f] = left
+                recovered = sum(len(v) for v in still.values()) - sum(len(v) for v in nxt.values())
+                print(f'    pass {_pass} recovered {recovered} chunk(s); '
+                      f'{sum(len(v) for v in nxt.values())} still missing', flush=True)
+                still = nxt
+                if not still:
+                    print('  ALL MISSING CHUNKS RECOVERED — collation proceeds with a complete set.',
+                          flush=True)
+                    break
+                if _pass < CHUNK_RETRY_PASSES:
+                    time.sleep(CHUNK_RETRY_BACKOFF_S * _pass)
             if still:
-                raise SystemExit(
-                    f'ABORT — chunks still missing after re-queue: {still}. Named by index so the '
-                    f'operator does not have to derive them with a set-difference.')
+                print('', flush=True)
+                print('  *** CHUNKS STILL MISSING AFTER '
+                      f'{CHUNK_RETRY_PASSES} RETRY PASSES ***', flush=True)
+                for f, ix in still.items():
+                    print(f'      {f}: {len(ix)} missing, indices {ix[:20]}'
+                          + (f' ... and {len(ix) - 20} more' if len(ix) > 20 else ''), flush=True)
+                print('  THESE FAMILIES WILL NOT BE COLLATED AND WILL NOT BE MARKED DONE. A '
+                      'silently short collation is worse than a visible failure: the candidate '
+                      'invariant would abort later with no context about which chunks were '
+                      'absent. Re-run and only these indices are re-queued.', flush=True)
+                print('', flush=True)
+        _short = set(still) if incomplete else set()
         for fam, script, _n, bounds in plan:
+            if fam in _short:
+                print(f'  {fam}: COLLATION SKIPPED — {len(_short and still.get(fam, []))} chunk(s) '
+                      f'absent after {CHUNK_RETRY_PASSES} retry passes. Not marked done.',
+                      flush=True)
+                continue
             if fam == 'F0':
                 ok, n_rows = collate_f0(script, len(bounds), df, adaptive, structural, warmup,
                                         expected_cands.get('F0'), input_sha)
