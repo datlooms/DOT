@@ -410,13 +410,153 @@ Matching composition would make the null a near-copy of the population and destr
 independence that gives it meaning. **This is a property of the method, not a defect awaiting
 a fix.**
 
-**7. Gates have never been priced.** Signals are priced against a matched null.
-**Gates are not.** Any gate found by testing variables and thresholds against a population is
-an unpriced search result — exactly the defect that made the pricing column necessary in the
-first place. Treat gate findings as hypotheses until an equivalent null exists.
+**7. Gates HAVE been priced before — and one prior result independently reproduced.** An
+earlier sweep of 117 adaptive variables hunting a short-side conditioner found
+**`Micro_Rejection:lo` at the 98.6th random-subset percentile, OOS-positive and
+mechanism-backed.** That is a priced gate result; the machinery existed and was used.
+
+It was re-tested on the NEW catalogue's short depth-3+ population and it holds:
+
+    SHORT 3+ ungated                n=1,485  PF 3.60
+    Micro_Rejection    lo p50       n=  973  PF 5.00   net 25,709   keeps 89% of net
+    Micro_Rejection    lo p30       n=  630  PF 5.53   net 19,176
+    Micro_FailedBreak  hi p50       n=  626  PF 7.61   net 13,298   keeps 42% of net
+
+**A gate found on the old pool, priced at the time, still works on a pool built by a rebuilt
+pipeline from a different catalogue.** That is out-of-sample confirmation of a gate and it is
+the strongest gate evidence this project holds.
+
+**But `Micro_FailedBreak` is NOT in that category.** It was found by testing eleven variables
+at three thresholds on two sides — 66 tests, one frame, never priced. Treat it as a hypothesis
+until it has the equivalent of a random-subset percentile. The two also trade off differently:
+FailedBreak is the sharper filter, Rejection the wider one that retains far more net. Under
+survival-first that distinction matters more than the PF headline.
 
 **8. F0's `MIN_PF = 2.0` internal pre-gate.** F0 rows are already a PF-filtered subset before
 S5 ever sees them. Coverage below the reachable ceiling has this as one of its named causes.
+
+---
+
+# 4B. WHAT THE PRIOR RESEARCH ALREADY ESTABLISHED
+
+Recovered from `foundational_documents/DOT_rule_master_spec.txt` and the Manager's record.
+**These are not new questions. They were answered once, with numbers, and the answers are
+still binding.** Do not re-open them without new evidence, and do not re-discover them.
+
+## CONVICTION — why the constants are what they are
+
+    MAX_RISK 150.0   HURST_SIZE_PCT 0.90   HURST_GAP_PCT 0.97   FB_PCT 0.90
+    CONV_HURST_MULT 2.0   CONV_RECENTFB_MULT 1.25   RECENTFB_WINDOW 5   GAP_LOCK 3.0
+
+**Hurst sizing is LONGS ONLY, and it was measured.** `Micro_Hurst` confers **no** short edge:
+**OOS PF 2.22 on shorts against 4.99 on longs.** Shorts stay at 1.0 lots unless D2D fires.
+
+**D2D is the ONLY short-side conviction source** — verbatim from the spec: *"it fills the gap
+where longs had Hurst/recentFB and shorts had nothing."*
+
+**A long that qualifies for both Hurst and recentFB takes the HIGHER multiplier (×2), never
+the product.**
+
+**SACRED BUILD-GUARD:** engine and `conviction.py` must size shorts (D2D-agree short → 2×).
+Without it D2D's entire short-side conviction is silently dropped — verified live, book ×2
+count 210 → 249 with the role on.
+
+**DELIBERATE ASYMMETRY, not a bug:** D2D-gap fires at a flat 2 lots because it clears the
+throne (96.9% WR, highest in the book). S.20 gaps stay 1 lot because they clear a lower ~p90
+gate. D2D-gap assigns lots **directly**, bypassing the conviction arrays — routing through
+them then hardcoding 2× would yield 4× and breach the gate.
+
+**A LIVE DECISION THE OPERATOR SHOULD RE-EXAMINE.** Two configurations were measured:
+
+    G'  Hurst x2 ONLY          net $85,134   worst-day -120.9   max-DD -120.9
+    G   Hurst x2 + recentFB    net $90,103   worst-day -147.2   max-DD -147.2
+
+**G' was the recommended tail-clean config. G is what is live.** $4,969 of net bought $26 of
+worst-day. That was decided before survival-first was the explicit governing filter. It is
+worth re-deciding.
+
+## THE JAR — mechanism, and it is a free improvement sitting unbuilt
+
+The jar is **6 LIVE LOTS, not 6 positions.** `g_dots_live_lots` is a single integer:
+
+    open                     += 1
+    admission                 only if g_dots_live_lots < 6
+    BE transition (S.8.1)    -= 1     the winner's lot LEAVES the jar
+    still-live exit pre-BE   -= 1     (no double-decrement after BE)
+
+A break-even'd winner carries no risk, so it stops blocking. **Unlimited open positions
+provided no more than 6 are pre-break-even.**
+
+**IT WAS SIMULATED:**
+
+    2,409 trades (+74)   net $58,685 (+$1,418)   PF 5.83   WR 91.9%
+    worst-day -$127.5    max-DD -$165.6          IDENTICAL to the count cap
+    6/6 folds   22/22 weeks   OOS 6.57
+
+**Strict improvement at the identical 6-lot hard bound.** More positions, same tail, because
+the extras are only admitted once existing risk has already been retired.
+
+Not blocked by a defect — sequenced behind the 50-signal panel so it is verified against the
+final book. It is step 17f. **Why 6 in the first place is NOT RECORDED.**
+
+## THE HEART OF THE OCEAN — a target, tested to destruction
+
+**It is not a signal and there is no named set to look up.** It was defined as: one variable,
+one threshold, ~100% WR **and** ~100% persistence **and** firing at least weekly. F13 exists
+solely to hunt it.
+
+**F13 ran. Clean documented NEGATIVE.** 117 variables × swept thresholds × 2 directions × 2
+D2D polarities: **0 stars, 0 candidates.**
+
+    best 100%-WR with >=22 trades   Sqz_Val:hi@p99 SHORT    24 tr, 10/22 weeks   FAILS persistence
+    best full-6-fold single         Micro_Hurst:hi@p97 LONG 93 tr, 91.4% WR
+
+91.4% is **below** the convergence book's 92.8%. The finding: *high WR only appears at low
+coverage; full coverage caps at ~91%; persistence and WR are mutually exclusive for singles.*
+
+**A caught defect validates the negative.** The first pass reported 126 stars — median 2
+trades, 55 present in a single week — because `total_firings` counted condition-true bars
+instead of entries. All 126 collapsed once frequency meant trades and persistence meant
+full-span presence.
+
+**"Diamonds" is F13's tier vocabulary**, not a named set of signals.
+
+## HOW BOOK-50 WAS ACTUALLY CHOSEN
+
+A 2,420-signal gated F0 pool → **BOOK-48 by loss-decorrelation** → two F1 sequentials added to
+fill missing market structures, reaching 8/8 coverage:
+
+    SQUEEZE_BREAKOUT   Sqz_Val:hi ->13-> Micro_OrderFlowDelta:lo   33 tr, WR 93.9%, PF 9.69
+    TREND_EXHAUSTION   ADX_Rising:==0 ->8-> D2D_DirStep:==-1       42 tr, WR 92.9%, PF 4.75
+
+**The binding criterion was worst-day held constant** — both additions recorded as "worst-day
+HELD at −127.5". Ordering was **persistence and decorrelation first, then structure coverage.
+Not PF.**
+
+**THE 37/13 SPLIT FELL OUT. IT WAS NOT CHOSEN, AND IT WAS NOT FORCED BY THE DATA.** An
+independent auditor, blind re-deriving from the **identical** 2,420-signal pool, produced
+**26 LONG / 19 SHORT** — OOS PF 3.23, 6/6 folds, 22/22 weeks. Same pool, far more balanced
+answer. **The imbalance is a property of the selection method, now confirmed three ways:** the
+auditor's re-derivation, the 51.3/48.7 pool split, and the fact that 13 signals cannot stack
+to depth 3.
+
+**One close call, rejected on survival:** an earlier exhaustion fill including shorts stacked
+counter-trend losses and pushed worst-day to −$238.
+
+**AND THE FOUNDING FACT, CONFIRMED BY THE RECORD:** OOS *was* measured — but on May–June of
+the same window the book was built on. The auditor separately demonstrated proper discipline
+by selecting on Jan–April and measuring on held-out May–June. **BOOK-50 itself never had
+that.**
+
+## SHORT-SIDE CONDITIONERS — the field was swept, not assumed
+
+117 adaptive variables were swept looking for a legitimate short-side conditioner.
+**`Micro_Rejection:lo` was the best found: 98.6th random-subset percentile, OOS-positive,
+mechanism-backed.** The sequential exhaustion sequence — Hurst-diminishing → FailedBreak →
+D2D flip — was tested and found *"real but fragile: better at flagging worst flips than best
+ones."*
+
+**`Micro_Rejection:lo` independently reproduces on the new catalogue** — see trap 7.
 
 ---
 

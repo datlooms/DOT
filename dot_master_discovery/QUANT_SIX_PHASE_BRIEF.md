@@ -14,6 +14,13 @@ anything you build on: 39,308 catalogue rows across seven families, F0 at 1,840 
 terrain 7,490 with 1,143 UP / 1,155 DOWN reachable, unclaimed 1,037/1,055, pass criterion mean
 2.1653 / min 1.5083 / lb95 1.4026 / **FAIL**.
 
+**READ `cake_dictionary.md` SECTION 4B BEFORE STARTING.** It records what prior research
+already established with numbers — the conviction constants and why Hurst is longs-only
+(OOS PF 2.22 short vs 4.99 long), the jar mechanism and its simulated result, the Heart of the
+Ocean tested to a documented negative, how BOOK-50 was actually selected, and the independent
+auditor's 26L/19S from the identical pool. **Several questions you might otherwise open are
+already closed. Do not re-discover them.**
+
 ---
 
 ## MEASUREMENT PROTOCOL — BINDING, EVERY PHASE
@@ -110,6 +117,23 @@ Eleven variables tested on SHORT depth-3+ (n=1,485, ungated PF 3.60):
 Stacking AT on top adds nothing (7.67 AT-bearish, 7.44 AT-bullish) — **FailedBreak does all the
 work.** Structurally coherent: a failed break *is* a short setup; Hurst measures trend
 persistence, which is what longs need.
+
+**BUT A PRIOR SWEEP ALREADY FOUND A BETTER-EVIDENCED SHORT GATE, AND IT REPRODUCES.** 117
+adaptive variables were swept in earlier research; **`Micro_Rejection:lo` scored at the 98.6th
+random-subset percentile, OOS-positive and mechanism-backed** — a *priced* gate result.
+Re-tested on this catalogue's short depth-3+ population:
+
+    Micro_Rejection    lo p50   n=973  PF 5.00  net 25,709   keeps 89% of net
+    Micro_Rejection    lo p30   n=630  PF 5.53  net 19,176
+    Micro_FailedBreak  hi p50   n=626  PF 7.61  net 13,298   keeps 42% of net
+
+**A gate found on the old pool still works on a pool built by a rebuilt pipeline from a
+different catalogue.** That is out-of-sample confirmation and it is the strongest gate evidence
+this project holds. FailedBreak has no such standing — 66 tests, one frame, never priced.
+
+The two are a genuine trade: FailedBreak is the sharper filter, Rejection the wider one
+retaining far more net. **Under survival-first that distinction matters more than the PF
+headline. Measure both; recommend neither.**
 
 Book with FailedBreak on shorts instead of Hurst:
 
@@ -242,6 +266,12 @@ that three splits cannot distinguish them — with what would.
 - F0 is 1,840 rows against BOOK-50's 48. State plainly how many clear the bar per direction;
   the operator's scaling target is 72–100 F0 signals for 4× the 505 triple population.
 
+**PRECEDENT WORTH KNOWING:** an independent auditor blind re-deriving from BOOK-50's identical
+2,420-signal pool produced **26 LONG / 19 SHORT** (OOS PF 3.23, 6/6 folds, 22/22 weeks) against
+the committed 37/13. Same pool, far more balanced answer. **A balanced book was always
+available from the same evidence** — the imbalance was a property of the selection method, not
+of the market. Your shortlist should make that visible rather than reproduce it.
+
 **OUTPUT:** shortlist size per direction per family, and the intersection of cheap-by-chance AND
 fold-persistent.
 
@@ -341,11 +371,15 @@ and overnight holds 0. A session-balanced book deliberately takes worse episodes
 Findings B and C establish that gating is **directional**. Longs enter on pullbacks and respond
 to Hurst; shorts enter on continuation and respond to FailedBreak. Neither gate has been priced.
 
-**SPECIFY WHAT A PRICED GATE TEST LOOKS LIKE.** `Micro_FailedBreak > p50` doubling short 3+ PF
-was found by testing eleven variables at three thresholds on two sides — 66 tests. That is
-exactly the search item 8 exists to price for signals, and no equivalent exists for gates. The
-required measurement is the analogue of `EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF`: **how large a lift
-would the best of 66 tested gates show by chance alone?** Specify the null; do not build it.
+**SPECIFY WHAT A PRICED GATE TEST LOOKS LIKE — AND THE PRECEDENT ALREADY EXISTS.** The prior
+research priced `Micro_Rejection:lo` at the **98.6th random-subset percentile**. That is the
+form the measurement should take, and it means the machinery has been done once before.
+Recover the method from the record rather than inventing one.
+
+`Micro_FailedBreak > p50` has no such standing: 66 tests (eleven variables x three thresholds x
+two sides), one frame, never priced. **How large a lift would the best of 66 tested gates show
+by chance alone?** Specify the null; do not build it. Then state which of the two gates the
+evidence actually supports.
 
 Also specify how to test the **tiered** gate that is currently untested: Hurst p90 on short
 solos/duals, FailedBreak on short triples.
