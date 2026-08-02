@@ -719,44 +719,73 @@ affordable. This shows three beats random; it does not show three beats two or f
 
 ---
 
-# 4G. THE DENSITY SWEEP — A BOOK-SCORING TOOL NOTHING POINTS AT
+# 4G. TWO DEPTH LADDERS — THEY MEASURE DIFFERENT THINGS AND THEY DISAGREE
 
-**Every depth figure in circulation was INFERRED by grouping trades on `entry_bar`. The engine
-has its own proper measurement and it has never been run.**
+**`score_book.py` now prints BOTH on every book it scores.** Read them as a pair. They are not
+alternatives and they are not contradictory — they answer different questions, and confusing
+them is the easiest available mistake.
 
-    scanners/triple_convergence_and_d2ddir.py
-      L461-469   DENSITY_K_BANDS = [1, 2, 3, 4, 5, 6, 8, 10]   "fused F10 dimension"
-      L472       build_set_density()
-      L523       density_sweep()
-      L549       run_density()
-      L589       fires ONLY on:  ... density <book.csv>
+    L174   SAME-BAR DEPTH LADDER — DISTINCT-SIGNAL basis
+    L233   F10 CONVERGENCE-DENSITY LADDER — set-condition basis
 
-**It is a SEPARATE entry point.** `master.py` imports the module for its triple scan and never
-calls `run_density`. `discovery_orchestrator.py` L36 records the decision in a comment — *"it
-is run SEPARATELY and its CSV ingested"* — and nothing else mentions it. **That is why the
-10h43m run produced no density output: nothing was ignored, nothing was called.**
+## LADDER 1 — DISTINCT SIGNALS ON THE SAME BAR (range 1..12)
 
-**WHY IT CANNOT LIVE IN THE PIPELINE:** `density_sweep` scores a **finished signal set** at
-k = 1…10. During discovery there is no book — the catalogue is the deliverable and item 15
-means nothing chooses. It is correctly outside the pipeline.
+**The question:** *do multiple SIGNALS agreeing on one bar predict a better outcome?*
 
-**HOW TO RUN IT:**
+    LONG   solo 3.59   dual 2.43   3-4 8.68   5+ 39.40
+    SHORT  solo 3.52   dual 2.49   3-4 3.88   5+  3.38
 
-    python scanners/triple_convergence_and_d2ddir.py density <your_book.csv>
+**Answer: emphatically yes on longs, not at all on shorts.** This is the gradient the whole
+architecture rests on, and section 4F shows it survives a random-triple null.
 
-**Its default argument is `recommended_set_76.csv`, a superseded pre-reconstruction file.
-ALWAYS pass the book explicitly.**
+## LADDER 2 — SET-CONDITIONS CO-FIRING (range 0..35)
 
-**WHAT IT GIVES YOU:** the depth ladder measured by the ratified engine rather than inferred —
-co-firing count ≥ k over the **candidate signal set under evaluation**, direction-aligned, run
-as a **gate** rather than a post-hoc grouping. The scanner's own note records why it is not
-measured over the raw 249-condition pool: *"that saturates"* — confirmed independently, since
-at 1,000 signals 97.1% of bars reach depth ≥3.
+**The question:** *does restricting entry to bars where MORE OF THE BOOK'S CONDITIONS are
+simultaneously true improve anything?* Measured over the candidate signal set, direction-
+aligned, applied as a GATE.
 
-> **USE IT AS A CHECKPOINT ON ANY CANDIDATE BOOK.** It answers *"does count≥5 outperform
-> count≥2"* directly, on whatever set you point it at, and it is the correct instrument for
-> that question. BOOK-50 is the current signal set; every future book should be screened the
-> same way.
+On BOOK-50, the first time it has ever been run on current data:
+
+    LONG (37 signals)   k>=1  PF 5.31  bars 177,246  trades 1,805
+                        k>=8  PF 5.45  bars  80,919  trades 1,748
+    SHORT (13 signals)  k>=1  PF 4.18  ->  k>=8  PF 4.41
+
+**Answer: almost nothing.** Half the bars discarded for roughly 3% of PF.
+
+## WHY BOTH ARE TRUE
+
+**Signal agreement is informative. Ambient condition density is not.**
+
+A bar where five distinct signals fire is a bar where five independently-selected patterns
+converged. A bar where 20 of the set's conditions are true is mostly a volatile bar — and the
+project already knows why: **~24 of 120 thresholds are at extremes on any bar by construction
+(120 × 20%).** Raw density is largely a volatility proxy. That is also the reason the scanner's
+own note restricts the measurement to the candidate set rather than the raw 249-condition pool:
+*"that saturates."*
+
+> **Use Ladder 1 to decide how many signals to hold. Use Ladder 2 to decide whether a density
+> gate earns its place — and on the current evidence it does not.**
+
+## RUNNING IT
+
+It fires automatically inside `score_book.py`, on the same book, in one invocation:
+
+    python score_book.py --book <your_book.csv> --data data --out <dir>
+      -> the constraint machinery (TailDep, FailConc, mCVaR, absolute survival)
+      -> the distinct-signal depth ladder
+      -> density_<book>.csv : k, direction, survival, bars, trades, PF, WR,
+                              worst_day_usd, hard_stop_days, pf_base, pf_stress
+
+`DENSITY_K_BANDS = [1,2,3,4,5,6,8,10]`, from
+`scanners/triple_convergence_and_d2ddir.py` L461-469 — the fused F10 dimension. `score_book.py`
+calls the ratified `f0.density_sweep` directly rather than reimplementing it. The scanner's
+standalone entry point (`... density <book.csv>`) still exists but is no longer needed, and its
+default argument is a superseded file — **never invoke it that way.**
+
+**Historical note:** this produced nothing in any discovery run because it was a separate
+entry point nothing called. It could not live in the pipeline — it scores a FINISHED signal
+set, and during discovery there is no book. It now runs wherever a book is scored, which is
+the correct place.
 
 ---
 
