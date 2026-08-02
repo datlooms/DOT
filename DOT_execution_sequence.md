@@ -176,6 +176,17 @@
   **FUSED-50 is the low-fit control** — beats BOOK-50 on FailConc (1.65 vs 3.46), mCVaR (-$2,091 vs -$4,923),
   survival (-$340 vs -$565) and net (+$8,233), with **no gate fitting at all**, and its LONG triple+ tier pays
   above parity (win/loss 1.0349, margin 48.8pp, 7 losses).
+  **ATR GATE ADOPTED + SHORT-GATE CORRECTION (2026-08-02).** `ATR_1M >= 20` at the entry bar, raw
+  value, every cell: **1,808 tr / WR 97.57% / PF 15.72 / $97,410 / wd -$272.9 / 44 losses / 3 losing
+  days** against the ungated 1,988 / 96.58% / 14.14 / $100,094 / 68. **35% of losses removed for 2.7%
+  of the net.** Mechanism: at low ATR the 3.0 spread eats 24% of the break-even trigger, so a BE exit
+  banks $10.92 against $34.11 normally. **A minimum BE trigger and a minimum stop were both tried and
+  both FAIL** — do not move the trigger, do not take the trade. The full TM constant set was swept and
+  **nothing beat the ratified values**; LOCK_FRAC above 1.0 was found to book exits at prices never
+  traded (52.7% of them at 2.0) and **1.0 is a ceiling by construction**.
+  **CORRECTION: the SHORT cells take TWO conditions IN SERIES** — `Bar_Range<p95 AND FailedBreak<p10`
+  (solo), `Efficiency_Ratio<p80 AND VPIN>p70` (dual). Either alone gives roughly half the PF. Full
+  detail in `foundational_documents/DOT_rule_master_spec_OPTION_B.txt` §3 and §5B.
   **SIX POST-DRAFT MEASUREMENTS, ALL MATERIAL** (full detail in `foundational_documents/DOT_rule_master_spec_OPTION_B.txt` §8):
   **(1) GAPS MUST NOT BE APPLIED** — with gaps $116,028 but 135 losses / 7 losing days / wd -$495.6 / PF
   8.06, against $100,094 / 68 / 3 / -$272.9 / PF 14.14 without. The book degrades before a gap trade is

@@ -131,6 +131,54 @@ architectural decision later supported; it is now a measured result with a null 
 three has never been competed against a same-bar pair or a 4/5-variable grammar.**
 
 
+### THE ATR GATE — ADOPTED 2026-08-02, AND A CORRECTION TO THE SHORT GATES
+
+**`ATR_1M >= 20` at the entry bar, raw value, applied to every cell.**
+
+    gate           trades    WR%      PF       net     worst day  losses  ldays
+    none            1,988   96.58   14.14   $100,094    -$272.9      68      3
+    ATR >= 15       1,902   97.06   14.74    $99,802    -$272.9      56      3
+    ATR >= 20       1,808   97.57   15.72    $97,410    -$272.9      44      3   ADOPTED
+    ATR >= 25       1,628   97.91   17.42    $93,511    -$287.7      34      3
+
+**35% of all losses removed for 2.7% of the net; the worst day does not move; the three losing days
+survive every setting.**
+
+**MECHANISM:** at low ATR the break-even lock sits ~12 points out and the 3.0 spread eats **24% of it**
+— a BE exit banks $10.92 against $34.11 in normal conditions. The low band nets +$7,097 so it does not
+bleed, but it earns $18.15 a trade against $58.23 and carries a disproportionate share of stop-outs.
+
+**REJECTED:** a MINIMUM BE TRIGGER makes it worse (floor 25 -> losses 68 -> 108) because a wider trigger
+means fewer trades reach break-even and more ride to the stop. A MINIMUM STOP does nothing — minimum
+ATR in the frame is 8.5 so floors under 15 never bind, and 20+ hurts because flooring ATR widens the
+stop and the step together. **Do not move the trigger. Do not take the trade.**
+
+**THE FULL TM CONSTANT SET WAS SWEPT** — RISK_MULT, MOMENTUM_SL_MULT, STEP_PCT, LAG_BASE, LAG_MOMENTUM,
+MOMENTUM_THRESHOLD, MAX_RISK, BE_TRIG_FRAC, LOCK_FRAC. **Nothing beat the ratified values**; the only
+marginal gain was LAG_BASE=3 at +0.33 PF, within noise. **The trade management is already tuned.**
+
+**A TRAP FOUND WHILE SWEEPING, AND IT MUST NOT BE REPEATED:** LOCK_FRAC above 1.0 books exits at prices
+the market never traded — 31.1% of exits at 1.5, **52.7% at 2.0**, producing a fictional $258,236. BE
+fires when price reaches entry + be_trigger; at LOCK_FRAC 1.0 the stop moves to exactly that price,
+which is reachable. Above 1.0 it is placed beyond where price has been and the next bar fills it.
+**LOCK_FRAC = 1.0 IS A CEILING BY CONSTRUCTION.** Same shape as the recorded defect that took PF 1.65
+to 1.01.
+
+**CORRECTION — THE SHORT CELLS ARE STACKED, TWO CONDITIONS IN SERIES:**
+
+    SHORT solo   Bar_Range < p95         AND  Micro_FailedBreak < p10
+    SHORT dual   Efficiency_Ratio < p80  AND  Micro_VPIN > p70
+
+    Bar_Range/Efficiency alone     3,343 tr  PF  7.36  $120,373  wd -$139.1  213 losses
+    FailedBreak/VPIN alone         2,323 tr  PF  8.53  $103,464  wd -$495.6  115 losses
+    BOTH IN SERIES = OPTION B      1,988 tr  PF 14.14  $100,094  wd -$272.9   68 losses
+
+**Either alone gives roughly half the profit factor.** An earlier draft of the spec listed four short
+conditions where there are eight and would not have reproduced the book.
+
+**All trade-management work ran on a research copy; the sacred `portfolio_simulation_engine.py` is
+byte-identical at `bb498eb13ce3`.**
+
 ### POST-DRAFT MEASUREMENTS — SIX, ALL MATERIAL (2026-08-02, same day)
 
 1. **GAPS MUST NOT BE APPLIED TO OPTION B.** With gaps: $116,028 but 135 losses, 7 losing days, wd

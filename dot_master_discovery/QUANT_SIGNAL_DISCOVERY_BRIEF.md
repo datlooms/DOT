@@ -328,8 +328,9 @@ active, and every book below PASSES every hard constraint through `score_book.py
     FUSED-120 + Option A          3,343  $120,373  93.6%   7.36     2.067        -      -$139
     FUSED-120 + Option B          1,988  $100,094  96.6%  14.14     1.352        -      -$273
 
-**OPTION B: $100,094 | WR 96.58% | PF 14.14 | 68 losses | 3 losing days of 119 | FailConc 1.352 — the lowest
-measured anywhere in this project.**
+**OPTION B, ADOPTED CONFIGURATION (with `ATR_1M >= 20`): $97,410 | WR 97.57% | PF 15.72 | 44 losses |
+3 losing days | worst day -$272.9.** Without the ATR gate: $100,094 | WR 96.58% | PF 14.14 | 68 losses |
+FailConc 1.352 — the lowest measured anywhere in this project.
 
     avg win $56.10 | avg loss -$112.06 | win/loss 0.501
     break-even WR 66.64% vs actual 96.58% -> MARGIN 29.9pp
@@ -404,6 +405,54 @@ counting** — the EA already evaluates every rule every bar so the tally is fre
 which five of eight qualifying entries get the six live lots on a deep bar. (c) **The one F1 signal came
 from BOOK-50**, not from catalogue-shopping — it is the SQUEEZE_BREAKOUT structure-fill, unioned in and
 kept on merit.
+
+
+
+### THE ATR GATE — ADOPTED, AND A CORRECTION TO THE SHORT GATES
+
+**`ATR_1M >= 20` at the entry bar, raw value not a percentile, applied to every cell.**
+
+    gate            trades    WR%      PF       net     worst day  losses  ldays
+    none (base)      1,988   96.58   14.14   $100,094    -$272.9      68      3
+    ATR >= 15        1,902   97.06   14.74    $99,802    -$272.9      56      3
+    ATR >= 20        1,808   97.57   15.72    $97,410    -$272.9      44      3   ADOPTED
+    ATR >= 25        1,628   97.91   17.42    $93,511    -$287.7      34      3
+
+**35% of all losses removed for 2.7% of the net, and the worst day does not move.** The
+three losing days survive every setting.
+
+**THE MECHANISM.** At low ATR the break-even lock sits ~12 points out and the 3.0 spread
+eats **24% of it** — a BE exit banks $10.92 against $34.11 in normal conditions. The low
+band still nets +$7,097, so it does not bleed; it earns $18.15 a trade against $58.23 and
+carries a disproportionate share of the stop-outs.
+
+**WHAT FAILED.** A minimum BE trigger makes it worse (floor 25 → losses 68 → 108) because
+widening the trigger means fewer trades reach break-even and more ride to the stop. A
+minimum STOP does nothing — minimum ATR in the frame is 8.5, so floors under 15 never
+bind, and 20+ hurts because flooring ATR widens the stop and the step together.
+**Do not move the trigger. Do not take the trade.**
+
+**AND THE WHOLE TM CONSTANT SET WAS SWEPT** — RISK_MULT, MOMENTUM_SL_MULT, STEP_PCT,
+LAG_BASE, LAG_MOMENTUM, MOMENTUM_THRESHOLD, MAX_RISK, BE_TRIG_FRAC, LOCK_FRAC. **Nothing
+beat the ratified values.** One trap found: **LOCK_FRAC above 1.0 books exits at prices
+the market never traded** — 52.7% of exits at LOCK_FRAC 2.0, producing a fictional
+$258,236. **1.0 is a ceiling by construction, not a tuning choice.**
+
+**CORRECTION TO THE GATE SPEC — THE SHORT CELLS ARE STACKED.**
+
+    SHORT solo   Bar_Range < p95         AND  Micro_FailedBreak < p10
+    SHORT dual   Efficiency_Ratio < p80  AND  Micro_VPIN > p70
+
+    short gates                       trades    PF      net      worst day  losses
+    Bar_Range/Efficiency alone         3,343   7.36   $120,373    -$139.1     213
+    FailedBreak/VPIN alone             2,323   8.53   $103,464    -$495.6     115
+    BOTH IN SERIES = OPTION B          1,988  14.14   $100,094    -$272.9      68
+
+**Either alone gives roughly half the profit factor. The stack is the system**, and an
+earlier draft listed only four short conditions where there are eight.
+
+**All trade-management work ran on a research copy. The sacred
+`portfolio_simulation_engine.py` is byte-identical at `bb498eb13ce3`.**
 
 
 **FUSED-50 is the low-fit control.** Beats BOOK-50 on every axis at the same size — FailConc 1.65 vs 3.46,
