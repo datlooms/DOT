@@ -698,8 +698,6 @@ def regime_profile(entry_bars, lab_causal):
     return out, max(modal, key=lambda k: (modal[k], k))
 
 
-MARGIN_MIN_LOSSES = 20
-
 
 def margin_of_safety(pnl):
     """Break-even WR and the margin above it. THE DEGENERATE CASES STAY BLANK.
