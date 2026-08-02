@@ -875,6 +875,97 @@ its loss count** — a tier resting on fewer than ~20 losses is noise wearing a 
 
 ---
 
+# 5D. SIX SUPERVISOR ATTEMPTS — WHAT MOVED THE NUMBER AND WHAT DID NOT
+
+**Six books were built and simulated before handing over. None is a recommendation. They are
+recorded because the FAILURES locate the constraints, and because one of them beat BOOK-50 —
+so the frontier has at least one measured point on it.**
+
+Every figure is 1 lot, in-sample, full conviction stack, jar active, `score_book.py` not run.
+
+## THE ROUTE
+
+    #  change                                     w/l 3+   what it established
+    1  rarity rank, one gate both directions       0.64    one gate for both sides is wrong
+    2  + decorrelate over a 300-signal slice       0.70    decorrelation helps
+    -  + move the free tier to the crossover         -     worst day -$2,087 -> -$949
+    3  persistence-ranked pool instead of rarity   ~0.55   RARITY BEATS PERSISTENCE for depth
+    4  book-size sweep, 50 to 120 signals          1.11    smaller book = better depth quality
+    5  DECORRELATE OVER ALL 1,818 VALID F0         0.98    THE FIELD SIZE WAS THE CONSTRAINT
+    6  tighten the shallow gate to H95/R20+ticks   0.98    worst day -$177 -> -$94.7
+
+## THE BEST RESULT
+
+**50 signals, 30 LONG / 20 SHORT.** Selected by greedy decorrelation over all 1,818 VALID F0
+signals on minimum shared LOSS DAYS, net-positive only, per direction separately. Gated: solo
+and dual require **Hurst p95 on longs, Micro_Rejection p20 on shorts, ticks >= 300 on both**.
+Triple+ free.
+
+                       trades    WR       PF      net      worst day   w/l 3+
+    BOOK-50 gated         755   96.4%   19.71   $36,068     -$130.7      0.99
+    THIS                  629   93.8%   11.90   $39,606      -$94.7      0.98
+
+**+10% net, 28% better worst day, better direction balance, payoff parity held.** PF is lower
+because it carries 234 more gated shallow trades — they add $9,898 and improve the tail.
+
+## THE FIVE FINDINGS
+
+**1. THE DECORRELATION FIELD SIZE WAS THE BINDING CONSTRAINT ALL ALONG.** Decorrelating over
+300 pre-filtered candidates gave w/l 0.70. Over all 1,818 it gave **0.98**. Nothing else moved
+the number remotely as far — not the gates, not the ranking, not the book size. **BOOK-48
+decorrelated over 2,420. Any selection that decorrelates over a pre-filtered slice has crippled
+the method before it runs.**
+
+**2. RANK ON RARITY, NOT PERSISTENCE.** A pool ranked on `folds_plus` / `min_fold_pf` produced
+*worse* depth quality than one ranked on `EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF`. Persistent
+signals fire often and stack badly. Persistence is a filter, not a ranking key.
+
+**3. THE FREE TIER MUST SIT AT THE CROSSOVER, AND THE CROSSOVER MOVES WITH BOOK SIZE.** BOOK-50
+crosses at depth 3 with 48 signals. A 100-signal book crosses at 4-6. Copying "triple+ free"
+into a larger book left an ungated tier at w/l 0.45 and **21 correlated long trades took $1,522
+in a single day.** Find the crossover empirically for each book; do not inherit the number.
+
+**4. GATED SHALLOW TRADES IMPROVE THE TAIL — THEY ARE BALLAST, NOT FILLER.** Triples alone:
+395 trades, worst day −$149.4. Adding the gated solos and duals: 629 trades, worst day
+**−$94.7**. They lose on different days. This reproduces BOOK-50's own behaviour, where gating
+takes the worst day BELOW triples-alone. **A book of triples only is not the optimum.**
+
+**5. THE FRONTIER IS REAL AND HAS BEEN MEASURED AT TWO POINTS.**
+
+        50 signals   parity held, w/l 0.98    $39,606 gated
+       100 signals   parity lost, w/l 0.52   $145,230 ungated
+
+**The 4x net target IS reachable — 50L/50S produced $145,230.** But every gated variant of it
+landed between w/l 0.52 and 0.64. **Nobody has yet found a point that holds both.** That is
+Phase 1's frontier and it is now a concrete question rather than an abstract one.
+
+**Also measured: it is not a threshold artifact.** At MATCHED RARITY — the deepest tier holding
+~16% of trades, as BOOK-50's 3+ does — bigger books still show worse quality:
+
+    24L/24S  3+  336 tr  PF 33.25  w/l 0.92
+    30L/20S  3+  395 tr  PF 31.29  w/l 0.98
+    37L/13S  3+  523 tr  PF 12.39  w/l 0.73
+    50L/50S  4+  538 tr  PF 16.83  w/l 0.72
+
+More signals means reaching further down the catalogue, and those signals are genuinely weaker.
+
+## WHAT THESE ATTEMPTS NEVER TESTED — TREAT AS OPEN, NOT CLOSED
+
+- **Any family other than F0.** No F1, F3, F9, F11, F2 or F4 signal was in any book.
+- **Gates priced against a null.** Every gate above was found by sweeping and is unpriced. An
+  early sweep ranked on w/l ratio and returned `PF 999 / w/l inf` in six of eight cells — **zero-loss
+  subsets from ~1,280 trials.** A loss floor and a net-retention floor were required before the
+  results meant anything. **That is the multiple-testing problem arriving in practice.**
+- **A gate sweep per tier at the 50-signal size.** The gates used came from a 100-signal book.
+- **Book sizes between 50 and 100**, where the frontier's knee most likely sits.
+- **Session, regime or structure balance.** Not considered in any attempt.
+- **Anything but greedy decorrelation.** No exhaustive search, no alternative objective.
+
+**The best result above is one point on a frontier, found by a Supervisor with limited compute
+and no pricing discipline on its gates. Treat it as a floor to beat, not a target to reproduce.**
+
+---
+
 # 6. WHAT "BETTER THAN BOOK-50" ACTUALLY MEANS
 
 Not one number. All of these, and survival first:

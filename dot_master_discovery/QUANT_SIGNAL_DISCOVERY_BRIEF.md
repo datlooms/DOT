@@ -317,6 +317,68 @@ split stands; the gated totals need re-running inside the simulation.**
 
 ---
 
+# A FLOOR TO BEAT — AND FIVE CONSTRAINTS FOUND WHILE FINDING IT
+
+Six books were built and simulated before this brief was handed over. **None is a
+recommendation and one of them beat BOOK-50** — so the frontier has a measured point on it.
+Full detail in `cake_dictionary.md` section 5D.
+
+    50 signals, 30L/20S. Greedy decorrelation over ALL 1,818 VALID F0 on minimum shared
+    LOSS DAYS, per direction. Gated: solo+dual require Hurst p95 (long) / Rejection p20
+    (short) / ticks >= 300. Triple+ free.
+
+                       trades    WR       PF      net      worst day   w/l 3+
+    BOOK-50 gated         755   96.4%   19.71   $36,068     -$130.7      0.99
+    THIS FLOOR            629   93.8%   11.90   $39,606      -$94.7      0.98
+
+**+10% net, 28% better worst day, better balance, payoff parity held. Beat it.**
+
+## THE FIVE CONSTRAINTS — inherit these, they cost six attempts to find
+
+**1. DECORRELATE OVER THE WHOLE FIELD.** 300 pre-filtered candidates gave w/l 0.70. All 1,818
+gave **0.98**. Nothing else moved the number remotely as far. Any selection that decorrelates
+over a pre-filtered slice has crippled the method before it runs.
+
+**2. RANK ON RARITY, NOT PERSISTENCE.** `folds_plus`/`min_fold_pf` ranking gave WORSE depth
+quality than `EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF`. Persistent signals fire often and stack badly.
+**Persistence is a filter; rarity is the ranking key.**
+
+**3. THE FREE-TIER DEPTH MOVES WITH BOOK SIZE.** BOOK-50 crosses at 3 with 48 signals; a
+100-signal book crosses at 4-6. Inheriting "triple+ free" left an ungated tier at w/l 0.45 and
+**21 correlated longs took $1,522 in one day.** Find the crossover empirically per book.
+
+**4. GATED SHALLOW TRADES IMPROVE THE TAIL.** Triples alone: worst day −$149.4. Plus gated
+solos and duals: **−$94.7**. They lose on different days. **A triples-only book is not the
+optimum** — this reproduces BOOK-50's own behaviour.
+
+**5. THE FRONTIER IS REAL, MEASURED AT TWO POINTS, AND IS NOT A THRESHOLD ARTIFACT.**
+
+        50 signals   w/l 0.98    $39,606 gated
+       100 signals   w/l 0.52   $145,230 ungated
+
+The 4x net target **is** reachable. Every gated 100-signal variant landed at w/l 0.52-0.64. And
+at MATCHED RARITY the bigger books are still worse (30L/20S at 3+ w/l 0.98; 50L/50S at 4+ w/l
+0.72), so it is not simply a shifted threshold — **more signals means reaching further down the
+catalogue, and those signals are weaker.**
+
+## WHAT THOSE ATTEMPTS NEVER TESTED — OPEN GROUND, NOT CLOSED
+
+- **Any family but F0.** No F1/F3/F9/F11/F2/F4 signal was in any book.
+- **Priced gates.** Every gate above was swept and is unpriced. One early sweep ranked on w/l
+  and returned `PF 999 / w/l inf` in six of eight cells — **zero-loss subsets from ~1,280
+  trials.** A loss floor and a net-retention floor were needed before the output meant anything.
+  **That is Phase 7's multiple-testing problem arriving in practice.**
+- **A gate sweep per tier at the 50-signal size** — the gates used came from a 100-signal book.
+- **Book sizes between 50 and 100**, where the frontier's knee most likely sits.
+- **Session, regime or structure balance** — not considered in any attempt.
+- **Anything but greedy decorrelation** — no exhaustive search, no alternative objective.
+
+**That floor was found by a Supervisor with limited compute and no pricing discipline on its
+gates. It is a starting altitude, not a ceiling — and every one of the six failures above is a
+door someone left unopened rather than a door that is shut.**
+
+---
+
 # PHASE 1 — WHERE DOES ADDING SIGNALS STOP HELPING?
 
 **Files:** `dilution_curve_agg_pf.csv`, `dilution_curve_EXPECTED_ROWS_....csv`,
