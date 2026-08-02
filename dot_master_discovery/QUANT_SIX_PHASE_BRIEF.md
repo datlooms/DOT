@@ -152,6 +152,25 @@ Book with FailedBreak on shorts instead of Hurst:
 with PF barely moving (2.44 → 2.48), so the whole gain is in the 3+ tier. A tiered version
 (Hurst p90 on short solos/duals, FailedBreak on short triples) is untested.
 
+## C2. THE CONVERGENCE GRADIENT SURVIVED A NULL TEST
+
+The depth gradient could have been a property of clustering rather than signal quality. 50
+random triples from the same 243 firing conditions, three seeds, identical build and scoring
+path, no filtering:
+
+    depth ladder      solo    dual    3-4      5+      trades at 5+
+    random seed 11    1.07    0.95    0.92    999            5
+    random seed 22    1.01    0.86    0.80     n/a           0
+    random seed 33    1.13    1.07    1.14    999            5
+    REAL BOOK (LONG)  3.59    2.43    8.68   39.40         387
+
+**Random shows NO gradient — flat to declining — and cannot reach depth at all** despite making
+3-4x more total trades. **The gradient is signal quality.** Full detail and caveats in
+`cake_dictionary.md` section 4F.
+
+**Still untested:** three has never been competed against a same-bar PAIR or a 4/5-variable
+grammar. This shows three beats random, not that three beats two.
+
 ## D. COVERAGE AND RARITY PULL AGAINST EACH OTHER, HARD
 
                           LONG            SHORT
@@ -222,6 +241,20 @@ fall as signals are added, so it cannot warn you.** Every prior expansion had a 
 to signal the stop. Coverage is monotone by construction. A book can be expanded until it is
 worthless while the coverage number improves the entire way down. **Any frontier you report
 must carry OOS PF and worst-day on the same axis as coverage, or it is not a frontier.**
+
+**A TOOL YOU CAN RUN YOURSELF, AND SHOULD.** Every depth figure in circulation — mine included
+— was INFERRED by grouping trades on `entry_bar`. The engine has its own measurement and it has
+never been run:
+
+    python scanners/triple_convergence_and_d2ddir.py density <book.csv>
+
+`DENSITY_K_BANDS = [1,2,3,4,5,6,8,10]`, co-firing count >= k over the candidate signal set,
+direction-aligned, applied as a GATE rather than a post-hoc grouping. See `cake_dictionary.md`
+section 4G. **Always pass the book explicitly — its default argument is a superseded file.**
+
+**Use it as a checkpoint on any candidate composition.** It answers "does count>=5 outperform
+count>=2" directly and it is the correct instrument for that question, where my groupby figures
+are an approximation.
 
 **OUTPUT:** the frontier per direction, with uncertainty on where the knee sits.
 
@@ -407,11 +440,10 @@ losers. 360 tests (90 FEAT_ x hi/lo x direction). For a candidate slice of size 
 random k-subsets from the same pool and read where the candidate lands. Five gates, all
 required: random-pct >=97.5, OOS-positive, fold-persistent, n>=8, stated mechanism.
 
-**If you can specify a better pricing method, do so and say why it is better.** The point is
-not to preserve this particular procedure — it is that a gate found by searching variables and
-thresholds MUST be priced against the search that found it, by some defensible method, before
-anyone acts on it. Recovering this one saves you inventing from nothing; it does not bind you
-to it.
+**If you can specify a better pricing method, do so and say why.** The requirement is that a
+gate found by searching variables and thresholds MUST be priced against the search that found
+it, by some defensible method. Recovering this one saves inventing from nothing; it does not
+bind you to it.
 
 **AND THE CAVEAT MUST TRAVEL WITH ANY RESULT YOU PRODUCE:** *"360 tests. At the p97.5 gate,
 expected chance survivors ~9.0. Bonferroni for FWER 5% = 99.986th pct; max candidate reached

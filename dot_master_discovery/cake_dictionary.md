@@ -684,18 +684,17 @@ plus new members found by an unpriced search. **Price them before adopting.**
 
 # 4F. THE CONVERGENCE GRADIENT HAS BEEN TESTED AGAINST A NULL — AND IT HOLDS
 
-**This is the load-bearing claim of the entire project, and until now it had never been put
-against a random baseline.** The depth gradient — PF rising with same-bar convergence — could
-in principle be a property of CLUSTERING (any set of conditions co-firing on volatile bars
-would show it) rather than of SIGNAL QUALITY. If it were clustering, random triples drawn from
-the same vocabulary would show the same rise.
+**This is the load-bearing claim of the whole project and it had never been put against a
+random baseline.** The depth gradient — PF rising with same-bar convergence — could in
+principle be a property of CLUSTERING rather than of SIGNAL QUALITY. If it were clustering,
+random triples from the same vocabulary would show the same rise.
 
 **They do not.**
 
 **Method:** 50 random triples drawn from the 243 firing conditions of the same 249-condition
-pool, direction assigned at the pool's own 51/49 split, built through the identical
+pool, direction at the pool's own 51/49 split, built through the identical
 `score_g.build_book` path and scored through the identical `run_portfolio` with the full
-conviction stack. Three independent seeds. No filtering, no selection, no VALID predicate.
+conviction stack. Three seeds. No filtering, no VALID predicate.
 
     depth ladder      solo    dual    3-4      5+       trades at 5+
     random seed 11    1.07    0.95    0.92    999.00          5
@@ -704,28 +703,60 @@ conviction stack. Three independent seeds. No filtering, no selection, no VALID 
 
     REAL BOOK (LONG)  3.59    2.43    8.68     39.40        387
 
-**TWO FINDINGS:**
+1. **Random triples show NO gradient — flat to DECLINING**, 1.07 → 0.95 → 0.92. The real book
+   rises 3.59 → 2.43 → 8.68 → 39.40. **The gradient is signal quality, not clustering.**
+2. **Random triples cannot reach depth.** 50 selected signals produce 387 long trades at depth
+   5+; 50 random ones produce 5, 0 and 5. **Deep convergence is specific to signals selected
+   for it.**
 
-**1. Random triples show NO gradient — they are flat to DECLINING.** 1.07 → 0.95 → 0.92.
-Convergence adds nothing to random conditions. The real book rises 3.59 → 2.43 → 8.68 → 39.40.
-**The gradient is a property of signal quality, not of clustering.**
+**Caveat:** the random triples were not fire-rate matched, so their depth distribution differs.
+That cuts in the project's favour — they produced 3–4× MORE total trades and still could not
+stack.
 
-**2. Random triples cannot reach depth.** 50 selected signals produce 387 long trades at depth
-5+. 50 random ones produce **5, 0 and 5**. So deep same-bar convergence is not something any
-50 conditions produce — **it is specific to signals selected for it.**
+**STILL UNTESTED:** the triple has never been competed against a 4- or 5-variable grammar, nor
+against a same-bar PAIR. Three was chosen as a search design where the arithmetic was
+affordable. This shows three beats random; it does not show three beats two or four.
 
-**CAVEAT, stated honestly:** the random triples were not fire-rate matched to the real ones, so
-their depth distribution differs. That cuts in the project's favour rather than against it —
-they produced MORE total trades (12,939 / 8,677 / 10,921 against the book's 3,105) and still
-could not reach depth.
+---
 
-> **Before this test, "triple convergence is irreducible" was an architectural decision that
-> was later supported. It is now a measured result with a null behind it.**
+# 4G. THE DENSITY SWEEP — A BOOK-SCORING TOOL NOTHING POINTS AT
 
-**WHAT REMAINS UNTESTED, and it should be said in the same breath:** the triple grammar has
-never been competed against a 4- or 5-variable grammar. Three was chosen as a search design in
-the original backtest's Phase 5. This test shows three beats random; it does not show three
-beats four.
+**Every depth figure in circulation was INFERRED by grouping trades on `entry_bar`. The engine
+has its own proper measurement and it has never been run.**
+
+    scanners/triple_convergence_and_d2ddir.py
+      L461-469   DENSITY_K_BANDS = [1, 2, 3, 4, 5, 6, 8, 10]   "fused F10 dimension"
+      L472       build_set_density()
+      L523       density_sweep()
+      L549       run_density()
+      L589       fires ONLY on:  ... density <book.csv>
+
+**It is a SEPARATE entry point.** `master.py` imports the module for its triple scan and never
+calls `run_density`. `discovery_orchestrator.py` L36 records the decision in a comment — *"it
+is run SEPARATELY and its CSV ingested"* — and nothing else mentions it. **That is why the
+10h43m run produced no density output: nothing was ignored, nothing was called.**
+
+**WHY IT CANNOT LIVE IN THE PIPELINE:** `density_sweep` scores a **finished signal set** at
+k = 1…10. During discovery there is no book — the catalogue is the deliverable and item 15
+means nothing chooses. It is correctly outside the pipeline.
+
+**HOW TO RUN IT:**
+
+    python scanners/triple_convergence_and_d2ddir.py density <your_book.csv>
+
+**Its default argument is `recommended_set_76.csv`, a superseded pre-reconstruction file.
+ALWAYS pass the book explicitly.**
+
+**WHAT IT GIVES YOU:** the depth ladder measured by the ratified engine rather than inferred —
+co-firing count ≥ k over the **candidate signal set under evaluation**, direction-aligned, run
+as a **gate** rather than a post-hoc grouping. The scanner's own note records why it is not
+measured over the raw 249-condition pool: *"that saturates"* — confirmed independently, since
+at 1,000 signals 97.1% of bars reach depth ≥3.
+
+> **USE IT AS A CHECKPOINT ON ANY CANDIDATE BOOK.** It answers *"does count≥5 outperform
+> count≥2"* directly, on whatever set you point it at, and it is the correct instrument for
+> that question. BOOK-50 is the current signal set; every future book should be screened the
+> same way.
 
 ---
 

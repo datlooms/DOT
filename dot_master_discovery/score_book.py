@@ -31,7 +31,10 @@ carries no wall-clock.
 """
 
 import argparse
+import contextlib
 import hashlib
+import io
+import re
 import json
 import os
 import sys
@@ -55,6 +58,7 @@ import selection as sel
 import terrain as tr
 import catalogue as cat
 import score_g
+import triple_convergence_and_d2ddir as f0
 
 PINNED_W, PINNED_K, PINNED_E = cat.PINNED_CELL
 TAU = sel.TAU
@@ -226,6 +230,8 @@ def score(book_path, data_path, out_dir):
     _write(os.path.join(out_dir, 'book_mcvar.csv'), mc, [
         'DOT item 16 - per-signal marginal tail contribution',
         f'worst {int(MCVAR_WORST_FRAC*100)}% of book days | PROPERTY OF THE BOOK'])
+    print('  F10 CONVERGENCE-DENSITY LADDER')
+    density_ladder(df, sigs, ad, st, w, out_dir, book_path)
     breaches = [k for k, v in verdicts.items() if v is False]
     rec = {'utc_timestamp': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime()),
            'book_sha256': _sha_file(book_path), 'input_sha': input_sha, 'code_sha': _code_sha(),
@@ -246,6 +252,81 @@ def score(book_path, data_path, out_dir):
         return 1
     print('VERDICT PASS — every hard constraint holds on this book.')
     return 0
+
+
+
+DENSITY_LINE = re.compile(
+    r'count>=(\d+)\s+\[(\w+)\s*\]\s+bars\s+([\d,]+)\s+\|\s+trades\s+(\d+)\s+\|\s+'
+    r'aggPF\s+([\d.]+)\s+\|\s+WR\s+([\d.]+)%\s+\|\s+worst-day\s+\$\s*(-?[\d,]+)\s+\|\s+'
+    r'hard-stop\s+(\d+)\s+\|\s+spread\s+([\d.]+)->([\d.]+)')
+DENSITY_DIR = re.compile(r'^\s+(LONG|SHORT) subset')
+
+
+def density_ladder(df, book, adaptive, structural, warmup, out_dir, book_path):
+    """Item F10: the convergence-density ladder, on the SAME book score_book is given.
+
+    THE LADDER IS NOT REIMPLEMENTED. f0.density_sweep is the ratified measurement
+    and is called directly with f0.DENSITY_K_BANDS; a second implementation would
+    drift from it, which is the failure this project has met most often.
+
+    density_sweep PRINTS and returns nothing, and
+    scanners/triple_convergence_and_d2ddir.py is a SCANNER that may not be
+    edited, so its stdout is captured, echoed so it still reaches the console and
+    the run log, and parsed into the CSV. The parse is of a fixed format string
+    in that file - if the format ever changes the CSV comes out empty and says
+    so, rather than silently wrong.
+
+    run_density() is NOT used: it loads the sealed baseline itself and defaults
+    to recommended_set_76.csv, a superseded pre-reconstruction file. The book
+    here comes from --book and the frame from --data, so that default is not
+    reachable on this path.
+    """
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            f0.density_sweep(df, book, f0.DENSITY_K_BANDS, adaptive, structural, warmup)
+    except Exception as exc:
+        print(f'  DENSITY LADDER FAILED: {type(exc).__name__}: {str(exc)[:120]}', flush=True)
+        return None
+    text = buf.getvalue()
+    print(text, flush=True)
+    rows = []
+    direction = ''
+    for ln in text.split('\n'):
+        m0 = DENSITY_DIR.match(ln)
+        if m0:
+            direction = m0.group(1)
+            continue
+        m = DENSITY_LINE.search(ln)
+        if m:
+            rows.append({'k': int(m.group(1)), 'direction': direction,
+                         'survival': m.group(2), 'bars': int(m.group(3).replace(',', '')),
+                         'trades': int(m.group(4)), 'PF': float(m.group(5)),
+                         'WR': float(m.group(6)),
+                         'worst_day_usd': float(m.group(7).replace(',', '')),
+                         'hard_stop_days': int(m.group(8)),
+                         'pf_base': float(m.group(9)), 'pf_stress': float(m.group(10))})
+    base = os.path.splitext(os.path.basename(book_path))[0]
+    path = os.path.join(out_dir, f'density_{base}.csv')
+    _write(path, pd.DataFrame(rows), [
+        'DOT F10 convergence-density ladder for an ASSEMBLED BOOK',
+        f'book={os.path.basename(book_path)} signals={len(book)} k_bands={f0.DENSITY_K_BANDS}',
+        'Entry is restricted to bars where >= k of the book\'s own set-conditions co-fire. This is '
+        'how a book is screened for whether its convergence tiers actually PAY: every depth figure '
+        'in circulation was INFERRED by grouping entry bars, not measured by the engine.',
+        'Produced by scanners/triple_convergence_and_d2ddir.density_sweep - the ratified '
+        'measurement, called not reimplemented. Rows absent for a k band mean that band fell below '
+        'MIN_TRADES and was not scored.',
+        'PROPERTY OF THE BOOK.'])
+    if not rows:
+        print(f'  DENSITY LADDER: 0 rows parsed - either every k band fell below MIN_TRADES or the '
+              f'printed format in the scanner changed. {path} written empty rather than wrong.',
+              flush=True)
+    else:
+        print(f'  density_{base}.csv: {len(rows)} ladder rows '
+              f'(k {min(r["k"] for r in rows)}..{max(r["k"] for r in rows)}, '
+              f'{len(set(r["direction"] for r in rows))} directions)', flush=True)
+    return rows
 
 
 def _write(path, frame, header):
