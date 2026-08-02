@@ -1,8 +1,160 @@
 # equiDOT — Development Progress & R&D Plan
 
-*Status snapshot — 2026-07-02*
+*Status snapshot — 2026-08-02*
 
 *Active phase: **Step 14 (Stage 8 discovery) CLOSED 2026-07-09 — 440,057 candidates. NEXT: step 15 — build + run `concurrence_profiler.py` (PRE-QUANT, BLOCKING), then step 16 — QRA selection.** Concurrent-convergence behaviour is the measurement this entire rebuild exists for and has still never been scored: the original 766K->4,773->76 pipeline deduped the overlap away before anyone measured it. Profile the stacking (depth, identity, variable recurrence, market-structure conditioning, depth-vs-outcome) over the F0 survivor pool BEFORE any selection. Preferred architecture is a rule-based concurrent-convergence engine, not a frozen regime-selected signal list. Sacred layer intact.*
+
+---
+
+## 2026-08-02 — DISCOVERY PROGRAM PROVEN COLD, PRICING DEFECT FOUND AND FIXED, AND A SUPERVISOR PRE-PASS THAT BEATS BOOK-50
+
+### THE PIPELINE IS PROVEN
+
+A **cold acceptance run from an empty tree completed in 10h43m** — every stage executing, no resumes, no
+markers inherited, no manual intervention, **99.7% of runtime concurrent**. It reproduced a previous
+independent cold run **byte-for-byte on ten of ten comparable artifacts**, including `wf_pass_criterion`.
+Until this run the honest description was "built and audited, never proven". It is now proven.
+
+Catalogues: **39,308 rows across seven families**, F0 at 1,840 (1,818 VALID). Four families — F5, F6, F7, F8 —
+produced rows and had every one cut by S5's `agg_pf >= 2.0`, with median PF 1.08-1.26 and 283-810 median
+trades. **They fire plentifully and have no edge. That is a family property, not a filter artifact.**
+
+### THE PASS CRITERION — A FAIL THAT CAN BE TRUSTED
+
+    split 0: 15,328 admitted ->  7,962/11,816 -> 0.6738  vs null 0.2360 = 2.86x
+    split 1: 23,832 admitted ->  9,712/19,176 -> 0.5065  vs null 0.2375 = 2.13x
+    split 2: 34,496 admitted -> 11,303/28,901 -> 0.3911  vs null 0.2593 = 1.51x
+    mean 2.1653 (bar 2.40) | min 1.5083 (bar 1.85) | lb95 1.4026 (bar 1.00) -> PASS
+    VERDICT: FAIL
+
+**The inclusion rule beats chance on every split and the 95% lower bound clears 1.0.** What fails is the
+strength bar set in advance. **No threshold was lowered to obtain a pass** — which is the whole point, given
+BOOK-50 produced a PF 6.40 nobody could trust.
+
+### THE DEFECT THAT ONLY A COLD RUN COULD EXPOSE
+
+The matched null seeded each family with `abs(hash(fam))`. **Python randomises string hashing per process.**
+Same code, same data, same nominal `NULL_SEED_BASE`, a different seed every run:
+
+    F0 seeded 20284991, 20330271 and 20266910 on three consecutive interpreters
+    F0 rows priced under 1.0 went 221 -> 778 on byte-identical candidates
+
+`EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF` is the column the whole selection rests on. **It was not reproducible.**
+Fixed with a blake2b digest of the family name; proven byte-identical across two independent processes.
+
+Also found and closed: the regime-label emit ran before F12 produced its source (cold-run only, catalogue
+regime columns came out all-NaN); the collected `run_log.txt` truncated before the timing table; four
+gate/marker defects where a stage skipped while an output was missing; and one duplicate `signal_id` in
+`candidates.csv` that the "0 skipped" counter was absorbing silently.
+
+### PERFORMANCE — EVERY LARGE WIN CAME FROM READING THE LOOP, NOT ADDING CORES
+
+    F1 score_candidate    seven simulations per candidate, one suffices          24h -> 8h12m
+    entity_persistence    the frame filtered six times per entity (quadratic)         112x
+    prefilter join        episode loop replaced by searchsorted                        77x
+    dilution curve        accumulator rebuilt from full history                        87x
+    S5C book arm          every candidate scored once per split                       3.0x
+
+The F1 fix is worth recording in full: the full simulation already contains every trade the six monthly runs
+produce, so the folds can be partitioned from it. The first implementation partitioned on **EXIT** month while
+`mask_window` gates on **ENTRY**. It passed a 25-candidate test **because none of those candidates contained a
+cross-month trade** — both partitions were indistinguishable. The Developer constructed the failing case
+deliberately (2026.03.31 22:56 -> 2026.04.01 02:53, one of only three month boundaries that are consecutive
+calendar days) and proved EXIT-partitioning breaks BOTH folds. **A test both implementations pass tells you
+nothing.**
+
+### THE SUPERVISOR PRE-PASS — SEVEN ATTEMPTS, AND ONE BEATS BOOK-50 ON EVERY AXIS
+
+All 1 lot, in-sample, full conviction stack, jar active, `score_book.py` run on every set.
+
+    system                       trades      net     WR      PF    FailConc    mCVaR    survival
+    BOOK-50 raw                   2,729   $76,458  90.8%     -      3.458   -$4,922     -$565
+    FUSED-50 raw                  2,697   $84,691  91.7%     -      1.649   -$2,091     -$340
+    FUSED-120 raw                 6,433  $158,418  89.8%   3.38     4.071        -      -$658
+    FUSED-120 + Option A          3,343  $120,373  93.6%   7.36     2.067        -      -$139
+    FUSED-120 + Option B          1,988  $100,094  96.6%  14.14     1.352        -      -$273
+
+**ALL SIX PASS EVERY HARD CONSTRAINT.**
+
+**OPTION B IS THE BEST SYSTEM PRODUCED: $100,094, WR 96.58%, PF 14.14, 68 losing trades, 3 losing days of 119,
+FailConc 1.352 — the lowest measured anywhere in this project.** Quality RISES into the window that broke
+BOOK-50: Jan-May PF 13.04 -> Jun-Jul PF 17.94, July alone PF 22.93. Every month positive; five of seven carry
+a positive worst day. Concurrence ladder monotone: solo 3.14 -> dual 7.20 -> triple 14.99 -> quad (zero losses)
+-> 5+ PF 81.95 with win/loss 2.04.
+
+**FUSED-50 is the low-fit control and beats BOOK-50 on everything at the same size** — FailConc 1.65 vs 3.46,
+mCVaR -$2,091 vs -$4,923, survival -$340 vs -$565, and +$8,233 of net on 32 fewer trades. Its LONG triple+
+tier pays **above parity** (win/loss 1.0349, break-even 49.14%, margin 48.8pp, 7 losses) — it passes the
+acceptance rule outright, with no gate fitting behind it.
+
+### WHAT THE SEVEN ATTEMPTS ESTABLISHED
+
+    #  change                                      w/l 3+   finding
+    1  rarity rank, one gate both directions        0.64    one gate for both sides is wrong
+    2  + decorrelate over a 300-signal slice        0.70    decorrelation helps
+    -  + move the free tier to the crossover           -    worst day -$2,087 -> -$949
+    3  persistence-ranked pool instead of rarity    ~0.55   RARITY BEATS PERSISTENCE for depth
+    4  book-size sweep 50-120 signals               1.11    smaller book = better depth quality
+    5  DECORRELATE OVER ALL 1,818 VALID F0          0.98    THE FIELD SIZE WAS THE CONSTRAINT
+    6  fuse two independently-selected books        1.00    method diversity fuses; book count does not
+    7  per-cell gate optimisation                     -     $158,418 at -$658, then $100,094 at PF 14.14
+
+**Five load-bearing findings:**
+
+1. **The decorrelation field size was the binding constraint the whole time.** 300 pre-filtered candidates gave
+   win/loss 0.70; all 1,818 gave 0.98. Nothing else moved the number remotely as far. BOOK-48 decorrelated over
+   2,420 — any selection that decorrelates over a pre-filtered slice has crippled the method before it runs.
+2. **Rank on RARITY, not persistence.** A pool ranked on `folds_plus`/`min_fold_pf` produced worse depth
+   quality than one ranked on `EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF`. Persistent signals fire often and stack badly.
+3. **The free-tier depth moves with book size.** BOOK-50 crosses at depth 3 with 48 signals; a 100-signal book
+   crosses at 4-6. Inheriting "triple+ free" left an ungated tier at win/loss 0.45 and 21 correlated long trades
+   took $1,522 in one day.
+4. **Gated shallow trades IMPROVE the tail.** Triples alone -$149.4; plus gated solos and duals -$94.7. They
+   lose on different days. **A triples-only book is not the optimum** — this reproduces BOOK-50's own behaviour.
+5. **Method diversity fuses; book count does not.** Fusing BOOK-50 with an independently-selected 50 (only 3 of
+   97 signals overlapped) beat both parents. Fusing NINE greedy variants of the same field added almost nothing.
+
+### THE CONVERGENCE GRADIENT NOW HAS A NULL BEHIND IT
+
+The depth gradient could have been a property of clustering rather than signal quality. 50 random triples from
+the same 243 firing conditions, three seeds, identical build and scoring path, no filtering:
+
+    depth ladder      solo    dual    3-4      5+      trades at 5+
+    random seed 11    1.07    0.95    0.92    999            5
+    random seed 22    1.01    0.86    0.80     n/a           0
+    random seed 33    1.13    1.07    1.14    999            5
+    REAL BOOK (LONG)  3.59    2.43    8.68   39.40         387
+
+**Random triples show NO gradient — flat to declining — and cannot reach depth at all** despite producing 3-4x
+more total trades. **The gradient is signal quality.** Before this, "triple convergence is irreducible" was an
+architectural decision later supported; it is now a measured result with a null behind it. **Still untested:
+three has never been competed against a same-bar pair or a 4/5-variable grammar.**
+
+### THE GATES WERE WALK-FORWARDED — THEY HOLD
+
+Re-fitted on **Jan-May ONLY**, applied **UNCHANGED** to Jun-Jul. The optimiser never saw the test months.
+
+    segment                     trades      WR       PF       net     worst day   losses
+    TRAIN Jan-May (fitted)         930   99.89%  2378.38   $56,106      +$5.4         1
+    TEST  Jun-Jul (UNSEEN)         216   95.83%    11.79   $10,400     -$249.0        9
+    ungated control Jun-Jul      1,666   89.02%     3.31   $43,103     -$658.0      183
+
+**On unseen data: PF 11.79 vs an ungated 3.31 (3.6x), WR 95.83% vs 89.02%, worst day -$249 vs -$658.**
+The gates generalise. **The TIGHTNESS does not** — the training fit reaches PF 2,378 on one loss and keeps
+only 24% of the net out of sample. **Fit looser than the optimiser wants.** Direction proven, calibration open.
+
+**BUILDABLE:** 119 of Option B's 120 signals are F0 triples the rule table already expresses; 95 distinct
+variables, all in the 172-column export; every gate variable in the export. One F1 signal needs the sequential
+latch already specified for BOOK-50's two. No new variable, no new export, no new mechanism.
+
+### CAVEAT THAT MUST TRAVEL WITH OPTION B
+
+
+Its ten per-cell gates were found by coordinate descent over ~150 gate options across ten cells on one frame —
+thousands of evaluations. An earlier gate sweep ranked on win/loss ratio returned `PF 999 / win-loss inf` in
+six of eight cells: **zero-loss subsets from ~1,280 trials.** A loss floor and a net-retention floor were
+required before the output meant anything. **Whether Option B's gates survive a walk-forward is measurable and
+has not been measured.** BOOK-50 also looked flawless before July.
 
 ---
 

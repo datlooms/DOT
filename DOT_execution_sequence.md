@@ -137,7 +137,53 @@
 
 - [ ] **17p. RUN THE DISCOVERY SCAN — THE NEXT ACTION.** `python master.py --workers 10` on the stitched series. 1-2 days. **This has never been run.** It produces the candidate pool that every unexercised component needs: the funnel re-run per split, entity persistence, §H.1's multiple-testing components, §H.2 stability selection, and **the pass criterion itself — the single number this redesign exists to produce.** Ceiling is 10 workers (`min(workers, pending_families)`, and there are 10); ~733 MB each, so ~7.3 GB on a 32 GB machine. Interruptible — re-run the same command and it resumes per family. One output directory is now safe across assets. **A FAIL is a legitimate result** and the code is built to report one rather than lower a bar. Read the artifact header on splits 0 and 1 before their numbers: they test a weaker constraint set than split 2.
 
+- [x] **17p-A. SCAN RUN, PIPELINE PROVEN, AND A SUPERVISOR PRE-PASS ON SELECTION — CLOSED 2026-08-02.**
+  The scan ran. A **cold acceptance run from an empty tree completed in 10h43m**, every stage executing, no
+  resumes, no manual intervention, **99.7% concurrent**, and it reproduced a previous independent cold run
+  **byte-for-byte on ten of ten comparable artifacts** including `wf_pass_criterion`. Catalogues: 39,308 rows,
+  F0 at 1,840 (1,818 VALID). Pass criterion **FAIL** on the strength bar (mean 2.1653 vs 2.40, min 1.5083 vs
+  1.85) while the **95% lower bound 1.4026 clears 1.0** — the inclusion rule beats chance on every split
+  (2.86x / 2.13x / 1.51x) and **no bar was lowered to obtain a pass**.
+  Defects found and closed during the run: eleven script stops, a **per-family null seed using Python's
+  `hash()`** (randomised per process — the pricing column varied between runs, F0 rows priced under 1.0 went
+  221 -> 778 on identical data; fixed with a blake2b digest and proven byte-identical across two processes),
+  the regime-label emit ordering (cold-run only), the collected `run_log.txt` truncating before the timing
+  table, and four gate/marker defects. Performance: F1's scan **24h -> 8h12m** (seven simulations per candidate
+  replaced by one partition on ENTRY month — the EXIT-month version passed a 25-candidate test because none
+  contained a cross-month trade, and was caught by constructing one), `entity_persistence` **112x** (quadratic
+  filter replaced by one groupby), the prefilter join **77x**, the dilution curve **87x**. **Every large win
+  came from reading the loop, not from adding cores.**
+  A Supervisor pre-pass on selection then produced **a system that beats BOOK-50 on every measured axis** —
+  see 17q. It is evidence for the Quant, not a committed book.
+
 - [ ] **17q. EVALUATE THE SCAN AND SELECT A BOOK** — quant reads the output, Supervisor verifies, and only then does step 18's install list get re-derived. BOOK-50 remains the committed artifact until superseded by a book that passes 17p's walk-forward.
+
+- [ ] **17q-2. THE SUPERVISOR'S PRE-PASS RESULT — THE NUMBER THE QUANT IS AIMING PAST.**
+  Seven selection attempts, all 1 lot, in-sample, full conviction stack, jar active. Documented in
+  `dot_master_discovery/cake_dictionary.md` section 5D and in the Quant brief.
+
+      system                       trades      net     WR      PF    FailConc  survival
+      BOOK-50 raw                   2,729   $76,458  90.8%     -      3.458     -$565
+      FUSED-50 raw                  2,697   $84,691  91.7%     -      1.649     -$340
+      FUSED-120 raw                 6,433  $158,418  89.8%   3.38     4.071     -$658
+      FUSED-120 + Option A          3,343  $120,373  93.6%   7.36     2.067     -$139
+      FUSED-120 + Option B          1,988  $100,094  96.6%  14.14     1.352     -$273
+
+  **All six PASS every hard constraint through `score_book.py`.**
+  **OPTION B is the best system produced: $100,094, WR 96.58%, PF 14.14, 68 losses, 3 losing days of 119,
+  FailConc 1.352 — the lowest measured anywhere in this project.** Quality RISES into the window that broke
+  BOOK-50 (Jan-May PF 13.04 -> Jun-Jul PF 17.94). Every month positive; five of seven have a positive worst day.
+  **FUSED-50 is the low-fit control** — beats BOOK-50 on FailConc (1.65 vs 3.46), mCVaR (-$2,091 vs -$4,923),
+  survival (-$340 vs -$565) and net (+$8,233), with **no gate fitting at all**, and its LONG triple+ tier pays
+  above parity (win/loss 1.0349, margin 48.8pp, 7 losses).
+  **WALK-FORWARDED, AND THEY HOLD.** Gates re-fitted on Jan-May ONLY and applied UNCHANGED to Jun-Jul:
+  **PF 11.79 vs an ungated control of 3.31, WR 95.83% vs 89.02%, worst day -$249 vs -$658** on months the
+  optimiser never saw. What does NOT carry is the tightness — the training fit reaches PF 2,378 on one loss
+  and at that calibration keeps only 24% of the net out of sample. **Fit looser than the optimiser wants:
+  direction proven, calibration open.**
+  **BUILDABLE:** 119 of 120 signals are F0 triples the rule table already expresses; 95 distinct variables,
+  all in the 172-column export; every gate variable in the export. One F1 signal needs the sequential latch
+  already specified for BOOK-50's two. Both books go to the Quant: one proven by method, one by search.
 
 - [ ] **17r. EXPORT-CLOCK DEFECT — `ExportDataForAnalysis()` WRITES SERVER TIME AS EST. MUST BE FIXED IN THE NEXT EA WINDOW.**
   **THE EA'S LIVE CLOCK IS CORRECT AND MUST NOT BE TOUCHED.** `GetEstTime()` at DOT.cs L1770 is `TimeGMT() + GetUSEasternOffsetSeconds()` — genuine GMT plus the US Eastern offset. The chart visuals, the session containers, the DST transition and the live Friday cutoff all run off this and all behave correctly; the operator has observed this over months.

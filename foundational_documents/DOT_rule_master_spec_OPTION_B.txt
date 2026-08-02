@@ -1,0 +1,342 @@
+================================================================================
+ DOT RULE MASTER SPEC — OPTION B
+ The complete makeup of the system produced by the Supervisor pre-pass, 2026-08-02
+================================================================================
+
+NOTE ON THE FILENAME. The existing foundational_documents/DOT_rule_master_spec.txt
+holds BOOK-50's specification and is referenced across the record. This file is
+written as DOT_rule_master_spec_OPTION_B.txt so the incumbent's spec survives.
+Rename it only when Option B supersedes BOOK-50.
+
+STATUS: CANDIDATE. Not committed. BOOK-50 remains the committed artifact until a
+book passes 17q. Every figure below is 1 LOT, in-sample unless marked, produced by
+portfolio_simulation_engine.py on the corrected 177,251-bar frame with the full
+conviction stack and the 6-lot jar active.
+
+================================================================================
+ 1. HEADLINE
+================================================================================
+
+  trades 1,988   wins 1,920   losses 68   WR 96.58%
+  gross win $107,714   gross loss -$7,620   NET $100,094
+  PF 14.14   win/loss 0.501   avg trade $50.35
+  avg win $56.10   avg loss -$112.06
+  break-even WR 66.64% vs actual 96.58%  ->  MARGIN OF SAFETY 29.9pp
+  worst day -$272.9   losing days 3 of 119 active (126 in frame, sits out 7)
+  the three losing days: 2026.05.05 -$96.9 | 2026.05.26 -$235.6 | 2026.06.10 -$272.9
+  total damage across six months: $605
+
+  score_book.py VERDICT: PASS — every hard constraint holds
+  FailConc 1.352  (BOOK-50 3.458)   ABSOLUTE SURVIVAL -$272.9 vs ceiling -$2,500
+
+  AGAINST THE INCUMBENT
+    system            trades      net     WR      PF    FailConc   survival
+    BOOK-50 raw        2,729   $76,458  90.8%     -      3.458      -$565
+    FUSED-50 raw       2,697   $84,691  91.7%     -      1.649      -$340
+    FUSED-120 raw      6,433  $158,418  89.8%   3.38     4.071      -$658
+    + Option A         3,343  $120,373  93.6%   7.36     2.067      -$139
+    + OPTION B         1,988  $100,094  96.6%  14.14     1.352      -$273
+  All six PASS every hard constraint through score_book.py.
+
+================================================================================
+ 2. THE SIGNAL SET — 120 SIGNALS, 70 LONG / 50 SHORT
+================================================================================
+
+  family      F0 119, F1 1
+  grammar     119 same-bar triples (A + B + C, D2D as the fourth directional term)
+              1 F1 sequential (needs the bounded latch already specified for BOOK-50's two)
+  variables   95 distinct, ALL present in the 172-column export
+  priced <1   34 of 120 (rows chance essentially does not produce)
+
+  MOST-USED VARIABLES
+    Slope_EMA_ST 15 | AT_Slope_ST 13 | Volume 11 | Micro_HLAsymmetry 11
+    Micro_Rejection 10 | RangeOsc_State 10 | PrevDay_High_Dist_ATR 8
+    OR_Low_Side 7 | PrevDay_Low_Side 7 | Micro_WickImbalance 7 | Lower_Wick 6
+    AT_Score_LT 6 | OR_High_Side 6 | Micro_Hurst 6 | KAMA_Dist 6 | VWAP_Sigma 6
+
+  MARKET STRUCTURE   TREND_CONTINUATION 44 | MOMENTUM_IGNITION 30
+                     STRUCTURAL_ENTRY 16 | BREAKOUT_EXPANSION 11
+                     PRICE_ACTION 3 | VOLUME_CONFIRMED 3 | TREND_EXHAUSTION 1
+                     UNMAPPED 1 | not classified 11
+  SESSION (modal)    overnight 63 | morning 44 | preclose 2 | n/a 11
+  REGIME (causal)    regime_0 88 | regime_1 21 | n/a 11
+
+================================================================================
+ 3. THE GATES — PER DIRECTION, PER DEPTH TIER
+================================================================================
+
+  Depth = number of DISTINCT signals entering on the same bar.
+  All thresholds are ADAPTIVE percentiles from dots_thresholds.py mechanism D
+  (rolling 2500 bars, day-refreshed, floor-index). No fixed numbers.
+
+  cell           gate                              effect
+  ------------------------------------------------------------------------
+  LONG  solo     Micro_Hurst        > p90          keeps 12%
+  LONG  dual     AT_Slope_ST        > p90          keeps 18%
+  LONG  triple   Bar_Range          > p95
+  LONG  quad     Micro_FailedBreak  > p20          keeps 72%
+  LONG  5+       Micro_VolOfVol     > p20          keeps 91%
+  SHORT solo     Micro_FailedBreak  < p10
+  SHORT dual     Micro_VPIN         > p70
+  SHORT triple   FREE
+  SHORT quad     FREE
+  SHORT 5+       FREE
+
+  THE SHAPE, AND WHY IT IS NOT SYMMETRIC:
+   - Longs are gated at every depth; shorts only at solo and dual.
+   - Long shallow gates are TIGHT (p90/p95) because long solos and duals carry
+     the worst payoff ratio in the book (0.26 and 0.43).
+   - Short deep tiers run FREE because short triple+ has 12 losses in 507 trades.
+   - Micro_Hurst gates LONGS ONLY — it confers no short edge (recorded OOS PF
+     2.22 short vs 4.99 long). AT_Slope_ST, FailedBreak and VPIN carry the shorts.
+
+  ALSO ACTIVE (unchanged from the ratified system):
+   - D2D_Trend_Dir as the mandatory fourth directional term on every entry
+   - conviction: Hurst>p90 longs 2x, recentFB 1.25x, D2D-agree 2x both directions,
+     higher-multiplier-wins never product
+   - the 6-lot LIVE-RISK jar
+   - S.7 trade management, ATRx2/x4 momentum SL, BE tier-1, LeapFrog
+
+================================================================================
+ 4. HOW THE SET WAS BUILT — REPRODUCIBLE PROCEDURE
+================================================================================
+
+  STEP 1  Score all 1,818 VALID F0 catalogue signals for per-signal DAILY P&L.
+          Run in batches of 120 through portfolio_simulation_engine.py so the
+          6-lot jar behaves as it would in a real book. 9 seconds, 121,966 trades.
+
+  STEP 2  Build nine DIVERSE selections of 50 by greedy decorrelation over that
+          field, varying the objective (min shared loss-days / max net per overlap /
+          min P&L correlation) and the seed (best ratio / max net / fewest losses).
+          Union them with BOOK-50's 48 F0 signals -> a 231-signal candidate field.
+
+  STEP 3  Re-decorrelate the union: greedy admission on MINIMUM SHARED LOSS DAYS,
+          net-positive signals only, PER DIRECTION SEPARATELY, to 70L/50S.
+
+  STEP 4  Find the gate per (direction x depth-tier) cell by coordinate descent
+          over ~150 gate options (16 variables x 8 percentiles x hi/lo, plus tick
+          and ADX thresholds), objective = maximise PF subject to a net floor and
+          a worst-day floor. Four passes to convergence.
+
+  WHY EACH STEP IS THERE — the five findings from seven attempts:
+   1. THE DECORRELATION FIELD SIZE IS THE BINDING CONSTRAINT. 300 pre-filtered
+      candidates gave win/loss 0.70; all 1,818 gave 0.98.
+   2. RANK ON RARITY, NOT PERSISTENCE. folds_plus ranking gave WORSE depth quality
+      than EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF. Persistent signals fire often and
+      stack badly.
+   3. THE FREE-TIER DEPTH MOVES WITH BOOK SIZE. 48 signals cross at depth 3; 120
+      cross at 4-6. Inheriting "triple+ free" cost $1,522 in a single day.
+   4. GATED SHALLOW TRADES IMPROVE THE TAIL. They lose on different days from the
+      triples. A triples-only book is NOT the optimum.
+   5. METHOD DIVERSITY FUSES; BOOK COUNT DOES NOT. BOOK-50 fused with one
+      independently-selected 50 (3 of 97 overlapping) beat both parents. Nine
+      greedy variants of the same field added almost nothing.
+
+================================================================================
+ 5. PERFORMANCE BREAKDOWN
+================================================================================
+
+  BY MONTH
+    month      n     W    L    WR%      PF      net      worst day
+    2026.01   98    90    8   91.8    7.82   $3,266       +$266
+    2026.02  386   378    8   97.9   16.25  $19,240        +$50
+    2026.03  440   428   12   97.3   13.17  $22,660        +$32
+    2026.04  354   341   13   96.3   13.77  $13,393        +$69
+    2026.05  255   241   14   94.5   11.03  $12,719       -$236
+    2026.06  274   265    9   96.7   14.87  $14,637       -$273
+    2026.07  181   177    4   97.8   22.93  $14,180        +$69
+  Every month positive. Five of seven have a POSITIVE worst day.
+
+  BY CONCURRENCE DEPTH
+    tier       n     W     L    WR%      PF       net     w/l
+    solo     186   172    14   92.5    3.14    $6,608    0.26
+    dual     494   466    28   94.3    7.20   $14,835    0.43
+    triple   507   492    15   97.0   14.99   $23,782    0.46
+    quad     348   348     0  100.0     inf   $18,942     -      ZERO LOSSES
+    5+       453   442    11   97.6   81.95   $35,927    2.04
+  Monotone. The 5+ tier pays $2.04 for every $1 risked.
+
+  THE WINDOW THAT BROKE BOOK-50 (6.40 -> 2.19)
+    Jan-May   1,533   WR 96.41%   PF 13.04   $71,278
+    Jun-Jul     455   WR 97.14%   PF 17.94   $28,816
+  Quality RISES into it.
+
+================================================================================
+ 6. WALK-FORWARD — GATES FITTED ON JAN-MAY, APPLIED UNCHANGED TO JUN-JUL
+================================================================================
+
+    segment                   trades      WR       PF       net    worst day  losses
+    TRAIN Jan-May (fitted)       930   99.89%  2378.38   $56,106     +$5.4        1
+    TEST  Jun-Jul (UNSEEN)       216   95.83%    11.79   $10,400    -$249.0       9
+    ungated control Jun-Jul    1,666   89.02%     3.31   $43,103    -$658.0     183
+
+  THE GATES GENERALISE. On months the optimiser never saw: PF 11.79 against an
+  ungated 3.31 (3.6x), WR 95.83% vs 89.02%, worst day -$249 vs -$658.
+
+  THE TIGHTNESS DOES NOT. The training fit reaches PF 2,378 on a single loss —
+  the search overfitting, plainly visible — and at that calibration keeps only
+  24% of the net out of sample ($10,400 of a possible $43,103).
+
+  OPERATIONAL CONCLUSION: FIT LOOSER THAN THE OPTIMISER WANTS. A gate tuned to
+  eliminate losses in-sample keeps almost nothing out-of-sample; one tuned to
+  IMPROVE the ratio keeps most of the money and most of the improvement.
+  Direction proven. Calibration is the open work.
+
+================================================================================
+ 7. BUILDABILITY
+================================================================================
+
+  119 of 120 signals are F0 triples — exactly what R(i,dir,f1,t1,f2,t2,f3,t3)
+    expresses. The current EA holds 76; DOTS_NUM_RULES is a #define.
+  95 distinct signal variables, ALL present in the 172-column export.
+  ALL gate variables present in the export: Micro_Hurst, AT_Slope_ST, Bar_Range,
+    Micro_FailedBreak, Micro_VolOfVol, Micro_VPIN, Volume, ADX_Value.
+  1 F1 sequential needs the bounded latch subsystem already specified in step 18.
+  NO new variable. NO new export. NO mechanism that does not already exist.
+
+  WHAT THE ENGINE DOES NOT YET HAVE: per-(direction x depth-tier) gating. The
+  depth of a bar must be known at entry to select the gate. That is a new engine
+  capability and it is the one genuine build item.
+
+================================================================================
+ 8. WHAT IS NOT PROVEN
+================================================================================
+
+  - The gate CALIBRATION. Direction holds out of sample; tightness does not.
+  - The gates are UNPRICED against a multiple-testing null. ~150 options x 10
+    cells x 4 passes is thousands of evaluations. The 302-pool random-subset
+    method exists and has not been applied to these.
+  - NO family other than F0/F1 was considered. F3, F9, F11, F2, F4 untested here.
+  - Session, regime and structure balance were OUTPUTS, never constraints.
+  - Book sizes between 50 and 120 were not swept with per-cell gates.
+  - Nothing has traded live or on demo. Slippage is not modelled anywhere.
+
+================================================================================
+ 9. THE FULL SIGNAL LISTING
+================================================================================
+
+--- LONG (70 signals) ---
+#    signal_def                                                                 price  fold      PF structure             
+1    AT_Slope_ST:lo + Momentum_Value:hi + Micro_RollProxy:hi                        0     7   12.03 TREND_CONTINUATION    
+2    Session_High_Dist_ATR:lo + Volume:hi + D2D_Signal:==1                      44.66     7    2.71 MOMENTUM_IGNITION     
+3    Micro_OrderFlowDelta:hi + Micro_Rejection:lo + Lower_Wick:lo                   0     7    7.80 TREND_CONTINUATION    
+4    Round_1000_Dist_ATR:lo + MultiDay_Position:hi + AT_Regime_LT:==1            26.8     6    3.53 MOMENTUM_IGNITION     
+5    Bars_Since_Flip:hi + Round_500_Dist_ATR:lo + VA_Position:hi                71.46     5    2.29 STRUCTURAL_ENTRY      
+6    Session_Low_Dist_ATR:lo + OR_Position:hi + DailyOpen_Side:==-1             8.932     7    4.33 TREND_CONTINUATION    
+7    Micro_Rejection:lo + Session_Low_Dist_ATR:lo + OR_Low_Side:==1                 0     7    8.99 TREND_CONTINUATION    
+8    Slope_EMA_ST:lo + Micro_Rejection:lo + Round_100_Dist_ATR:lo               8.932     6    5.06 TREND_CONTINUATION    
+9    PrevDay_High_Dist_ATR:lo + ADX_Rising:==1 + PrevDay_Low_Side:==-1              0     7    5.91 TREND_EXHAUSTION      
+10   D2D_ATR:hi + Micro_Rejection:lo + PrevDay_High_Dist_ATR:hi                 53.59     5    2.56 BREAKOUT_EXPANSION    
+11   Slope_EMA_ST:lo + Micro_FailedBreak:hi + Micro_WickImbalance:lo                0     7    9.51 TREND_CONTINUATION    
+12   Micro_GarmanKlass:hi + Micro_VolOfVol:hi + PrevDay_Close_Dist_ATR:hi           0     5   10.95 BREAKOUT_EXPANSION    
+13   Round_500_Dist_ATR:lo + DailyOpen_Side:==1 + OR_Low_Side:==-1              35.73     6    3.16 STRUCTURAL_ENTRY      
+14   AT_Score_LT:lo + Micro_MicroGap:lo + OR_High_Side:==-1                     17.86     4    3.78 TREND_CONTINUATION    
+15   Slope_EMA_ST:lo + Momentum_Value:hi + Micro_RangeVelocity:hi                   0     6    5.66 TREND_CONTINUATION    
+16   AT_Slope_ST:lo + Micro_RangeAccel:lo + AT_Regime_LT:==1                    53.59     5    2.58 MOMENTUM_IGNITION     
+17   Bar_Range:hi + OBV_Macd:lo + Micro_TickIntensity:hi                          n/a     -       - UNMAPPED              
+18   AT_Lookback_ST:hi + Slope_EMA_ST:hi + ADX_Value:lo                             0     6    6.17 BREAKOUT_EXPANSION    
+19   Slope_EMA_ST:lo + Micro_Hurst:hi + PrevDay_High_Side:==-1                      0     7   15.10 MOMENTUM_IGNITION     
+20   KAMA_Dist:lo + Micro_WickImbalance:hi + OR_High_Side:==-1                      0     -     inf UNMAPPED              
+21   Slope_EMA_ST:lo + Micro_RangeAccel:hi + Micro_Rejection:lo                     0     7   16.68 TREND_CONTINUATION    
+22   Slope_EMA_ST:lo + Micro_HLAsymmetry:hi + Micro_Rejection:lo                    0     7    8.51 TREND_CONTINUATION    
+23   AT_Slope_ST:lo + Micro_HLAsymmetry:hi + Micro_Hurst:hi                     8.932     6    4.54 TREND_CONTINUATION    
+24   PrevDay_High_Dist_ATR:lo + Sqz_State:==1 + PrevDay_Low_Side:==-1           17.86     4    3.92 TREND_CONTINUATION    
+25   Micro_Rejection:lo + VWAP_Sigma:lo + Volume:hi                             8.932     5    4.32 MOMENTUM_IGNITION     
+26   AT_Score_LT:hi + Micro_GarmanKlass:hi + Micro_Rejection:hi                 35.73     6    3.44 TREND_CONTINUATION    
+27   Micro_VPIN:lo + Volume:hi + ST_Flip_Event:==-1                                 0     7   15.44 MOMENTUM_IGNITION     
+28   EMA_Oscillator:lo + Micro_HLAsymmetry:lo + AT_Regime_ST:==1                8.932     6    5.02 MOMENTUM_IGNITION     
+29   Slope_EMA_ST:lo + Micro_RangeVelocity:lo + OR_Position:lo                  8.932     6    4.07 TREND_CONTINUATION    
+30   AT_Slope_ST:lo + Micro_RollProxy:hi + RangeOsc_State:==-1                      0     6    5.96 TREND_CONTINUATION    
+31   Slope_EMA_ST:lo + Micro_HLAsymmetry:hi + Micro_OrderFlowDelta:lo               0     7    5.58 TREND_CONTINUATION    
+32   PrevDay_High_Dist_ATR:lo + PrevDay_Close_Side:==-1 + WeeklyOpen_Side:=     53.59     5    2.51 MOMENTUM_IGNITION     
+33   Micro_Entropy:lo + Micro_MomoTransfer:hi + Micro_RangeAccel:lo             8.932     5    4.48 MOMENTUM_IGNITION     
+34   Bar_Range:hi + Slope_EMA_ST:lo + Micro_AutoCorr:hi                         17.86     7    3.77 TREND_CONTINUATION    
+35   Micro_IBSP:hi + DailyOpen_Side:==1 + OR_Low_Side:==-1                          0     6    5.56 MOMENTUM_IGNITION     
+36   Volume_Avg_10:hi + Micro_Rejection:lo + PrevDay_High_Dist_ATR:hi           53.59     5    2.68 STRUCTURAL_ENTRY      
+37   AT_Slope_ST:lo + Micro_FailedBreak:hi + VWAP_Side:==-1                         0     6    5.92 TREND_CONTINUATION    
+38   PrevDay_High_Dist_ATR:lo + PrevDay_Low_Side:==-1 + OR_Low_Side:==1         35.73     5    3.02 TREND_CONTINUATION    
+39   Slope_Accel_LT:lo + Micro_HLAsymmetry:hi + Volume:hi                       35.73     6    2.97 TREND_CONTINUATION    
+40   Micro_HLAsymmetry:lo + Micro_LogReturn:hi + Micro_MicroGap:hi              35.73     6    3.17 TREND_CONTINUATION    
+41   Micro_IBSP:lo + VWAP_Sigma:lo + Volume:hi                                  8.932     6    5.48 MOMENTUM_IGNITION     
+42   RangeOsc_Val:hi + OR_Position:lo + PrevDay_Low_Side:==1                    339.4     4    1.56 TREND_CONTINUATION    
+43   AT_Slope_ST:lo + Micro_BarOverlap:lo + VWAP_Sigma:hi                           0     6   25.55 TREND_CONTINUATION    
+44   D2D_ATR_MA:hi + AT_Slope_ST:lo + Micro_VolOfVol:hi                             0     7    5.85 BREAKOUT_EXPANSION    
+45   Slope_EMA_ST:lo + Lower_Wick:hi + RangeOsc_State:==-1                      17.86     6    3.68 TREND_CONTINUATION    
+46   AT_Slope_ST:lo + Micro_AutoCorr:hi + Micro_LogReturn:hi                        0     6    9.75 TREND_CONTINUATION    
+47   AT_Slope_ST:lo + Micro_Hurst:hi + Round_1000_Dist_ATR:lo                       0     7   12.78 TREND_CONTINUATION    
+48   KAMA_Dist:hi + AT_Regime_ST:==1 + PrevDay_Low_Side:==-1                        0     5    9.83 MOMENTUM_IGNITION     
+49   Slope_Accel_LT:hi + Micro_TickIntensity:hi + PrevDay_Low_Side:==-1           n/a     -       - UNMAPPED              
+50   AT_Score_LT:lo + Slope_Accel_LT:hi + VWAP_Sigma:hi                             0     4   11.10 TREND_CONTINUATION    
+51   Sqz_Val:hi ->13-> Micro_OrderFlowDelta:lo                                    n/a     -       - UNMAPPED              
+52   Micro_LogReturn:hi + Micro_TickIntensity:hi + Micro_VPIN:lo                8.932     7    4.07 MOMENTUM_IGNITION     
+53   OBV_Macd:lo + MultiDay_Slope:lo + Lower_Wick:hi                            151.8     4    2.00 MOMENTUM_IGNITION     
+54   Bar_Range:hi + Micro_MomoTransfer:hi + Micro_TickIntensity:hi              44.66     7    2.70 BREAKOUT_EXPANSION    
+55   KAMA_Dist:lo + Micro_WickImbalance:hi + ADX_Rising:==0                         0     7   19.26 MOMENTUM_IGNITION     
+56   Momentum_Value:lo + Micro_VolOfVol:hi + Volume:hi                          44.66     6    2.84 TREND_CONTINUATION    
+57   Micro_MicroGap:lo + AT_Regime_ST:==1 + OR_Low_Side:==-1                        0     6   16.87 PRICE_ACTION          
+58   Micro_MomoTransfer:lo + VWAP_Sigma:lo + Volume:hi                          8.932     6    5.15 MOMENTUM_IGNITION     
+59   AT_Lookback_ST:hi + AT_Slope_ST:lo + Micro_RollProxy:hi                        0     7    7.30 BREAKOUT_EXPANSION    
+60   D2D_ATR:hi + AT_Slope_ST:lo + Bars_Since_Flip:hi                             n/a     -       - UNMAPPED              
+61   Bars_Since_Flip:hi + Volume_Avg_10:hi + Session_Low_Dist_ATR:lo                0     7   31.08 STRUCTURAL_ENTRY      
+62   AT_Slope_ST:lo + Session_Low_Dist_ATR:lo + Volume:hi                       8.932     7    4.46 TREND_CONTINUATION    
+63   KAMA_Dist:lo + Upper_Wick:hi + RangeOsc_State:==-1                         35.73     5    3.10 TREND_CONTINUATION    
+64   AT_Slope_LT:lo + Slope_EMA_ST:lo + Micro_FailedBreak:hi                    8.932     6    5.26 TREND_CONTINUATION    
+65   PrevDay_High_Dist_ATR:lo + VWAP_Side:==-1 + WeeklyOpen_Side:==-1           71.46     5    2.28 STRUCTURAL_ENTRY      
+66   Bars_Since_Flip:hi + Micro_PriceAccel:lo + OR_Low_Side:==-1                    0     7    6.36 STRUCTURAL_ENTRY      
+67   Micro_Entropy:lo + DailyOpen_Side:==-1 + OR_High_Side:==1                  98.25     6    2.09 PRICE_ACTION          
+68   Bars_Since_Flip:hi + Slope_Accel_LT:hi + Micro_VPIN:lo                     8.932     6    4.97 STRUCTURAL_ENTRY      
+69   Volume_Ratio_10:hi + Micro_FractalDim:lo + TChan_A15:hi                    53.59     5    2.50 VOLUME_CONFIRMED      
+70   KAMA_Dist:lo + VWAP_Dist_ATR:lo + OR_High_Side:==-1                            0     5    5.93 MOMENTUM_IGNITION     
+
+--- SHORT (50 signals) ---
+#    signal_def                                                                 price  fold      PF structure             
+1    Slope_Accel_ST:lo + Volume_Avg_10:hi + VAL_Side:==-1                       8.932     6    5.13 STRUCTURAL_ENTRY      
+2    Bar_Range:hi + Micro_RangeVelocity:lo + Lower_Wick:lo                      35.73     6    3.03 BREAKOUT_EXPANSION    
+3    Round_500_Dist_ATR:lo + RangeOsc_State:==2 + PrevDay_Close_Side:==-1       98.25     6    2.12 STRUCTURAL_ENTRY      
+4    PrevDay_Close_Dist_ATR:lo + VWAP_Side:==1 + PrevDay_High_Side:==1          35.73     5    2.95 STRUCTURAL_ENTRY      
+5    Micro_Entropy:lo + Micro_WickImbalance:lo + VAL_Side:==0                   44.66     5    2.90 MOMENTUM_IGNITION     
+6    DailyOpen_Dist_ATR:lo + TChan_A15:hi + VAH_Side:==-1                       35.73     6    2.95 STRUCTURAL_ENTRY      
+7    Micro_MomoTransfer:hi + Micro_RangeAccel:lo + OBVf_Signal:==1                  0     7    7.55 MOMENTUM_IGNITION     
+8    Micro_HLAsymmetry:hi + Micro_Hurst:lo + DailyOpen_Dist_ATR:hi               26.8     6    3.54 TREND_CONTINUATION    
+9    AT_Score_LT:hi + Volume_Avg_10:hi + RangeOsc_State:==-1                    35.73     5    3.40 STRUCTURAL_ENTRY      
+10   Micro_Hurst:hi + Micro_Lambda:hi + Micro_RangeVelocity:lo                  35.73     5    3.43 MOMENTUM_IGNITION     
+11   Micro_BarOverlap:lo + RangeOsc_State:==2 + OR_High_Side:==1                8.932     7    4.24 TREND_CONTINUATION    
+12   Bar_Range:hi + PrevDay_Low_Dist_ATR:hi + PrevDay_High_Side:==1             62.52     4    2.30 BREAKOUT_EXPANSION    
+13   Micro_MomoTransfer:hi + Micro_WickImbalance:lo + VAL_Side:==0              151.8     4    1.97 MOMENTUM_IGNITION     
+14   OBVf_DirStepCount:hi + VAL_Side:==0 + WeeklyOpen_Side:==-1                     0     6    7.99 MOMENTUM_IGNITION     
+15   D2D_Dynamic_Sensitivity:lo + Micro_IBSP:lo + Micro_WickImbalance:hi        44.66     5    2.81 MOMENTUM_IGNITION     
+16   D2D_ATR_MA:hi + Sqz_Val:hi + Session_High_Dist_ATR:hi                      8.932     5    4.31 BREAKOUT_EXPANSION    
+17   ATR_1M:hi + MultiDay_Slope:hi + RangeOsc_State:==2                         35.73     5    3.41 TREND_CONTINUATION    
+18   Micro_BarEntropy:hi + Round_100_Dist_ATR:lo + PoC_Side:==0                 35.73     4    3.13 MOMENTUM_IGNITION     
+19   AT_Lookback_LT:hi + Micro_Amihud:lo + Body_Size:hi                         44.66     5    2.92 MOMENTUM_IGNITION     
+20   Micro_HLAsymmetry:lo + Micro_LogReturn:hi + MultiDay_Slope:hi              44.66     4    2.88 TREND_CONTINUATION    
+21   D2D_Dynamic_Sensitivity:lo + Volume_Avg_10:hi + Efficiency_Ratio:hi        8.932     5    4.63 STRUCTURAL_ENTRY      
+22   Micro_GarmanKlass:hi + WeeklyOpen_Dist_ATR:hi + PrevDay_High_Side:==1      17.86     4    4.00 MOMENTUM_IGNITION     
+23   Micro_FailedBreak:lo + Micro_FractalDim:lo + Micro_HLAsymmetry:hi          8.932     7    4.89 TREND_CONTINUATION    
+24   D2D_ATR:hi + AT_Score_LT:hi + RangeOsc_State:==-1                          53.59     5    2.55 BREAKOUT_EXPANSION    
+25   Slope_Accel_LT:lo + Sqz_Val:hi + Micro_CSSpread:lo                             0     -     inf UNMAPPED              
+26   AT_Score_LT:hi + Volume_Ratio_10:hi + Volume:hi                            44.66     6    2.81 VOLUME_CONFIRMED      
+27   Slope_EMA_ST:hi + Micro_MicroGap:hi + OBVf_Signal:==1                      17.86     5    3.96 TREND_CONTINUATION    
+28   OBV_Velocity:hi + Micro_RollProxy:hi + PrevDay_High_Dist_ATR:lo            53.59     5    2.43 MOMENTUM_IGNITION     
+29   Efficiency_Ratio:lo + PrevDay_Close_Side:==-1 + OR_High_Side:==1           44.66     7    2.76 MOMENTUM_IGNITION     
+30   D2D_Dynamic_Sensitivity:lo + Lower_Wick:lo + Volume:hi                     8.932     6    5.00 STRUCTURAL_ENTRY      
+31   Volume_Ratio_10:hi + VWAP_Sigma:hi + RangeOsc_State:==-2                   17.86     7    4.01 VOLUME_CONFIRMED      
+32   Micro_BarOverlap:lo + Micro_OrderFlowDelta:hi + Micro_PriceAccel:lo        17.86     6    3.65 TREND_CONTINUATION    
+33   Slope_Accel_LT:lo + Micro_Rejection:hi + PrevDay_High_Side:==1             8.932     5    4.61 TREND_CONTINUATION    
+34   Micro_FailedBreak:lo + Micro_HLAsymmetry:hi + Micro_VolAccel:hi            44.66     5    2.70 TREND_CONTINUATION    
+35   Slope_EMA_ST:lo + Micro_ThrustEff:hi + ADX_Value:lo                        53.59     6    2.48 TREND_CONTINUATION    
+36   AT_Slope_LT:hi + Micro_BarOverlap:hi + OBVf_Signal:==1                     62.52     5    2.32 UNMAPPED              
+37   AT_Slope_ST:hi + Micro_MicroGap:lo + Upper_Wick:hi                           n/a     -       - UNMAPPED              
+38   Efficiency_Ratio:hi + Micro_BarEntropy:hi + Body_Size:hi                     n/a     -       - UNMAPPED              
+39   DailyOpen_Dist_ATR:lo + VAH_Side:==0 + PrevDay_Low_Side:==1                8.932     5    4.31 STRUCTURAL_ENTRY      
+40   OBV_Velocity:lo + Micro_TickIntensity:lo + PoC_Side:==0                    53.59     6    2.55 BREAKOUT_EXPANSION    
+41   D2D_Dynamic_Sensitivity:lo + RangeOsc_Val:lo + Volume_Avg_10:hi            151.8     6    1.97 STRUCTURAL_ENTRY      
+42   Slope_EMA_ST:hi + Slope_Accel_ST:hi + VA_Position:hi                         259     4    1.69 TREND_CONTINUATION    
+43   Micro_Entropy:lo + Micro_WickImbalance:lo + Lower_Wick:lo                      0     7   18.68 PRICE_ACTION          
+44   Micro_HLAsymmetry:lo + Micro_Hurst:hi + Session_High_Dist_ATR:lo           71.46     5    2.26 TREND_CONTINUATION    
+45   Slope_EMA_LT:hi + Micro_VPIN:lo + RangeOsc_State:==-1                      35.73     5    3.20 MOMENTUM_IGNITION     
+46   Volume_Ratio_10:lo + Micro_RollProxy:lo + Volume:hi                          n/a     -       - UNMAPPED              
+47   Micro_VolAccel:hi + Body_Size:lo + OR_Low_Side:==-1                          n/a     -       - UNMAPPED              
+48   D2D_Dynamic_Sensitivity:lo + Upper_Wick:hi + VAH_Side:==-1                   n/a     -       - UNMAPPED              
+49   Momentum_Value:hi + Session_High_Dist_ATR:hi + TChan_A15:hi                    0     6    5.71 TREND_CONTINUATION    
+50   KAMA_Dist:hi + Micro_IBSP:hi + OBVf_Signal:==1                             53.59     5    2.43 MOMENTUM_IGNITION     

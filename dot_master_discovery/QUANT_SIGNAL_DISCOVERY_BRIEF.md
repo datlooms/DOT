@@ -315,67 +315,79 @@ existing trade table, not by re-simulating with the gate active. The position ca
 of entries, so blocking shallow trades frees capacity and admits others. **The out-of-sample
 split stands; the gated totals need re-running inside the simulation.**
 
+
+## THE NUMBER TO BEAT — OPTION B
+
+A Supervisor pre-pass over seven attempts produced this. **All 1 lot, in-sample, full conviction stack, jar
+active, and every book below PASSES every hard constraint through `score_book.py`.**
+
+    system                       trades      net     WR      PF    FailConc    mCVaR    survival
+    BOOK-50 raw                   2,729   $76,458  90.8%     -      3.458   -$4,922     -$565
+    FUSED-50 raw                  2,697   $84,691  91.7%     -      1.649   -$2,091     -$340
+    FUSED-120 raw                 6,433  $158,418  89.8%   3.38     4.071        -      -$658
+    FUSED-120 + Option A          3,343  $120,373  93.6%   7.36     2.067        -      -$139
+    FUSED-120 + Option B          1,988  $100,094  96.6%  14.14     1.352        -      -$273
+
+**OPTION B: $100,094 | WR 96.58% | PF 14.14 | 68 losses | 3 losing days of 119 | FailConc 1.352 — the lowest
+measured anywhere in this project.**
+
+    avg win $56.10 | avg loss -$112.06 | win/loss 0.501
+    break-even WR 66.64% vs actual 96.58% -> MARGIN 29.9pp
+    gross win $107,714 | gross loss -$7,620
+
+    month     n     W    L    WR%      PF      net       wd        concurrence     n     PF      net
+    2026.01   98    90    8  91.8    7.82   $3,266    +$266        solo          186   3.14   $6,608
+    2026.02  386   378    8  97.9   16.25  $19,240     +$50        dual          494   7.20  $14,835
+    2026.03  440   428   12  97.3   13.17  $22,660     +$32        triple        507  14.99  $23,782
+    2026.04  354   341   13  96.3   13.77  $13,393     +$69        quad          348    inf  $18,942
+    2026.05  255   241   14  94.5   11.03  $12,719    -$236        5+            453  81.95  $35,927
+    2026.06  274   265    9  96.7   14.87  $14,637    -$273
+    2026.07  181   177    4  97.8   22.93  $14,180     +$69        Jan-May PF 13.04 -> Jun-Jul PF 17.94
+
+**Quality RISES into the window that broke BOOK-50.** The three losing days across six months total $605.
+
+**FUSED-50 is the low-fit control.** Beats BOOK-50 on every axis at the same size — FailConc 1.65 vs 3.46,
+mCVaR -$2,091 vs -$4,923, survival -$340 vs -$565, +$8,233 net on 32 fewer trades — **with no gate fitting at
+all.** Its LONG triple+ tier pays above parity: win/loss 1.0349, break-even 49.14%, margin 48.8pp, 7 losses.
+**It passes the acceptance rule outright.**
+
+**THE GATES WERE WALK-FORWARDED AND THEY HOLD.** Re-fitted on Jan-May only and applied unchanged to Jun-Jul:
+**PF 11.79 against an ungated control of 3.31, WR 95.83% vs 89.02%, worst day -$249 vs -$658** — on months the
+optimiser never saw. What does not carry is the TIGHTNESS: the training fit reaches PF 2,378 on one loss, and
+at that tightness it keeps only 24% of the net out of sample. **Fit looser than the optimiser wants.** The
+direction is proven; the calibration is the open work.
+
+### WALK-FORWARD ON THE GATES — RUN, AND THEY HOLD
+
+The gates were re-fitted on **Jan-May ONLY** and applied **UNCHANGED** to June-July. The optimiser never saw
+the test months.
+
+    segment                     trades      WR       PF       net     worst day   losses
+    TRAIN Jan-May (fitted)         930   99.89%  2378.38   $56,106      +$5.4         1
+    TEST  Jun-Jul (UNSEEN)         216   95.83%    11.79   $10,400     -$249.0        9
+    ungated control Jun-Jul      1,666   89.02%     3.31   $43,103     -$658.0      183
+
+**On genuinely unseen data the gated book runs PF 11.79 against the ungated control's 3.31 — 3.6x — with
+WR 95.83% against 89.02% and a worst day of -$249 against -$658.** The gates generalise.
+
+**What does NOT generalise is the TIGHTNESS.** The training fit is PF 2,378 on a single loss — the search
+overfitting, plainly visible. Tuned that hard it keeps only **24% of the net** out of sample ($10,400 of a
+possible $43,103).
+
+**THE OPERATIONAL CONCLUSION: fit gates LOOSER than the optimiser wants.** A gate tuned to eliminate losses
+in-sample keeps almost nothing out-of-sample; one tuned to IMPROVE the ratio keeps most of the money and most
+of the improvement. That is a tuning problem with a measured direction, not a failure.
+
+**AND IT IS BUILDABLE.** 119 of Option B's 120 signals are F0 triples — exactly what the rule table expresses.
+95 distinct variables, all present in the 172-column export. Every gate variable present in the export. One F1
+signal needs the sequential latch already specified for BOOK-50's two. **No new variable, no new export, no
+mechanism that does not exist.**
+
+
+
+**Both books go to you: one proven by method, one by search. Beat them, or show why they do not hold.**
+
 ---
-
-# A FLOOR TO BEAT — AND FIVE CONSTRAINTS FOUND WHILE FINDING IT
-
-Six books were built and simulated before this brief was handed over. **None is a
-recommendation and one of them beat BOOK-50** — so the frontier has a measured point on it.
-Full detail in `cake_dictionary.md` section 5D.
-
-    50 signals, 30L/20S. Greedy decorrelation over ALL 1,818 VALID F0 on minimum shared
-    LOSS DAYS, per direction. Gated: solo+dual require Hurst p95 (long) / Rejection p20
-    (short) / ticks >= 300. Triple+ free.
-
-                       trades    WR       PF      net      worst day   w/l 3+
-    BOOK-50 gated         755   96.4%   19.71   $36,068     -$130.7      0.99
-    THIS FLOOR            629   93.8%   11.90   $39,606      -$94.7      0.98
-
-**+10% net, 28% better worst day, better balance, payoff parity held. Beat it.**
-
-## THE FIVE CONSTRAINTS — inherit these, they cost six attempts to find
-
-**1. DECORRELATE OVER THE WHOLE FIELD.** 300 pre-filtered candidates gave w/l 0.70. All 1,818
-gave **0.98**. Nothing else moved the number remotely as far. Any selection that decorrelates
-over a pre-filtered slice has crippled the method before it runs.
-
-**2. RANK ON RARITY, NOT PERSISTENCE.** `folds_plus`/`min_fold_pf` ranking gave WORSE depth
-quality than `EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF`. Persistent signals fire often and stack badly.
-**Persistence is a filter; rarity is the ranking key.**
-
-**3. THE FREE-TIER DEPTH MOVES WITH BOOK SIZE.** BOOK-50 crosses at 3 with 48 signals; a
-100-signal book crosses at 4-6. Inheriting "triple+ free" left an ungated tier at w/l 0.45 and
-**21 correlated longs took $1,522 in one day.** Find the crossover empirically per book.
-
-**4. GATED SHALLOW TRADES IMPROVE THE TAIL.** Triples alone: worst day −$149.4. Plus gated
-solos and duals: **−$94.7**. They lose on different days. **A triples-only book is not the
-optimum** — this reproduces BOOK-50's own behaviour.
-
-**5. THE FRONTIER IS REAL, MEASURED AT TWO POINTS, AND IS NOT A THRESHOLD ARTIFACT.**
-
-        50 signals   w/l 0.98    $39,606 gated
-       100 signals   w/l 0.52   $145,230 ungated
-
-The 4x net target **is** reachable. Every gated 100-signal variant landed at w/l 0.52-0.64. And
-at MATCHED RARITY the bigger books are still worse (30L/20S at 3+ w/l 0.98; 50L/50S at 4+ w/l
-0.72), so it is not simply a shifted threshold — **more signals means reaching further down the
-catalogue, and those signals are weaker.**
-
-## WHAT THOSE ATTEMPTS NEVER TESTED — OPEN GROUND, NOT CLOSED
-
-- **Any family but F0.** No F1/F3/F9/F11/F2/F4 signal was in any book.
-- **Priced gates.** Every gate above was swept and is unpriced. One early sweep ranked on w/l
-  and returned `PF 999 / w/l inf` in six of eight cells — **zero-loss subsets from ~1,280
-  trials.** A loss floor and a net-retention floor were needed before the output meant anything.
-  **That is Phase 7's multiple-testing problem arriving in practice.**
-- **A gate sweep per tier at the 50-signal size** — the gates used came from a 100-signal book.
-- **Book sizes between 50 and 100**, where the frontier's knee most likely sits.
-- **Session, regime or structure balance** — not considered in any attempt.
-- **Anything but greedy decorrelation** — no exhaustive search, no alternative objective.
-
-**That floor was found by a Supervisor with limited compute and no pricing discipline on its
-gates. It is a starting altitude, not a ceiling — and every one of the six failures above is a
-door someone left unopened rather than a door that is shut.**
 
 ---
 
