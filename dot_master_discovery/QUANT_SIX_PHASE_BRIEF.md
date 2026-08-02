@@ -401,11 +401,17 @@ and overnight holds 0. A session-balanced book deliberately takes worse episodes
 Findings B and C establish that gating is **directional**. Longs enter on pullbacks and respond
 to Hurst; shorts enter on continuation and respond to FailedBreak. Neither gate has been priced.
 
-**THE PRICED-GATE METHOD IS RECOVERED IN FULL — USE IT, DO NOT INVENT A SECOND.** See
+**A PRICED-GATE METHOD ALREADY EXISTS — USE IT AS THE BASELINE, AND IMPROVE ON IT IF YOU CAN.** See
 `cake_dictionary.md` section 4D. Pool: raw D2D flips both directions at ADX>=15, n=302, ~17%
 losers. 360 tests (90 FEAT_ x hi/lo x direction). For a candidate slice of size k, draw many
 random k-subsets from the same pool and read where the candidate lands. Five gates, all
 required: random-pct >=97.5, OOS-positive, fold-persistent, n>=8, stated mechanism.
+
+**If you can specify a better pricing method, do so and say why it is better.** The point is
+not to preserve this particular procedure — it is that a gate found by searching variables and
+thresholds MUST be priced against the search that found it, by some defensible method, before
+anyone acts on it. Recovering this one saves you inventing from nothing; it does not bind you
+to it.
 
 **AND THE CAVEAT MUST TRAVEL WITH ANY RESULT YOU PRODUCE:** *"360 tests. At the p97.5 gate,
 expected chance survivors ~9.0. Bonferroni for FWER 5% = 99.986th pct; max candidate reached
