@@ -202,52 +202,113 @@ only ever be zero. Do not read it as a finding.
 
 ---
 
-# THE TARGET SYSTEM, AND THE RULE THAT GOVERNS EVERY PHASE
+# THE OBJECTIVE — 4x THE GATED SYSTEM, SAME STATS OR BETTER
 
-**The operator is not composing from scratch. He is expanding a system that already works, and
-he wants it improved rather than replaced.** Full detail in `cake_dictionary.md` sections 5B
-and 5C.
+**This is not "compose a book from the catalogue." It is: take a system that already works and
+make it four times larger without degrading it.** Everything you measure should be read against
+this.
+
+## THE SYSTEM BEING EXPANDED
 
     solo    -> Hurst p90 AND ticks >= 300
     double  -> Hurst p90
     triple+ -> FREE
 
-    On BOOK-50, full span, 1 lot:
+    BOOK-50, full span, 1 lot:
       solo + Hurst + ticks     146   WR 91.1%   PF  6.49   net  $6,877   wd -$187.6
       double + Hurst           104   WR 96.2%   PF 16.18   net  $2,575   wd  -$50.8
       triple+ free             505   WR 98.0%   PF 53.70   net $26,616   wd -$138.9
-      GATED TOTAL              755   WR 96.4%   PF 19.71   net $36,068   wd -$130.7
+      GATED TOTAL              755   WR 96.4%   PF 19.71   net $36,068   wd -$130.7   27 losses
 
-    Unseen 18 days, gates unfitted:  ungated PF 2.25  ->  gated PF 16.63
-      96% of the money, 28% of the worst day, 8% of the losses.
+    Unseen 18 days, gates unfitted:  ungated PF 2.25 -> gated PF 16.63
+      96% of the money at 28% of the worst day and 8% of the losses.
 
-**THE OBJECTIVE: more longs, more shorts, more terrain, more opportunities — WITHOUT DEGRADING
-THIS.**
+## THE TARGET
 
-## THE ACCEPTANCE RULE — REPORT AGAINST IT IN EVERY PHASE
+    tier            now              ->  target
+    solo            146   $6,877     ->    584   $27,508
+    double          104   $2,575     ->    416   $10,300
+    triple+         505  $26,616     ->  2,020  $106,464
+    TOTAL           755  $36,068     ->  3,020  $144,272
+
+    WR       >= 96.4%       PF >= 19.71
+    WORST DAY MUST STAY AT ROUGHLY -$130.7 — IT MUST NOT SCALE TO -$523.
+
+**THAT LAST LINE IS THE WHOLE DIFFICULTY.** Four times the trades at the same tail means the
+added trades must lose on DIFFERENT DAYS from the ones already there. That is decorrelation.
+
+BOOK-48 was built that way — per-signal daily P&L vectors, greedy admission by minimum co-fire
+of LOSS days, plus a leave-one-out trim removing high-standalone-PF signals whose losses were
+correlated. **Treat that as a starting point, not a prescription.** It was blind to three things
+you now have: the long/short asymmetry, the terrain map, and the possibility of gating each
+direction differently. A selection method that produced 37L/13S without anyone choosing that
+split is not the method to inherit unexamined.
+
+## HOW MANY SIGNALS THAT IMPLIES
+
+Same-bar triples scale roughly as C(n,3):
+
+    48 signals  ->  C(n,3) 17,296   1.00x   ~505 triples   (BOOK-50 today)
+    60 signals  ->         34,220   1.98x   ~999
+    72 signals  ->         59,640   3.45x   ~1,741
+    76 signals  ->         70,300   4.06x   ~2,052        <- the target lands here
+    84 signals  ->         95,284   5.51x   ~2,782
+   100 signals  ->        161,700   9.35x   ~4,721
+
+**~76 signals is the arithmetic MINIMUM for 4x triples. THE OPERATOR'S TARGET IS 100.**
+
+100 implies ~4,721 triples — well past the 2,020 needed — which is headroom, not a problem. The
+acceptance rule decides how many are kept, not the arithmetic.
+
+**AND DO NOT READ THE 100-SIGNAL ILLUSTRATION AS EVIDENCE AGAINST 100.** It produced 2,635
+triples at win/loss 0.64 because it was ranked PURELY ON RARITY, with one gate applied to both
+directions and no decorrelation step at all. That is evidence that THAT selection was bad. It
+is not evidence that 100 signals cannot hold the ratio. **Nobody has yet tried 100 selected per
+direction, decorrelated on loss days, and gated by side.**
+
+## THE GUARD — WHY MORE TRIPLES IS NOT AUTOMATICALLY PROGRESS
 
     break-even WR = avg_loss / (avg_win + avg_loss)
     margin        = actual WR - break-even WR
 
-    BOOK-50 corrected      win/loss   break-even   margin     losses
-      solo                   0.40       71.4%     16.8pp       144
-      double                 0.52       65.7%     24.8pp        94
-      triple+                0.99       50.3%     46.9pp        14
+    BOOK-50 corrected          win/loss   break-even   margin    losses
+      solo                       0.40       71.4%     16.8pp      144
+      double                     0.52       65.7%     24.8pp       94
+      triple+                    0.99       50.3%     46.9pp       14
 
-    100-signal illustration  win/loss   break-even   margin
-      triple+                0.64       61.2%     30.1pp
-      five+                  0.81       55.2%     35.0pp
+    100-signal illustration    win/loss   break-even   margin
+      triple+                    0.64       61.2%     30.1pp
+      five+                      0.81       55.2%     35.0pp
 
-**BOOK-50's triples pay $1 for every $1 risked. The expanded book's pay 64 cents.** PF 6.61
-looks respectable and conceals it entirely.
+**BOOK-50's triples pay $1 for every $1 risked. The expanded book's pay 64 cents.** It reached
+2,635 triples — past the target — and the payoff shape collapsed. **PF 6.61 looks respectable
+and conceals all of it.**
 
+> ### THE ACCEPTANCE RULE
+>
 > **A signal may be added only if the triple+ tier's win/loss ratio does not fall.**
+>
+> Coverage is monotone and cannot warn anyone. Every one of the four prior expansions raised
+> net, lowered out-of-sample PF, and gave no signal until afterwards. **Break-even WR moves
+> live as signals are admitted.** Carry win/loss ratio and margin alongside PF everywhere, and
+> never quote either without the loss count — a tier resting on fewer than ~20 losses is noise
+> wearing a number.
 
-**WHY THIS MATTERS TO YOUR WORK:** coverage is monotone and cannot warn anyone. Every one of the
-four prior expansions raised net, lowered out-of-sample PF, and gave no signal until afterwards.
-**Break-even WR moves live as signals are admitted.** Wherever a phase reports a frontier, a
-shortlist or a cohort, **carry win/loss ratio and margin alongside PF** — and never quote either
-without the loss count. A tier resting on fewer than ~20 losses is noise wearing a number.
+## WHAT YOU HAVE THAT BOOK-50'S SELECTION DID NOT
+
+    1,818 VALID F0 signals        against a 2,420 pre-gate pool, now PRICED against a null
+    a terrain map                 2,298 reachable episodes; BOOK-50 touches 82
+    100% quality gap              every unclaimed episode WAS reached by the search
+    four balance axes             direction x structure x session x regime, all populated
+    a priced-gate method          recovered, with one gate reproduced out of sample
+    the full family set           F1/F3/F9/F11/F2/F4 — measured, not assumed
+
+## ORDER OF WORK
+
+**F0 FIRST. Hit the 4x target with F0 signals and gates alone.** Only once that is achieved do
+the other families get considered as additions — as companions, gates, or independent coverage
+(Phase 4). **Do not mix the two questions.** Expanding F0 and evaluating F1/F3/F9 are separate
+problems and conflating them is how the last expansion went wrong.
 
 **AND ONE METHOD CAVEAT TO CARRY:** the gated figures above were produced by FILTERING an
 existing trade table, not by re-simulating with the gate active. The position cap binds on 15.4%
