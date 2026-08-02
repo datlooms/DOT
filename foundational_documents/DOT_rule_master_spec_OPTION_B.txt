@@ -199,7 +199,104 @@ conviction stack and the 6-lot jar active.
   capability and it is the one genuine build item.
 
 ================================================================================
- 8. WHAT IS NOT PROVEN
+ 8. SIX MEASUREMENTS TAKEN AFTER THE FIRST DRAFT — ALL MATERIAL
+================================================================================
+
+ 8.1  THE GAP-FILLER SYSTEM MUST NOT BE APPLIED TO OPTION B.
+
+      Option B, NO gaps     1,988 tr  $100,094  WR 96.58%  PF 14.14  wd -$272.9   68 losses  3 losing days
+      Option B + gaps       2,546 tr  $116,028  WR 94.70%  PF  8.06  wd -$495.6  135 losses  7 losing days
+
+      +$16K for DOUBLE the losses, double the losing days, PF nearly halved and an 82% worse
+      tail. And the damage is not the gaps' own P&L — the BOOK degrades before a single gap
+      trade is counted (1,988 -> 2,323 trades, $100,094 -> $103,464, wd -$272.9 -> -$495.6),
+      because a gap holds a lot in the 6-lot jar and changes which book trades are admitted
+      afterwards. Option B's gates leave the book flat 80.5% of the time, so gaps fire into
+      space the book was about to use. On BOOK-50 the gaps IMPROVE the worst day (-153.7 ->
+      -104.4); that behaviour does NOT transfer to a more heavily gated book.
+      ADOPTED CONFIGURATION: OPTION B WITHOUT GAP FILLERS.
+
+ 8.2  NO OTHER FAMILY WORKS AS A GAP FILLER. Clean negative, on flat bars only:
+
+      family  signals  trades  on-flat   WR      PF       net
+      F3           53  23,958   17,300  75.1%   0.78   -$38,753
+      F9          127   2,958      651  78.3%   0.92    -$1,143
+      F11           2     770      399  78.9%   0.85      -$674
+      F2            1      82       12  75.0%   0.38      -$366
+
+      Every one loses money on the bars where the book is flat. The gap-filler role was the
+      most promising unexplored use for the non-F0 families and on this test it is dead. The
+      three existing gap types (GAP_FB, GAP_HURST, GAP_D2D) are not improved on by any of them.
+      (F4 aborted — its divergence grammar needs the oracle passed to build_book. Two rows.)
+
+ 8.3  TERRAIN COVERAGE IS OPTION B'S WEAK AXIS — LONG WENT BACKWARDS.
+
+                    signals   episodes   % of REACHABLE      vs BOOK-50
+      LONG   Option B    70         47       4.11%            0.87x  (BOOK-50 54 / 4.72%)
+      SHORT  Option B    50         48       4.16%            1.71x  (BOOK-50 28 / 2.42%)
+      catalogue ceiling             103 UP / 89 DOWN = 9.01% / 7.71%
+      captured: 45.6% of the long ceiling, 53.9% of the short ceiling
+
+      BALANCE WAS ACHIEVED; REACH WAS NOT. The selection objective was loss decorrelation and
+      coverage was never in it — decorrelated signals cluster in time by definition of what
+      makes them decorrelated. Greedy union coverage reaches 6.82% / 7.71% from 50 signals.
+      **Option B is one corner of the frontier: maximum quality, minimum reach.** A book
+      optimised for both has not been built.
+
+ 8.4  THE RANDOM-SUBSET CONTROL — THE GATES SIT AT THE 100th PERCENTILE.
+
+      The ungated control in section 6 is the weak comparison. The right one is the project's
+      own random-subset percentile. 4,000 random 216-trade draws from the 1,666 ungated
+      Jun-Jul trades:
+
+        ungated full-set PF   3.31
+        random 216-subsets    median 3.32 | p90 4.74 | p99 6.69 | max 9.68
+        GATED PF 11.79        100.00th percentile — ABOVE ALL 4,000 DRAWS
+
+      Random selection returns the same PF as the full set (median 3.32 vs 3.31), so "any rule
+      taking the top 13% wins by construction" is FALSE. The gates carry real information on
+      data the optimiser never saw.
+
+ 8.5  PER-TIER AVERAGE LOSS — THE TAIL IS IN THE GATED LONG SHALLOW CELLS, NOT THE FREE ONES.
+
+      cell             n   losses   avg loss   worst    total     share of all loss
+      LONG  solo     123       14   -$220.27  -$306    -$3,084        40%   GATED
+      LONG  dual     338       22   -$100.90  -$297    -$2,220        29%   GATED
+      SHORT triple   345       12   -$105.65  -$153    -$1,268        17%   FREE
+      LONG  5+       407       11    -$40.35   -$50      -$444         6%
+      LONG  triple   162        3   -$143.90  -$144      -$432         6%
+      SHORT dual     156        6    -$28.90   -$37      -$173         2%
+      SHORT solo      63        0        -        -          0         0%
+      LONG  quad     232        0        -        -          0         0%
+      SHORT quad     116        0        -        -          0         0%
+      SHORT 5+        46        0        -        -          0         0%
+      total                    68                    -$7,620
+
+      69% OF ALL LOSSES SIT IN THE TWO LONG SHALLOW CELLS THAT ARE ALREADY GATED. The free
+      short deep tiers carry 17% at a BELOW-AVERAGE loss size ($105.65 vs the book's $112.06),
+      and short quad and 5+ carry zero. The objection that a free tier is where the risk hides
+      is not supported here.
+
+ 8.6  THREE CORRECTIONS TO THE FIRST DRAFT.
+
+      (a) THE WALK-FORWARD IN SECTION 6 TESTED A DIFFERENT GATE SET. Those gates were fitted
+          on Jan-May and cover 1,146 trades. The headline system's gates were fitted on all
+          seven months and cover 1,988. Section 6 demonstrates that a coordinate-descent gate
+          fit GENERALISES. It does NOT put the headline artifact out of sample. The headline
+          gate set has never been tested on unseen data.
+      (b) THE REAL BUILD ITEM IS JAR ADMISSION ORDER, NOT DEPTH COUNTING. The EA already
+          evaluates every rule every bar, so the depth tally is a by-product of that loop and
+          costs nothing. What is unspecified: when a depth-5 bar generates more qualifying
+          entries than six live lots can hold, WHICH FIVE GET IN. Today it is first-come within
+          the loop. Under depth gating that becomes a policy decision nobody has made.
+      (c) THE ONE F1 SIGNAL CAME FROM BOOK-50, NOT FROM CATALOGUE-SHOPPING.
+          `Sqz_Val:hi ->13-> Micro_OrderFlowDelta:lo LONG` is BOOK-50's SQUEEZE_BREAKOUT
+          structure-fill. The fusion step unioned BOOK-50 in, and decorrelation kept it on
+          merit. The F0-only rule governed selection FROM THE CATALOGUE and was not broken;
+          the incumbent's own signal earned its place in a fused book.
+
+================================================================================
+ 9. WHAT IS NOT PROVEN
 ================================================================================
 
   - The gate CALIBRATION. Direction holds out of sample; tightness does not.
@@ -212,7 +309,7 @@ conviction stack and the 6-lot jar active.
   - Nothing has traded live or on demo. Slippage is not modelled anywhere.
 
 ================================================================================
- 9. THE FULL SIGNAL LISTING
+ 10. THE FULL SIGNAL LISTING
 ================================================================================
 
 --- LONG (70 signals) ---

@@ -906,6 +906,66 @@ measured anywhere in this project.**
 
 **Quality RISES into the window that broke BOOK-50.** The three losing days across six months total $605.
 
+
+### SIX MEASUREMENTS TAKEN AFTER THE FIRST DRAFT — ALL MATERIAL
+
+**1. THE GAP-FILLER SYSTEM MUST NOT BE APPLIED TO OPTION B.**
+
+    Option B, NO gaps   1,988 tr  $100,094  WR 96.58%  PF 14.14  wd -$272.9   68 losses  3 losing days
+    Option B + gaps     2,546 tr  $116,028  WR 94.70%  PF  8.06  wd -$495.6  135 losses  7 losing days
+
++$16K for double the losses and an 82% worse tail. **The BOOK degrades before a single gap trade is
+counted** — a gap holds a lot in the 6-lot jar and changes which book trades are admitted afterwards.
+Option B's gates leave it flat 80.5% of the time, so gaps fire into space the book was about to use. On
+BOOK-50 gaps IMPROVE the worst day; **that does not transfer to a heavily gated book.**
+**ADOPTED: OPTION B WITHOUT GAP FILLERS.**
+
+**2. NO OTHER FAMILY WORKS AS A GAP FILLER — clean negative on flat bars.**
+
+    F3   53 signals  17,300 on-flat trades  WR 75.1%  PF 0.78  -$38,753
+    F9  127 signals     651                 WR 78.3%  PF 0.92   -$1,143
+    F11   2 signals     399                 WR 78.9%  PF 0.85     -$674
+    F2    1 signal       12                 WR 75.0%  PF 0.38     -$366
+
+Every one loses money where the book is flat. **The gap-filler role was the most promising unexplored
+use for the non-F0 families and on this test it is dead.**
+
+**3. TERRAIN COVERAGE IS OPTION B'S WEAK AXIS — LONG WENT BACKWARDS.**
+
+    LONG   70 signals  47 episodes  4.11% of reachable   vs BOOK-50 54 / 4.72%  = 0.87x
+    SHORT  50 signals  48 episodes  4.16%                vs BOOK-50 28 / 2.42%  = 1.71x
+    ceiling 103 UP / 89 DOWN — Option B captures 45.6% long, 53.9% short
+
+**Balance achieved; reach not.** The objective was loss decorrelation and coverage was never in it —
+decorrelated signals cluster in time by definition. Greedy union coverage reaches 6.82% / 7.71% from 50
+signals. **Option B is one corner of the frontier: maximum quality, minimum reach.**
+
+**4. THE RANDOM-SUBSET CONTROL — THE GATES SIT AT THE 100th PERCENTILE.** 4,000 random 216-trade draws
+from the 1,666 ungated Jun-Jul trades: median PF **3.32** (full set 3.31), p99 6.69, **max 9.68**.
+**Gated PF 11.79 is above all 4,000.** Random selection returns the same PF as the full set, so "any
+rule taking the top 13% wins by construction" is FALSE. **The gates carry real information out of
+sample.**
+
+**5. PER-TIER AVERAGE LOSS — the tail is in the GATED long shallow cells, not the free ones.**
+
+    LONG  solo   14 losses  avg -$220.27  total -$3,084   40% of all loss   GATED
+    LONG  dual   22 losses  avg -$100.90  total -$2,220   29%               GATED
+    SHORT triple 12 losses  avg -$105.65  total -$1,268   17%               FREE
+    SHORT quad / SHORT 5+ / SHORT solo / LONG quad:  ZERO losses
+
+**69% of all losses sit in the two long shallow cells that are already gated.** The free short deep
+tiers carry 17% at a below-average loss size. The objection that a free tier hides the risk is not
+supported here.
+
+**6. THREE CORRECTIONS.** (a) **The walk-forward tested a DIFFERENT gate set** — fitted Jan-May, 1,146
+trades, against the headline's all-seven-months 1,988. It proves the METHOD generalises; **the headline
+gate set has never been out of sample.** (b) **The real build item is JAR ADMISSION ORDER, not depth
+counting** — the EA already evaluates every rule every bar so the tally is free; what is unspecified is
+which five of eight qualifying entries get the six live lots on a deep bar. (c) **The one F1 signal came
+from BOOK-50**, not from catalogue-shopping — it is the SQUEEZE_BREAKOUT structure-fill, unioned in and
+kept on merit.
+
+
 **FUSED-50 is the low-fit control.** Beats BOOK-50 on every axis at the same size — FailConc 1.65 vs 3.46,
 mCVaR -$2,091 vs -$4,923, survival -$340 vs -$565, +$8,233 net on 32 fewer trades — **with no gate fitting at
 all.** Its LONG triple+ tier pays above parity: win/loss 1.0349, break-even 49.14%, margin 48.8pp, 7 losses.

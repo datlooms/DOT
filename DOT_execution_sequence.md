@@ -176,6 +176,17 @@
   **FUSED-50 is the low-fit control** — beats BOOK-50 on FailConc (1.65 vs 3.46), mCVaR (-$2,091 vs -$4,923),
   survival (-$340 vs -$565) and net (+$8,233), with **no gate fitting at all**, and its LONG triple+ tier pays
   above parity (win/loss 1.0349, margin 48.8pp, 7 losses).
+  **SIX POST-DRAFT MEASUREMENTS, ALL MATERIAL** (full detail in `foundational_documents/DOT_rule_master_spec_OPTION_B.txt` §8):
+  **(1) GAPS MUST NOT BE APPLIED** — with gaps $116,028 but 135 losses / 7 losing days / wd -$495.6 / PF
+  8.06, against $100,094 / 68 / 3 / -$272.9 / PF 14.14 without. The book degrades before a gap trade is
+  counted; gaps take jar lots and Option B is flat 80.5% of the time. **ADOPTED: NO GAP FILLERS.**
+  **(2) NO OTHER FAMILY WORKS AS A GAP FILLER** — F3 loses $38,753 on flat bars, F9/F11/F2 all negative.
+  **(3) COVERAGE IS THE WEAK AXIS** — LONG 4.11% (BOOK-50 4.72%, went backwards), SHORT 4.16% (1.71x).
+  Balance achieved, reach not; Option B is the maximum-quality / minimum-reach corner of the frontier.
+  **(4) RANDOM-SUBSET CONTROL: gated PF 11.79 exceeds all 4,000 random 216-trade draws** (median 3.32).
+  **(5) 69% of all losses sit in the two GATED long shallow cells**; the free short deep tiers carry 17%
+  at below-average loss size. **(6) The walk-forward tested a DIFFERENT gate set than the headline; the
+  real build item is jar admission order at depth; the one F1 signal came from BOOK-50 itself.**
   **WALK-FORWARDED, AND THEY HOLD.** Gates re-fitted on Jan-May ONLY and applied UNCHANGED to Jun-Jul:
   **PF 11.79 vs an ungated control of 3.31, WR 95.83% vs 89.02%, worst day -$249 vs -$658** on months the
   optimiser never saw. What does NOT carry is the tightness — the training fit reaches PF 2,378 on one loss

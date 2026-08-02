@@ -130,6 +130,32 @@ more total trades. **The gradient is signal quality.** Before this, "triple conv
 architectural decision later supported; it is now a measured result with a null behind it. **Still untested:
 three has never been competed against a same-bar pair or a 4/5-variable grammar.**
 
+
+### POST-DRAFT MEASUREMENTS — SIX, ALL MATERIAL (2026-08-02, same day)
+
+1. **GAPS MUST NOT BE APPLIED TO OPTION B.** With gaps: $116,028 but 135 losses, 7 losing days, wd
+   -$495.6 and PF 8.06 — against $100,094 / 68 losses / 3 losing days / -$272.9 / PF 14.14 without.
+   The BOOK degrades before a gap trade is counted, because a gap holds a jar lot and changes book
+   admission. Option B is flat 80.5% of the time so gaps fire into space the book wanted. **On BOOK-50
+   gaps IMPROVE the tail; that does not transfer. ADOPTED: OPTION B WITHOUT GAP FILLERS.**
+2. **NO OTHER FAMILY WORKS AS A GAP FILLER.** On flat bars: F3 17,300 trades PF 0.78 -$38,753;
+   F9 PF 0.92; F11 PF 0.85; F2 PF 0.38. All negative. **The most promising unexplored use for the
+   non-F0 families is dead on this test.**
+3. **COVERAGE IS OPTION B'S WEAK AXIS.** LONG 47 episodes / 4.11% (BOOK-50 54 / 4.72% — WENT
+   BACKWARDS); SHORT 48 / 4.16% (BOOK-50 28 / 2.42% — 1.71x). Captures 45.6% / 53.9% of the catalogue
+   ceiling. **Balance achieved, reach not** — the objective was loss decorrelation and coverage was
+   never in it. Option B is one corner of the frontier: maximum quality, minimum reach.
+4. **RANDOM-SUBSET CONTROL: THE GATES SIT AT THE 100th PERCENTILE.** 4,000 random 216-trade draws from
+   the unseen months: median PF 3.32 (full set 3.31), max 9.68. **Gated PF 11.79 exceeds all 4,000.**
+   Random selection returns the same PF as the full set — "top 13% wins by construction" is FALSE.
+5. **PER-TIER AVERAGE LOSS: 69% of all loss sits in the two GATED long shallow cells** (LONG solo avg
+   -$220.27, 40%; LONG dual -$100.90, 29%). The FREE short deep tiers carry 17% at a below-average loss
+   size, and short quad / 5+ / solo and long quad carry ZERO.
+6. **THREE CORRECTIONS.** The walk-forward tested a DIFFERENT gate set (Jan-May fit, 1,146 trades) than
+   the headline (all-seven-months fit, 1,988) — it proves the method, not the book. The real build item
+   is JAR ADMISSION ORDER at depth, not depth counting. The single F1 signal came in from BOOK-50's own
+   structure-fill, not from catalogue-shopping.
+
 ### THE GATES WERE WALK-FORWARDED — THEY HOLD
 
 Re-fitted on **Jan-May ONLY**, applied **UNCHANGED** to Jun-Jul. The optimiser never saw the test months.
