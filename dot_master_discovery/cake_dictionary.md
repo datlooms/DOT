@@ -719,73 +719,44 @@ affordable. This shows three beats random; it does not show three beats two or f
 
 ---
 
-# 4G. TWO DEPTH LADDERS — THEY MEASURE DIFFERENT THINGS AND THEY DISAGREE
+# 4G. THE DENSITY SWEEP — A BOOK-SCORING TOOL NOTHING POINTS AT
 
-**`score_book.py` now prints BOTH on every book it scores.** Read them as a pair. They are not
-alternatives and they are not contradictory — they answer different questions, and confusing
-them is the easiest available mistake.
+**Every depth figure in circulation was INFERRED by grouping trades on `entry_bar`. The engine
+has its own proper measurement and it has never been run.**
 
-    L174   SAME-BAR DEPTH LADDER — DISTINCT-SIGNAL basis
-    L233   F10 CONVERGENCE-DENSITY LADDER — set-condition basis
+    scanners/triple_convergence_and_d2ddir.py
+      L461-469   DENSITY_K_BANDS = [1, 2, 3, 4, 5, 6, 8, 10]   "fused F10 dimension"
+      L472       build_set_density()
+      L523       density_sweep()
+      L549       run_density()
+      L589       fires ONLY on:  ... density <book.csv>
 
-## LADDER 1 — DISTINCT SIGNALS ON THE SAME BAR (range 1..12)
+**It is a SEPARATE entry point.** `master.py` imports the module for its triple scan and never
+calls `run_density`. `discovery_orchestrator.py` L36 records the decision in a comment — *"it
+is run SEPARATELY and its CSV ingested"* — and nothing else mentions it. **That is why the
+10h43m run produced no density output: nothing was ignored, nothing was called.**
 
-**The question:** *do multiple SIGNALS agreeing on one bar predict a better outcome?*
+**WHY IT CANNOT LIVE IN THE PIPELINE:** `density_sweep` scores a **finished signal set** at
+k = 1…10. During discovery there is no book — the catalogue is the deliverable and item 15
+means nothing chooses. It is correctly outside the pipeline.
 
-    LONG   solo 3.59   dual 2.43   3-4 8.68   5+ 39.40
-    SHORT  solo 3.52   dual 2.49   3-4 3.88   5+  3.38
+**HOW TO RUN IT:**
 
-**Answer: emphatically yes on longs, not at all on shorts.** This is the gradient the whole
-architecture rests on, and section 4F shows it survives a random-triple null.
+    python scanners/triple_convergence_and_d2ddir.py density <your_book.csv>
 
-## LADDER 2 — SET-CONDITIONS CO-FIRING (range 0..35)
+**Its default argument is `recommended_set_76.csv`, a superseded pre-reconstruction file.
+ALWAYS pass the book explicitly.**
 
-**The question:** *does restricting entry to bars where MORE OF THE BOOK'S CONDITIONS are
-simultaneously true improve anything?* Measured over the candidate signal set, direction-
-aligned, applied as a GATE.
+**WHAT IT GIVES YOU:** the depth ladder measured by the ratified engine rather than inferred —
+co-firing count ≥ k over the **candidate signal set under evaluation**, direction-aligned, run
+as a **gate** rather than a post-hoc grouping. The scanner's own note records why it is not
+measured over the raw 249-condition pool: *"that saturates"* — confirmed independently, since
+at 1,000 signals 97.1% of bars reach depth ≥3.
 
-On BOOK-50, the first time it has ever been run on current data:
-
-    LONG (37 signals)   k>=1  PF 5.31  bars 177,246  trades 1,805
-                        k>=8  PF 5.45  bars  80,919  trades 1,748
-    SHORT (13 signals)  k>=1  PF 4.18  ->  k>=8  PF 4.41
-
-**Answer: almost nothing.** Half the bars discarded for roughly 3% of PF.
-
-## WHY BOTH ARE TRUE
-
-**Signal agreement is informative. Ambient condition density is not.**
-
-A bar where five distinct signals fire is a bar where five independently-selected patterns
-converged. A bar where 20 of the set's conditions are true is mostly a volatile bar — and the
-project already knows why: **~24 of 120 thresholds are at extremes on any bar by construction
-(120 × 20%).** Raw density is largely a volatility proxy. That is also the reason the scanner's
-own note restricts the measurement to the candidate set rather than the raw 249-condition pool:
-*"that saturates."*
-
-> **Use Ladder 1 to decide how many signals to hold. Use Ladder 2 to decide whether a density
-> gate earns its place — and on the current evidence it does not.**
-
-## RUNNING IT
-
-It fires automatically inside `score_book.py`, on the same book, in one invocation:
-
-    python score_book.py --book <your_book.csv> --data data --out <dir>
-      -> the constraint machinery (TailDep, FailConc, mCVaR, absolute survival)
-      -> the distinct-signal depth ladder
-      -> density_<book>.csv : k, direction, survival, bars, trades, PF, WR,
-                              worst_day_usd, hard_stop_days, pf_base, pf_stress
-
-`DENSITY_K_BANDS = [1,2,3,4,5,6,8,10]`, from
-`scanners/triple_convergence_and_d2ddir.py` L461-469 — the fused F10 dimension. `score_book.py`
-calls the ratified `f0.density_sweep` directly rather than reimplementing it. The scanner's
-standalone entry point (`... density <book.csv>`) still exists but is no longer needed, and its
-default argument is a superseded file — **never invoke it that way.**
-
-**Historical note:** this produced nothing in any discovery run because it was a separate
-entry point nothing called. It could not live in the pipeline — it scores a FINISHED signal
-set, and during discovery there is no book. It now runs wherever a book is scored, which is
-the correct place.
+> **USE IT AS A CHECKPOINT ON ANY CANDIDATE BOOK.** It answers *"does count≥5 outperform
+> count≥2"* directly, on whatever set you point it at, and it is the correct instrument for
+> that question. BOOK-50 is the current signal set; every future book should be screened the
+> same way.
 
 ---
 
@@ -806,6 +777,101 @@ have no per-signal value and must be computed on the assembled book.
 
 **Failure is a map, not a verdict.** A weak result redirects a line of inquiry; it never ends
 one. Do not let a prior negative harden into a lens that pre-interprets new evidence.
+
+---
+
+# 5B. THE TARGET SYSTEM — THIS IS WHAT IS BEING IMPROVED
+
+**The operator is not composing a book from scratch. He is expanding a system that already
+works.** Every measurement in this project should be read against this structure.
+
+    solo    -> Hurst p90 AND ticks >= 300
+    double  -> Hurst p90
+    triple+ -> FREE, no gate
+
+On BOOK-50, full span, 1 lot:
+
+    tier                        trades    WR       PF      net      worst day  losses
+    ungated (book, no gaps)      2,678   91.3%    5.14   $77,239    -$639.1     234
+      solo + Hurst + ticks         146   91.1%    6.49    $6,877    -$187.6
+      double + Hurst               104   96.2%   16.18    $2,575     -$50.8
+      triple+ free                 505   98.0%   53.70   $26,616    -$138.9
+    GATED TOTAL                    755   96.4%   19.71   $36,068    -$130.7      27
+    GATED @ flat 2 lots            755   96.4%   16.87   $48,604    -$209.2      27
+
+**Three properties that make this the target and not merely a result:**
+
+1. **Gating IMPROVES the worst day below triples alone** — −$130.7 against −$138.9. The gated
+   solos and doubles lose on DIFFERENT days from the triples. They are decorrelated ballast,
+   not filler.
+2. **It held out of sample, with the gates unfitted.** On the 18 unseen trading days
+   Jun 25 → Jul 21: ungated PF 2.25 → gated PF 16.63. **96% of the money at 28% of the worst
+   day and 8% of the losses.** The solo gate alone cut 143 break-even trades and nearly tripled
+   solo net.
+3. **The triples survived that segment and the solos did not** — solo PF 1.09, triple+ PF
+   36.17. **That is what took BOOK-50 from 6.40 to 2.19: it carried 2,173 ungated shallow
+   trades against 505 triples.** The engine never failed. It was dragging weight.
+
+**THE OBJECTIVE IS TO EXPAND THIS — more longs, more shorts, more terrain, more opportunities —
+WITHOUT DEGRADING IT.**
+
+**METHOD CAVEAT, and it is not small:** the gated rows above were produced by FILTERING an
+existing trade table, not by re-running the simulation with the gate active. The position/lot
+cap binds regularly — 15.4% of entries occur with 5+ already open. Blocking ~1,900 shallow
+trades frees capacity and would admit trades previously turned away. **The real gated book has
+more than 755 trades and different ones.** The out-of-sample split is unaffected and stands;
+the gated totals need re-running with the gate inside the simulation before they are final.
+
+---
+
+# 5C. THE ACCEPTANCE RULE — MARGIN OF SAFETY, NOT PROFIT FACTOR
+
+**This is the stopping rule the four failed expansions never had.**
+
+Every prior expansion raised net and lowered out-of-sample PF, and the only warning arrived
+afterwards. Coverage cannot warn you — it is monotone. **Break-even win rate can, and it moves
+live as signals are added.**
+
+    break-even WR = avg_loss / (avg_win + avg_loss)
+    margin        = actual WR - break-even WR
+
+**BOOK-50, corrected frame:**
+
+    tier       n     WR      PF    avg win  avg loss   win/loss   break-even   margin
+    solo    1,225   88.2    3.00    38.13     95.42      0.40       71.4%     16.8pp   144 losses
+    double    992   90.5    4.99    31.46     60.21      0.52       65.7%     24.8pp    94 losses
+    triple+   512   97.3   35.11    54.55     55.27      0.99       50.3%     46.9pp    14 losses
+
+**THE CROSSOVER IS THE FINDING.** At solo the average loss is 2.5x the average win — solos are
+solvent only on an extreme win rate, which is exactly why they collapsed to PF 1.09 the moment
+that rate slipped. **At triple+ the payoff reaches parity (0.99) and the margin of safety
+nearly triples.** A 10-point win-rate degradation is fatal to solos and harmless at depth.
+
+**AND HERE IS WHY PF IS THE WRONG AXIS.** A 100-signal illustrative book, same frame, same
+engine, 5x the triple population:
+
+    tier       n     WR      PF    avg win  avg loss   win/loss   break-even   margin
+    solo    1,704   90.6    3.56    35.06     95.13      0.37       73.1%     17.5pp
+    double  2,278   86.0    2.46    26.26     65.83      0.40       71.5%     14.5pp
+    triple+ 2,635   91.2    6.61    42.86     67.48      0.64       61.2%     30.1pp
+    five+     895   90.2    7.45    63.60     78.24      0.81       55.2%     35.0pp
+
+**It never crosses over.** Best is 0.81 at five+. **BOOK-50's triples pay $1 for every $1
+risked; these pay 64 cents.** Margin at triple+ is 30pp against 47pp.
+
+PF 6.61 looks respectable and conceals all of it. **Break-even WR shows it in one number.**
+
+> ## THE RULE
+>
+> **A signal may be added only if the triple+ tier's win/loss ratio does not fall.**
+>
+> Expand for terrain, for direction balance, for opportunity — and check the ratio after each
+> admission. **The moment it starts falling, stop.** That is the live warning light the
+> previous four expansions did not have.
+
+**CAVEAT ON DEGENERATE TIERS:** BOOK-50's five+ shows break-even 0% and margin 100pp because it
+has ZERO losses. Quad+ rests on 8. **Never quote a win/loss ratio or a break-even WR without
+its loss count** — a tier resting on fewer than ~20 losses is noise wearing a number.
 
 ---
 

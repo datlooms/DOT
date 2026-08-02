@@ -1,4 +1,4 @@
-# QUANT — SEVEN-PHASE ANALYSIS OF THE COMPLETED RUN
+# QUANT — SIX-PHASE ANALYSIS OF THE COMPLETED RUN
 
 This produces the evidence the operator composes the final engine from. It is the last
 analytical work before a live system, and it is the reason the last three weeks happened.
@@ -199,6 +199,60 @@ touches the entire reachable terrain. What excluded those 2,092 episodes was S5'
 The companion column `n_valid_triples_touching` is **tautological and carries no information**:
 an episode appears in that file precisely because no VALID signal touches it, so the count can
 only ever be zero. Do not read it as a finding.
+
+---
+
+# THE TARGET SYSTEM, AND THE RULE THAT GOVERNS EVERY PHASE
+
+**The operator is not composing from scratch. He is expanding a system that already works, and
+he wants it improved rather than replaced.** Full detail in `cake_dictionary.md` sections 5B
+and 5C.
+
+    solo    -> Hurst p90 AND ticks >= 300
+    double  -> Hurst p90
+    triple+ -> FREE
+
+    On BOOK-50, full span, 1 lot:
+      solo + Hurst + ticks     146   WR 91.1%   PF  6.49   net  $6,877   wd -$187.6
+      double + Hurst           104   WR 96.2%   PF 16.18   net  $2,575   wd  -$50.8
+      triple+ free             505   WR 98.0%   PF 53.70   net $26,616   wd -$138.9
+      GATED TOTAL              755   WR 96.4%   PF 19.71   net $36,068   wd -$130.7
+
+    Unseen 18 days, gates unfitted:  ungated PF 2.25  ->  gated PF 16.63
+      96% of the money, 28% of the worst day, 8% of the losses.
+
+**THE OBJECTIVE: more longs, more shorts, more terrain, more opportunities — WITHOUT DEGRADING
+THIS.**
+
+## THE ACCEPTANCE RULE — REPORT AGAINST IT IN EVERY PHASE
+
+    break-even WR = avg_loss / (avg_win + avg_loss)
+    margin        = actual WR - break-even WR
+
+    BOOK-50 corrected      win/loss   break-even   margin     losses
+      solo                   0.40       71.4%     16.8pp       144
+      double                 0.52       65.7%     24.8pp        94
+      triple+                0.99       50.3%     46.9pp        14
+
+    100-signal illustration  win/loss   break-even   margin
+      triple+                0.64       61.2%     30.1pp
+      five+                  0.81       55.2%     35.0pp
+
+**BOOK-50's triples pay $1 for every $1 risked. The expanded book's pay 64 cents.** PF 6.61
+looks respectable and conceals it entirely.
+
+> **A signal may be added only if the triple+ tier's win/loss ratio does not fall.**
+
+**WHY THIS MATTERS TO YOUR WORK:** coverage is monotone and cannot warn anyone. Every one of the
+four prior expansions raised net, lowered out-of-sample PF, and gave no signal until afterwards.
+**Break-even WR moves live as signals are admitted.** Wherever a phase reports a frontier, a
+shortlist or a cohort, **carry win/loss ratio and margin alongside PF** — and never quote either
+without the loss count. A tier resting on fewer than ~20 losses is noise wearing a number.
+
+**AND ONE METHOD CAVEAT TO CARRY:** the gated figures above were produced by FILTERING an
+existing trade table, not by re-simulating with the gate active. The position cap binds on 15.4%
+of entries, so blocking shallow trades frees capacity and admits others. **The out-of-sample
+split stands; the gated totals need re-running inside the simulation.**
 
 ---
 
@@ -460,119 +514,6 @@ solos/duals, FailedBreak on short triples.
 
 **OUTPUT:** the achievable coverage per (direction × structure × session × regime) cell, the
 measured cost of balance against concentration, and the specification for a priced gate test.
-
----
-
-# PHASE 7 — THE GATE PALETTE
-
-**This is a research programme, not a caveat. It is the largest genuinely unexplored area in
-the project and it may matter more than the composition itself.**
-
-Every gate in the record is either a SIZING multiplier or a static threshold chosen in advance.
-**A gate whose bar is set by the measured yield of the population behind it has never existed
-here.** The pass-bar shape has been used three times — S5's filter admitting a SIGNAL, the D2D
-sweep admitting a CONDITIONER, the exhaustion screen admitting a RULE — but never to decide
-whether an admitted signal may fire on a given bar.
-
-## 7.1 — THREE DISTINCT ROLES, AND THEY MUST BE MEASURED SEPARATELY
-
-    ADMISSION   blocks the trade entirely        NEW. Nothing in the record does this.
-    CONVICTION  scales the lot, never blocks     EXISTS: Hurst p90 longs 2x, recentFB 1.25x,
-                                                 D2D-agree 2x
-    NEGATIVE    excludes rather than includes    EXISTS ONCE: the exhaustion sequence failed
-                                                 as a positive conditioner (71.8th pct,
-                                                 fragile) and cleared decisively as a negative
-                                                 screen (1.4th pct, OOS -$38.3). SAME VARIABLE,
-                                                 useless one way, strong the other.
-
-**Test every candidate in all three roles.** A variable that fails as an admission gate may be
-a strong sizer, and one that fails positively may clear as a negative screen. The record
-contains a worked example of exactly that inversion.
-
-**Specific hypothesis worth testing first, from the operator:** `AT_Slope_ST` disagreeing with
-`D2D_Trend_Dir` marks 84% of deep long entries — the pullback. As an ADMISSION gate requiring
-agreement it is destructive (keeps 16% of deep longs, PF 13.97 -> 6.14). **As a CONVICTION
-variable — size up when AT is bearish on a long — it is untested and structurally coherent.**
-
-## 7.2 — WHERE THE WORK ACTUALLY IS
-
-Cell power measured on the illustrative 100-signal book. **A gate can only remove losses. Half
-the cells have almost none.**
-
-    dir     tier   trades  losses      PF
-    LONG    solo      782      74     3.59    gate has work
-    LONG    dual     1130     148     2.43    gate has work
-    LONG    3         519      33     8.88
-    LONG    4         244      16     8.08    thin
-    LONG    5         195      10    12.55    thin
-    LONG    6+        192       0   999.00    NOTHING TO GATE
-    SHORT   solo      922      86     3.52    gate has work
-    SHORT   dual     1148     170     2.49    gate has work
-    SHORT   3         549      54     3.11
-    SHORT   4         428      40     5.38
-    SHORT   5         280      60     1.77    WEAKEST DEEP CELL - most to fix
-    SHORT   6+        228      18     5.97    thin
-
-**Four cells hold 478 of the 729 losses: long solo, long dual, short solo, short dual.** Plus
-`SHORT 5`, the only deep cell that is genuinely weak.
-
-**`LONG 6+` is ungateable by definition** — zero losses, so a gate there can only remove
-winners. **The deep long tiers do not need a gate. They need not to be diluted.**
-
-**Report cell power BEFORE fitting anything.** A threshold fitted to a cell with ten losses is
-the 126-false-stars failure with a different label.
-
-## 7.3 — THE MULTIPLE-TESTING PROBLEM, WHICH IS SEVERE
-
-A gate whose threshold is chosen because that is where the yield clears **is a search over
-thresholds, and every threshold tested is a trial.**
-
-    12 cells x 249 conditions x 8 thresholds  =  23,904 gate-trials
-      expected chance survivors at p97.5      =  598
-      expected chance survivors at p99        =  239
-      expected chance survivors at p99.9      =   24
-      Bonferroni FWER 5%                      =  the 99.9998th percentile
-
-**598 apparent discoveries from noise alone at the p97.5 bar.** Restricting to the five cells
-that have losses worth removing roughly halves the search, which is a real reduction and not
-a solution.
-
-**NOTHING IN THIS PROJECT HAS EVER PRICED A GATE FOR MULTIPLE TESTING.** The random-subset
-percentile is the closest and it recorded its own limit honestly: *"Bonferroni for FWER 5% over
-360 tests = 99.986th pct; max candidate reached 99.9th -> NONE clear strict Bonferroni."*
-
-**`EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF` prices signals. There is no equivalent for gates. That
-column is what the pipeline is missing, and specifying it is part of this phase.**
-
-## 7.4 — THE CANDIDATES ALREADY ON THE TABLE
-
-    Micro_Rejection lo     PRICED at the 98.6th random-subset pct, and REPRODUCED on a
-                           different pool, pipeline and population. Strongest standing.
-    Micro_FailedBreak hi   long 3+ 13.97 -> 34.26 at p70; short 3+ 3.60 -> 7.61 at p50.
-                           STRONGER ON LONGS. 66 tests, one frame, UNPRICED.
-    Lower_Wick hi          long 3+ -> 25.50 at p70
-    Upper_Wick hi          short 3+ -> 5.77 at p70, keeps 79% of net
-    Micro_Hurst            the incumbent sizer. LONGS ONLY - no short edge, OOS PF 2.22 vs 4.99
-    AT_Slope_ST            destructive as an admission gate; UNTESTED as conviction
-    VWAP_Z, Bar_Range      weaker, in the same sweep
-
-**The wick family is directionally MIRRORED and mechanically coherent:** longs want a buying
-wick defending the low, shorts want a selling wick rejecting the high. Same mechanism, opposite
-member.
-
-## 7.5 — WHAT TO DELIVER
-
-Not a chosen gate set. **A priced palette:**
-
-  - for each candidate x role x direction x tier: the lift, the retention, the cell power, and
-    the price
-  - a stated null for gate search, and the method for computing it
-  - which cells should be left UNGATED and why
-  - which candidates survive their own price, and which are noise from 24,000 trials
-
-**Retention matters as much as lift.** `Upper_Wick hi p70` keeps 79% of short net at 1.6x PF;
-`Micro_FailedBreak hi p50` keeps 42% at 2.1x. Under survival-first those are different
-propositions and the operator chooses between them — you measure both.
 
 ---
 
