@@ -230,6 +230,48 @@ def score(book_path, data_path, out_dir):
     _write(os.path.join(out_dir, 'book_mcvar.csv'), mc, [
         'DOT item 16 - per-signal marginal tail contribution',
         f'worst {int(MCVAR_WORST_FRAC*100)}% of book days | PROPERTY OF THE BOOK'])
+    print('  MARGIN OF SAFETY PER DEPTH TIER PER DIRECTION')
+    _mrows = []
+    for d, lab in ((1, 'LONG'), (-1, 'SHORT')):
+        sub = bk[bk['direction'] == lab]
+        if not len(sub):
+            continue
+        by_bar = {}
+        for b_, nm in zip(sub['entry_bar'].values, sub['signal_name'].values):
+            by_bar.setdefault(int(b_), set()).add(nm)
+        depth_of = {b_: len(v) for b_, v in by_bar.items()}
+        tiers = (('solo', 1, 1), ('double', 2, 2), ('triple+', 3, 10 ** 6))
+        for tname, lo, hi in tiers:
+            m = np.array([lo <= depth_of.get(int(b_), 0) <= hi for b_ in sub['entry_bar'].values])
+            p = np.asarray(sub['pnl'].values, dtype=float)[m]
+            if p.size == 0:
+                continue
+            pf_l = -p[p < 0].sum()
+            mo = cat.margin_of_safety(p)
+            row = {'direction': lab, 'tier': tname, 'trades': int(p.size),
+                   'WR': round(float((p > 0).mean() * 100), 2),
+                   'PF': (round(float(p[p > 0].sum() / pf_l), 4) if pf_l > 0 else 'inf'),
+                   'net': round(float(p.sum()), 2)}
+            row.update(mo)
+            _mrows.append(row)
+            print(f"    {lab:5} {tname:8} n {row['trades']:5} WR {row['WR']:5.1f} PF "
+                  f"{str(row['PF']):>7} | avg win {mo['avg_win']} avg loss {mo['avg_loss']} | "
+                  f"win/loss {mo['win_loss_ratio']} | break-even {mo['breakeven_wr']} | "
+                  f"margin {mo['margin_pp']}pp | losses {mo['n_losses']}")
+    _write(os.path.join(out_dir, 'book_margin_by_tier.csv'), pd.DataFrame(_mrows), [
+        'DOT margin of safety PER DEPTH TIER PER DIRECTION for an ASSEMBLED BOOK',
+        f'book={os.path.basename(book_path)} signals={len(book)}',
+        'break-even WR = avg_loss / (avg_win + avg_loss); margin = WR - break-even, in points.',
+        'THE STOPPING RULE IS A SET PROPERTY, NOT A ROW PROPERTY: a signal may be added only if '
+        'the triple+ tier win/loss ratio does not fall. That is checkable here, on a candidate '
+        'composition, and nowhere in the per-signal catalogue.',
+        'PF HIDES THIS. An expanded book can show triple+ PF 6.61 - respectable - on a win/loss '
+        'ratio of 0.64 and a 30pp margin, against a tighter book at 0.99 and 47pp.',
+        'n_losses is the readability column: a tier resting on a handful of losses is noise '
+        'wearing a number. With ZERO losses win_loss_ratio and breakeven_wr are BLANK, because a '
+        'tier with no losses has no measurable break-even point.',
+        'Depth is DISTINCT SIGNALS on the entry bar, per direction. PROPERTY OF THE BOOK.'])
+    print(f'    book_margin_by_tier.csv: {len(_mrows)} tier rows')
     print('  F10 CONVERGENCE-DENSITY LADDER')
     density_ladder(df, sigs, ad, st, w, out_dir, book_path)
     breaches = [k for k, v in verdicts.items() if v is False]

@@ -1506,6 +1506,7 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
                 row['coverage_pct_reachable'] = round(100.0 * len(tch_reach) / max(len(reach[d]), 1), 4)
                 row['terrain_cell'] = f'W{W}/K{int(K*100)}/E{int(E*100)}'
                 row.update(fold_p)
+                row.update(cat.margin_of_safety(pnl_p))
                 row.update({f'gated_{k}': v for k, v in gated_p.items()})
                 _sp, _smod = cat.session_profile(bars, df['EST_Hour'].values, tr.session_of)
                 row.update(_sp)

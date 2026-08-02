@@ -245,16 +245,20 @@ def segment_fold_stats(trades):
 def gated_arm(trades, gate_ok_bars):
     """Item 10: the conviction arm. Both arms emitted, plus the delta."""
     if len(trades) == 0:
-        return {'trades': 0, 'WR': '', 'PF': '', 'worst_day_usd': '', 'net': 0.0}
+        return dict({'trades': 0, 'WR': '', 'PF': '', 'worst_day_usd': '', 'net': 0.0},
+                    **margin_of_safety(np.empty(0)))
     keep = trades[np.isin(np.asarray(trades['entry_bar'].values, dtype=np.int64), gate_ok_bars)]
     if len(keep) == 0:
-        return {'trades': 0, 'WR': '', 'PF': '', 'worst_day_usd': '', 'net': 0.0}
+        return dict({'trades': 0, 'WR': '', 'PF': '', 'worst_day_usd': '', 'net': 0.0},
+                    **margin_of_safety(np.empty(0)))
     p = np.asarray(keep['pnl'].values, dtype=float)
     pf, und = _pf(p)
-    return {'trades': int(len(keep)), 'WR': round(float((p > 0).mean() * 100), 2),
-            'PF': ('inf' if und else round(pf, 4)),
-            'worst_day_usd': round(float(_daily(keep).min()), 2),
-            'net': round(float(p.sum()), 2)}
+    out = {'trades': int(len(keep)), 'WR': round(float((p > 0).mean() * 100), 2),
+           'PF': ('inf' if und else round(pf, 4)),
+           'worst_day_usd': round(float(_daily(keep).min()), 2),
+           'net': round(float(p.sum()), 2)}
+    out.update(margin_of_safety(p))
+    return out
 
 
 def same_bar_cohort_table(entries_by_dir, ids_by_dir, families_by_id, max_depth=12):
@@ -692,3 +696,43 @@ def regime_profile(entry_bars, lab_causal):
     out['regime_burnin_pct'] = round(100.0 * cb / n, 3)
     modal = {'regime_causal_0': c0, 'regime_causal_1': c1, 'regime_burnin': cb}
     return out, max(modal, key=lambda k: (modal[k], k))
+
+
+MARGIN_MIN_LOSSES = 20
+
+
+def margin_of_safety(pnl):
+    """Break-even WR and the margin above it. THE DEGENERATE CASES STAY BLANK.
+
+    break-even WR = avg_loss / (avg_win + avg_loss); margin = actual WR minus
+    that, in percentage points. PF hides what this exposes: an expanded book can
+    show a respectable triple+ PF while its payoff ratio has collapsed, and every
+    prior expansion in this project raised net and lowered out-of-sample PF with
+    no warning until afterwards.
+
+    WITH NO LOSSES THERE IS NO MEASURABLE BREAK-EVEN POINT, so win_loss_ratio and
+    breakeven_wr are BLANK - not inf, not 0. BOOK-50's five+ tier otherwise reads
+    break-even 0% and margin 100pp, which is meaningless. n_losses ships beside
+    the ratios precisely so a tier resting on a handful of losses is readable as
+    noise wearing a number rather than a result.
+    """
+    p = np.asarray(pnl, dtype=float)
+    wins = p[p > 0]
+    losses = p[p < 0]
+    n_losses = int(losses.size)
+    out = {'avg_win': '', 'avg_loss': '', 'win_loss_ratio': '', 'breakeven_wr': '',
+           'margin_pp': '', 'n_losses': n_losses}
+    if p.size == 0:
+        return out
+    aw = float(wins.mean()) if wins.size else 0.0
+    al = float(np.abs(losses).mean()) if n_losses else 0.0
+    out['avg_win'] = round(aw, 2)
+    out['avg_loss'] = round(al, 2)
+    if n_losses == 0 or (aw + al) <= 0:
+        return out
+    be = 100.0 * al / (aw + al)
+    wr = 100.0 * float((p > 0).mean())
+    out['win_loss_ratio'] = round(aw / al, 4) if al > 0 else ''
+    out['breakeven_wr'] = round(be, 2)
+    out['margin_pp'] = round(wr - be, 2)
+    return out
