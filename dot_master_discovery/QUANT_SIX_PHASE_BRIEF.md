@@ -203,6 +203,26 @@ direction"**.
 - **Report the frontier, not a point.** For a given book size, the achievable
   (depth-selectivity, terrain-coverage) pairs, per direction.
 
+**THE STRONGEST PRIOR IN THE PROJECT, AND IT BEARS DIRECTLY ON THIS PHASE.** A dilution curve
+has been built twice before. **Neither landed on an N above its starting point.**
+
+    taskB expansion   n=78 -> 124        VERDICT: DO NOT EXPAND PAST 78
+    BOOK-48 + F1      x5/10/15/20        OOS PF  6.65 -> 6.07 -> 5.87 -> 4.55 -> 4.03
+                                         worst-day -127 -> -167 -> -320 -> -457 -> -405
+    rolling walk-forward on 78           expanded sets collapse to OOS PF ~3 failing the 4.0
+                                         floor; the conservative baseline holds 7.3-10.9 in
+                                         EVERY fold
+
+**Every increment traded OOS PF and worst-day for net.** The new same-bar-depth curve is the
+first of its kind but not the first of its family. **Report whether it curves down like its
+ancestors, and if it does not, say why this one differs.**
+
+**AND THE STRUCTURAL WARNING:** the new headline is a COVERAGE number, and **coverage cannot
+fall as signals are added, so it cannot warn you.** Every prior expansion had a falling OOS PF
+to signal the stop. Coverage is monotone by construction. A book can be expanded until it is
+worthless while the coverage number improves the entire way down. **Any frontier you report
+must carry OOS PF and worst-day on the same axis as coverage, or it is not a frontier.**
+
 **OUTPUT:** the frontier per direction, with uncertainty on where the knee sits.
 
 ---
@@ -362,6 +382,16 @@ the evidence supports.
   UNEVALUABLE rows, correctly blank).
 - **DIRECTION** — in every row.
 
+**A PRECEDENT THAT WOULD NOW BE A DOCTRINE BREACH.** BOOK-50's 8/8 market-structure coverage
+was a **REQUIREMENT, not an observation** — two F1 sequentials were added specifically to fill
+SQUEEZE_BREAKOUT and TREND_EXHAUSTION, and the task is recorded as "Filling both missing
+structures." **Under doctrine rule 3 that is a quota and would not be permitted.** Report
+structure coverage as an OUTPUT. Do not propose filling a gap.
+
+Note also the original assignment used a rule-based `classify(s)` against a PRIORITY list, and
+**the rule's contents are NOT RECORDED** — so the new classifier's 20 UNMAPPED rows cannot be
+checked against the original. State that limitation rather than assuming agreement.
+
 **THE TENSION TO QUANTIFY RATHER THAN RESOLVE:** NY OPEN holds 225 of the largest-decile episodes
 and overnight holds 0. A session-balanced book deliberately takes worse episodes to be even.
 **Measure that cost.** The operator decides whether to pay it.
@@ -371,10 +401,16 @@ and overnight holds 0. A session-balanced book deliberately takes worse episodes
 Findings B and C establish that gating is **directional**. Longs enter on pullbacks and respond
 to Hurst; shorts enter on continuation and respond to FailedBreak. Neither gate has been priced.
 
-**SPECIFY WHAT A PRICED GATE TEST LOOKS LIKE — AND THE PRECEDENT ALREADY EXISTS.** The prior
-research priced `Micro_Rejection:lo` at the **98.6th random-subset percentile**. That is the
-form the measurement should take, and it means the machinery has been done once before.
-Recover the method from the record rather than inventing one.
+**THE PRICED-GATE METHOD IS RECOVERED IN FULL — USE IT, DO NOT INVENT A SECOND.** See
+`cake_dictionary.md` section 4D. Pool: raw D2D flips both directions at ADX>=15, n=302, ~17%
+losers. 360 tests (90 FEAT_ x hi/lo x direction). For a candidate slice of size k, draw many
+random k-subsets from the same pool and read where the candidate lands. Five gates, all
+required: random-pct >=97.5, OOS-positive, fold-persistent, n>=8, stated mechanism.
+
+**AND THE CAVEAT MUST TRAVEL WITH ANY RESULT YOU PRODUCE:** *"360 tests. At the p97.5 gate,
+expected chance survivors ~9.0. Bonferroni for FWER 5% = 99.986th pct; max candidate reached
+99.9th -> NONE clear strict Bonferroni."* The prior research stated this about its own
+findings. Hold yourself to the same standard.
 
 `Micro_FailedBreak > p50` has no such standing: 66 tests (eleven variables x three thresholds x
 two sides), one frame, never priced. **How large a lift would the best of 66 tested gates show

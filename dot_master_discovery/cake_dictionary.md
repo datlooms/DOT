@@ -39,16 +39,28 @@ From `contenders.csv`, on the same frame these artifacts come from:
 That is the number to beat, and it is not the only one. **The book must also beat it on
 worst-day, on out-of-sample persistence, and on terrain coverage — not just on net.**
 
-## WHY THIS REBUILD HAPPENED
+## WHY THIS REBUILD HAPPENED — AND THE FRAMING HAS BEEN CORRECTED
 
-BOOK-50 scored **PF 6.40 in-sample and PF 2.19 on first contact with genuinely unseen data**
-(Jun–Jul 2026). The post-mortem conclusion is the founding fact of this project:
+BOOK-50 scored **PF 6.40 in-sample and PF 2.19 on first contact with genuinely unseen data.**
 
-> **The book was validated. The selection process never was.** Every prior validation sat
-> inside the same window the book was built on.
+**The commonly repeated version of why — "the selection process was never validated" — is NOT
+accurate, and the accurate version is more useful.**
+
+From the record: **BOOK-48 WAS selected on Jan–April and measured on held-out May–June. It came
+back at OOS PF 6.65 — the highest of any book in the project.** The discipline was applied.
+
+**What killed it is that May–June sat inside the sealed baseline.** July was the first
+genuinely unseen data, and that is where 6.40 → 2.19 happened.
+
+> **The book had a real hold-out. The hold-out was too close.**
+
+That is a different and harder problem than "nobody checked". It means a hold-out drawn from
+within the same construction window can return an excellent number and still tell you nothing.
+**It is why the walk-forward in this rebuild tests the INCLUSION RULE across anchored splits
+rather than testing a book against a slice — and that genuinely is new.**
 
 Everything in this project exists to stop that recurring. **Validate the method, not the
-output.**
+output — and be suspicious of any hold-out that shares a window with the build.**
 
 ## WHAT BOOK-50 ACTUALLY REACHES
 
@@ -557,6 +569,116 @@ D2D flip — was tested and found *"real but fragile: better at flagging worst f
 ones."*
 
 **`Micro_Rejection:lo` independently reproduces on the new catalogue** — see trap 7.
+
+---
+
+# 4C. THE FOUR PRIOR EXPANSIONS — EVERY ONE CURVED DOWN
+
+**This is the strongest prior in the project and it bears directly on composition.** A
+dilution curve has been built before. Twice. Neither landed on an N above its starting point.
+
+    taskB expansion      n=78 -> 124              VERDICT: DO NOT EXPAND PAST 78
+    BOOK-48 + F1         x5 / 10 / 15 / 20
+        OOS PF          6.65 -> 6.07 -> 5.87 -> 4.55 -> 4.03
+        worst-day       -127 -> -167 ->  -320 ->  -457 ->  -405
+    the +18 structure fillers                     "quality-for-throughput trade"
+    rolling walk-forward on 78 signals            expanded sets collapse to OOS PF ~3,
+                                                  WR ~87%, failing the 4.0 floor, while the
+                                                  conservative baseline holds OOS PF 7.3-10.9
+                                                  in EVERY fold
+
+**Every increment traded OOS PF and worst-day for net.** The new same-bar-depth dilution curve
+is the first of its kind, but it is not the first of its family, and its ancestors all curve
+down.
+
+## THE TRAP IN THE NEW WORK — AND WHY IT IS HARDER TO SEE
+
+The new headline number is a **coverage** number: 6.82% / 7.71% against BOOK-50's 4.72% /
+2.42%. Measured on episodes touched — **not on PF, not on worst-day, not on OOS.**
+
+> **COVERAGE CANNOT FALL AS SIGNALS ARE ADDED, SO IT CANNOT WARN YOU.**
+>
+> Every prior expansion had a falling OOS PF to signal the stop. Coverage has no such
+> property. It is monotone by construction. A book can be expanded until it is worthless and
+> the coverage number will improve the entire way down.
+
+**Three specific forms the failure takes:**
+
+1. **The inclusion rule is 2.17× chance against a 2.40 bar.** A book composed from a catalogue
+   inherits its inclusion rule's strength. 2.17× is real and it is not much.
+2. **F1 is 95% of the catalogue by row count and contributes 3 convergence slots.** Browsing by
+   eye means browsing F1. **The volume is not where the edge is.**
+3. **The 512-trade PF 35.11 population is one frame.** The honest reading of every ancestor
+   curve is *stop sooner than you want to.*
+
+**The countermeasure already exists.** Score every candidate composition through
+`score_book.py` on worst-day and OOS before committing, and treat coverage as **the tie-break
+it is in the lexicographic order — not the headline.** The machinery to avoid this is built.
+The risk is reading the coverage number first.
+
+---
+
+# 4D. THE PRICED-GATE METHOD — RECOVERED IN FULL
+
+This is the only priced-gate method the project has, and it does not need re-inventing.
+
+**Pool:** raw D2D flips both directions at ADX≥15, **n=302, ~17% losers** — chosen deliberately
+because the 32 throne trades had one loss and could not discriminate.
+**Tests:** 360 — 90 FEAT_ variables × hi/lo × direction.
+**Statistic:** for a candidate slice of size k, draw many random k-subsets from the same 302
+pool, compute the statistic, read where the candidate lands in that distribution.
+**Five gates, all required:** random-pct ≥97.5 · OOS-positive · fold-persistent · n≥8 · a
+stated mechanism.
+
+**THE MULTIPLE-COMPARISONS CAVEAT WAS RECORDED AT THE TIME AND MUST TRAVEL WITH THE RESULT:**
+
+> *"360 tests. At the p97.5 gate, expected chance survivors ≈9.0. Bonferroni for FWER 5% =
+> 99.986th pct; max candidate reached 99.9th → **NONE clear strict Bonferroni**."*
+
+That honesty is precisely why the out-of-sample reproduction matters so much.
+
+**The ranked survivors — it is a FAMILY, not a variable:**
+
+    variable              dir     n    WR      avg      PF    rnd-pct   OOS avg   folds
+    Micro_Rejection lo   LONG    17   100%   $135.8   999      99.9     +$56.7    5/5
+    Lower_Wick lo        SHORT   17  94.1%   $ 52.4   6.82     98.9     +$19.9    4/5
+    Micro_Rejection lo   SHORT   19  94.7%   $ 48.1   6.98     98.6     +$42.8    3/4
+    AT_Lookback_LT hi    LONG    25  88.0%   $ 81.8   5.46     98.1     +$27.5    6/6
+
+**Recorded mechanism:** *"low rejection at a D2D flip = a decisive, clean flip bar with no
+counter-wick; for shorts, no buying-wick defending the low."*
+
+## RE-TESTED ON THE NEW CATALOGUE — AND THE FAMILY IS DIRECTIONALLY MIRRORED
+
+The prior sweep ran on **D2D flips**. The re-test ran on the new catalogue's **depth-3+
+entries** — a different pool AND a different population, so it is out-of-sample twice over.
+
+    SHORT depth 3+ ungated  n=1,485  PF  3.60
+      Micro_FailedBreak hi p50   n=  626  WR 93.1%  PF  7.61  net 13,298
+      Micro_Rejection   lo p10   n=  238  WR 89.1%  PF  6.86  net  5,286
+      Upper_Wick        hi p70   n=  788  WR 90.2%  PF  5.77  net 22,863   keeps 79% of net
+      Micro_Rejection   lo p30   n=  630  WR 89.7%  PF  5.53  net 19,176
+
+    LONG  depth 3+ ungated  n=1,150  PF 13.97
+      Micro_FailedBreak hi p70   n=  484  WR 98.1%  PF 34.26  net 33,764
+      Micro_Rejection   lo p10   n=  183  WR 96.2%  PF 27.54  net  5,234
+      Lower_Wick        hi p70   n=  480  WR 96.7%  PF 25.50  net 29,919
+      Micro_FailedBreak hi p30   n=  795  WR 96.5%  PF 21.90  net 45,796
+
+**Three findings that were not visible before:**
+
+1. **The wick family is MIRRORED, and the mirror is mechanically correct.** LONG wants
+   `Lower_Wick:hi` — a buying wick defending the low. SHORT wants `Upper_Wick:hi` — a selling
+   wick rejecting the high. Same mechanism, opposite member. The prior record's
+   `Lower_Wick:lo SHORT` was measured on flip bars, where the reading differs.
+2. **`Micro_FailedBreak` is NOT a short-side gate.** It is the strongest gate found on BOTH
+   sides, and it is stronger on longs — **PF 34.26 against an ungated 13.97**. The earlier
+   characterisation of it as a short-side fix was wrong.
+3. **`Upper_Wick:hi p70` keeps 79% of short net at 1.6× PF** — the best net-retention gate
+   found. Under survival-first, retention matters as much as the PF headline.
+
+**NONE of these has been priced by the 302-pool method.** They are re-tests of a priced family
+plus new members found by an unpriced search. **Price them before adopting.**
 
 ---
 
