@@ -3,12 +3,11 @@
 This produces the evidence the operator composes the final engine from. It is the last
 analytical work before a live system, and it is the reason the last three weeks happened.
 
-**AUTHORITATIVE RUN: `cold2`.** Use the `_cold2` artifacts throughout. The `cold` and
-unsuffixed sets predate the null-seed fix and their pricing column is not reproducible.
-
-`cold2` is a 10h43m cold run from an empty tree — every stage executing, no resumes, no manual
-intervention, 99.7% concurrent. Ten of ten comparable artifacts are byte-identical against the
-previous cold run, including `wf_pass_criterion`.
+**THE SOURCE RUN.** Every artifact in project files comes from one completed cold run: 10h43m
+from an empty tree, every stage executing, no resumes, no manual intervention, 99.7% concurrent.
+It reproduced a previous independent cold run byte-for-byte on ten of ten comparable artifacts,
+including `wf_pass_criterion`. The pricing column is reproducible — a per-family seed defect that
+made it vary between runs was found and fixed before this run.
 
 Figures already verified by the Supervisor, given as context and not as inputs — re-derive
 anything you build on: 39,308 catalogue rows across seven families, F0 at 1,840 (1,818 VALID),
@@ -20,7 +19,7 @@ terrain 7,490 with 1,143 UP / 1,155 DOWN reachable, unclaimed 1,037/1,055, pass 
 ## MEASUREMENT PROTOCOL — BINDING, EVERY PHASE
 
 1. **EVERY FIGURE CITES ITS SOURCE**: file, column, filter. "Median PF is 3.2" is worthless;
-   "median `agg_pf` over `catalogue_F0_cold2.csv` where `verdict=='VALID'` and
+   "median `agg_pf` over `catalogue_F0.csv` where `verdict=='VALID'` and
    `direction=='LONG'` is 3.2 (n=1,445)" is a measurement.
 2. **NEVER CARRY A NUMBER FORWARD FROM THIS BRIEF OR FROM MEMORY.** Everything re-derived this
    turn.
@@ -43,7 +42,7 @@ terrain 7,490 with 1,143 UP / 1,155 DOWN reachable, unclaimed 1,037/1,055, pass 
 
 # WHAT THE SUPERVISOR ALREADY MEASURED — FIVE FINDINGS THAT SHAPE THE PHASES
 
-One illustrative book was built from `catalogue_F0_cold2.csv` and simulated on the real frame.
+One illustrative book was built from `catalogue_F0.csv` and simulated on the real frame.
 **It is not a selection** — item 15 stands, the operator composes — but it changed what several
 phases should ask.
 
@@ -147,7 +146,7 @@ what makes them rare.
 
 ## E. THE HEADROOM IS A QUALITY GAP, NOT A GRAMMAR GAP
 
-`unclaimed_reachable_cold2.csv` carries `n_prefilter_candidates_touching`: **min 76, median
+`unclaimed_reachable.csv` carries `n_prefilter_candidates_touching`: **min 76, median
 1,810, max 73,357. Zero episodes have zero.**
 
 **Every unclaimed reachable episode was reached by the search.** The 249-condition vocabulary
@@ -162,7 +161,7 @@ only ever be zero. Do not read it as a finding.
 
 # PHASE 1 — WHERE DOES ADDING SIGNALS STOP HELPING?
 
-**Files:** `dilution_curve_agg_pf_cold2.csv`, `dilution_curve_EXPECTED_ROWS_..._cold2.csv`,
+**Files:** `dilution_curve_agg_pf.csv`, `dilution_curve_EXPECTED_ROWS_....csv`,
 `selection_depthyield_grid.csv`
 
 39,260 admission steps each, two ranking keys. Columns: `admitted`, `signal_id`, `ranking_key`,
@@ -186,8 +185,8 @@ direction"**.
 
 # PHASE 2 — WHY DID THE WALK-FORWARD FAIL?
 
-**Files:** `wf_pass_criterion_cold2.csv`, `wf_null_arm_summary_cold2.csv`,
-`wf_book_arm_entities.csv`, `wf_per_segment_rederivation.csv`, `wf_splits_cold2.csv`
+**Files:** `wf_pass_criterion.csv`, `wf_null_arm_summary.csv`,
+`wf_book_arm_entities.csv`, `wf_per_segment_rederivation.csv`, `wf_splits.csv`
 
     split 0: 15,328 admitted →  7,962/11,816 → 0.6738  vs null 0.2360 = 2.86x
     split 1: 23,832 admitted →  9,712/19,176 → 0.5065  vs null 0.2375 = 2.13x
@@ -218,7 +217,7 @@ that three splits cannot distinguish them — with what would.
 
 # PHASE 3 — WHICH SIGNALS ARE DIAMONDS?
 
-**Files:** `catalogue_F0_cold2.csv` (1,840), then F1, F3, F9, F2, F4, F11
+**Files:** `catalogue_F0.csv` (1,840), then F1, F3, F9, F2, F4, F11
 
 44 base columns plus 17 axis columns. Pricing block: `n_trials_family`,
 `null_valid_rate_family`, `expected_valid_by_chance_family`, `pf_null_p50/p90/p99_family`,
@@ -251,7 +250,7 @@ fold-persistent.
 # PHASE 4 — CONVERGENCE, AND HOW THE OTHER FAMILIES WORK ALONGSIDE F0
 
 **Files:** `cohort_scored.csv` (95 rows, PF/WR/net/worst-day per family composition),
-`same_bar_cohort_cold2.csv`, `cross_family_cofiring.csv`, `cluster_basis_summary.csv`
+`same_bar_cohort.csv`, `cross_family_cofiring.csv`, `cluster_basis_summary.csv`
 
 **PART 1 — DOES A MIXED COHORT KEEP THE EDGE, PER DIRECTION?**
 
@@ -286,7 +285,7 @@ the evidence supports.
 
 # PHASE 5 — WHAT IS REACHABLE THAT HE DOES NOT HOLD?
 
-**Files:** `unclaimed_reachable_cold2.csv`, `terrain_hour_profile.csv`, `terrain_episodes.csv`,
+**Files:** `unclaimed_reachable.csv`, `terrain_hour_profile.csv`, `terrain_episodes.csv`,
 `reach_D0_missed_decomposition.csv`, `reach_D02_D2_coverage.csv`
 
 2,092 unclaimed (1,037 UP / 1,055 DOWN) of 2,298 reachable.
@@ -310,8 +309,8 @@ the evidence supports.
 
 # PHASE 6 — BALANCE ACROSS FOUR AXES, AND DIRECTIONAL GATING
 
-**Files:** `catalogue_F0_cold2.csv` (all four axes present), `regime_labels_cold2.csv`,
-`terrain_hour_profile.csv`, `family_evidence_cold2.csv`, `selection_g2_domain_bridging.csv`,
+**Files:** `catalogue_F0.csv` (all four axes present), `regime_labels.csv`,
+`terrain_hour_profile.csv`, `family_evidence.csv`, `selection_g2_domain_bridging.csv`,
 `DOT_signal_dictionary.xlsx`
 
 **ALL FOUR AXES ARE NOW MEASURABLE.** The catalogue carries 17 axis columns:
@@ -327,7 +326,7 @@ the evidence supports.
 - **SESSION** — `session_*_pct` across the eight terrain sessions plus `session_modal`. F0 modal:
   overnight 987, morning 810, preclose 21.
 - **REGIME** — `regime_causal_0_pct`, `regime_causal_1_pct`, `regime_burnin_pct`, `regime_modal`,
-  joined from `regime_labels_cold2.csv` (170,351 rows, `bar_index` 6900–177250, `lab_causal` in
+  joined from `regime_labels.csv` (170,351 rows, `bar_index` 6900–177250, `lab_causal` in
   {-1,0,1}, 5,636 burn-in bars). **Use `lab_causal` only** — `lab_desc` is full-sample and must
   never characterise a tradeable signal. F0 modal: causal_0 1,459, causal_1 359, NaN 22 (the
   UNEVALUABLE rows, correctly blank).
