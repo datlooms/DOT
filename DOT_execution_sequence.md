@@ -176,6 +176,17 @@
   **FUSED-50 is the low-fit control** — beats BOOK-50 on FailConc (1.65 vs 3.46), mCVaR (-$2,091 vs -$4,923),
   survival (-$340 vs -$565) and net (+$8,233), with **no gate fitting at all**, and its LONG triple+ tier pays
   above parity (win/loss 1.0349, margin 48.8pp, 7 losses).
+  **THE CONCURRENCE LADDER AND THE JAR CEILING (2026-08-02).** All 44 of Option B's losses sit at
+  depth 1-3; **depth 4+ is 739 trades with ZERO losses** and the average trade climbs $37 -> $97.
+  **Uncapped, the book takes 2,237 trades for $125,261 at PF 17.51 — the 6-lot jar is turning away 429
+  trades worth $27,851, and they are better than average** (depth 8 avg $274, depth 15 avg $374).
+  **This reframes step 18's jar item: not only which six entries get the slots, but whether six is the
+  right number.** The cap was never derived. Answer it on the tail, not the net. ANOMALY: uncapped
+  depth 6 shows 18 losses / PF 2.76 between two perfect tiers — the only non-monotone cell.
+  **NON-F0 SECOND BOOK:** everything except F0 gives 2,764 tr / PF 7.33 / $90,025 / wd -$157.8, carried
+  by F1 (83 of 100 signals). Option B is flat on 95.7% of bars and the jar is full on 0.44%, so there is
+  room. Joint run: **F0 + NF0 depth-5+ beats F0 alone on every axis including a $163 better worst day.**
+  Full detail in `foundational_documents/DOT_rule_master_spec_OPTION_B.txt` §5C-5E.
   **ATR GATE ADOPTED + SHORT-GATE CORRECTION (2026-08-02).** `ATR_1M >= 20` at the entry bar, raw
   value, every cell: **1,808 tr / WR 97.57% / PF 15.72 / $97,410 / wd -$272.9 / 44 losses / 3 losing
   days** against the ungated 1,988 / 96.58% / 14.14 / $100,094 / 68. **35% of losses removed for 2.7%

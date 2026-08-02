@@ -131,6 +131,60 @@ architectural decision later supported; it is now a measured result with a null 
 three has never been competed against a same-bar pair or a 4/5-variable grammar.**
 
 
+### THE CONCURRENCE LADDER, THE JAR CEILING, AND THE NON-F0 SECOND BOOK
+
+**ALL 44 OF OPTION B'S LOSSES SIT AT DEPTH 1, 2 AND 3. Depth 4+ is 739 trades with ZERO losses.**
+
+    depth      trades       WR       PF      net $   avg $   wins / losses
+    solo   177 ( 9.8%)   92.7%     3.16     6,552    37.0      164 / 13
+    2      412 (22.8%)   96.1%     8.54    14,216    34.5      396 / 16
+    3      480 (26.5%)   96.9%    14.31    22,628    47.1      465 / 15
+    4      324 (17.9%)  100.0%      inf    18,458    57.0      324 / 0
+    5      145 ( 8.0%)  100.0%      inf     9,446    65.1      145 / 0
+    6      270 (14.9%)  100.0%      inf    26,109    96.7      270 / 0
+    TOTAL        1,808   97.6%    15.72    97,410    53.9    1,764 / 44
+
+Average trade climbs $37 -> $34 -> $47 -> $57 -> $65 -> $97. Depth 6 alone earns $26,109 from 15% of
+the trades — more than any other tier.
+
+**THE 6-LOT JAR IS TURNING AWAY 429 TRADES WORTH $27,851, AND THEY ARE BETTER THAN AVERAGE.**
+
+    capped     1,808 trades   $97,410   PF 15.72
+    uncapped   2,237 trades  $125,261   PF 17.51
+    depth 8 avg $273.8 | depth 14 avg $354.2 | depth 15 avg $374.3
+
+**The deepest convergences in the book are exactly the ones the jar cannot hold.** This reframes the
+build item: not only WHICH six entries get the slots on a deep bar, but **whether six is the right
+number at all.** The cap was never derived (NOT RECORDED). Raising it is a survival question and must
+be answered on the tail, not the net. **ANOMALY for the Quant:** uncapped depth 6 shows 18 losses and
+PF 2.76 between two perfect tiers — the only non-monotone cell. Possibly a single bad day.
+
+**MONTH BY MONTH.** January has ZERO losing trades; four of seven months have NO losing day. Every
+month clears PF 12.8; July strongest at 21.34. The three losing days total **$605.40**. Peak-to-trough
+equity drawdown **$272.9 — the maximum drawdown IS one day**; the curve never has two bad days running.
+
+    2026.01   87 tr  PF 999.00  $3,724 | 2026.02  357  15.58  $18,396 | 2026.03  422  12.92  $22,179
+    2026.04  322 tr  PF  17.95 $13,420 | 2026.05  219  12.83  $12,560 | 2026.06  248  15.05  $13,977
+    2026.07  153 tr  PF  21.34 $13,154 | TOTAL 1,808  15.72  $97,410  wd -$272.9
+
+**THE NON-F0 EXPERIMENT — a second book, not a gap filler.** A book from everything EXCEPT F0
+(2,184-signal field, decorrelated per direction): 50L/50S ungated 6,867 tr PF 2.73 $113,933; best gated
+2,764 tr PF 7.33 $90,025 wd -$157.8. **F1 carries it — 83 of 100 signals.** Weaker than F0 (PF 4-7 vs
+15.72, 446 losses vs 44) but with a better worst day at tight settings.
+
+**AND THERE IS ROOM:** Option B holds nothing on 95.7% of bars; the jar is full on 0.44%. Non-F0 quad+
+fires into an empty book 71.8% of the time. **Joint run, shared jar:**
+
+    F0 Option B alone (in joint)   1,733   PF 14.37   $92,894   wd -$435.9
+    F0 + NF0 5+                    1,919   PF 14.69   $99,164   wd -$272.9
+    F0 + NF0 quad+                 2,275   PF 12.91  $109,235   wd -$348.4
+
+**F0 + NF0 5+ beats F0 alone in the same run on every axis — including a worst day $163 better.** They
+win on F0's bad days. **But F0 alone in the joint run is worse than F0 standalone**, because non-F0
+takes jar slots and changes F0's admission — part of what non-F0 "adds" is returning what it cost.
+Against the true standalone baseline, +NF0 5+ is roughly neutral; +NF0 quad+ is +$11,825 for -2.81 PF
+and a 28% worse tail.
+
 ### THE ATR GATE — ADOPTED 2026-08-02, AND A CORRECTION TO THE SHORT GATES
 
 **`ATR_1M >= 20` at the entry bar, raw value, applied to every cell.**

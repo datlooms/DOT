@@ -255,6 +255,156 @@ conviction stack and the 6-lot jar active.
   portfolio_simulation_engine.py is byte-identical at bb498eb13ce3 and was never edited.
 
 ================================================================================
+ 5C. THE CONCURRENCE LADDER — AND THE JAR IS TURNING AWAY $27,851
+================================================================================
+
+  ADOPTED CONFIGURATION, jar cap 6, ATR_1M >= 20:
+
+    depth         trades       WR       PF      net $   avg $   wins / losses
+    solo      177 ( 9.8%)   92.7%     3.16     6,552    37.0      164 / 13
+    2         412 (22.8%)   96.1%     8.54    14,216    34.5      396 / 16
+    3         480 (26.5%)   96.9%    14.31    22,628    47.1      465 / 15
+    4         324 (17.9%)  100.0%      inf    18,458    57.0      324 / 0
+    5         145 ( 8.0%)  100.0%      inf     9,446    65.1      145 / 0
+    6         270 (14.9%)  100.0%      inf    26,109    96.7      270 / 0
+    TOTAL           1,808   97.6%    15.72    97,410    53.9    1,764 / 44
+
+  ALL 44 LOSSES SIT AT DEPTH 1, 2 AND 3. Depth 4 and above is 739 trades with ZERO
+  losses. The average trade climbs the whole way: $37 -> $34 -> $47 -> $57 -> $65 -> $97.
+  Depth 6 alone earns $26,109 — more than any other tier — from 15% of the trades.
+
+  UNCAPPED — TRUE DEMAND (MAX_POSITIONS raised, everything else identical):
+
+    depth         trades       WR       PF      net $   avg $   wins / losses
+    solo      182 ( 8.1%)   92.9%     3.41     7,306    40.1      169 / 13
+    2         418 (18.7%)   95.7%    10.21    14,646    35.0      400 / 18
+    3         492 (22.0%)   97.6%    18.10    21,683    44.1      480 / 12
+    4         364 (16.3%)  100.0%      inf    22,304    61.3      364 / 0
+    5         180 ( 8.0%)  100.0%      inf     7,094    39.4      180 / 0
+    6         126 ( 5.6%)   85.7%     2.76     2,989    23.7      108 / 18   <- ANOMALY
+    7         126 ( 5.6%)  100.0%      inf     4,635    36.8      126 / 0
+    8          40 ( 1.8%)  100.0%      inf    10,951   273.8       40 / 0
+    9          90 ( 4.0%)  100.0%      inf     6,808    75.6       90 / 0
+    10         50 ( 2.2%)  100.0%      inf     1,285    25.7       50 / 0
+    11         55 ( 2.5%)  100.0%      inf     1,963    35.7       55 / 0
+    12         24 ( 1.1%)  100.0%      inf       929    38.7       24 / 0
+    13         13 ( 0.6%)  100.0%      inf       524    40.3       13 / 0
+    14         28 ( 1.3%)  100.0%      inf     9,918   354.2       28 / 0
+    15         30 ( 1.3%)  100.0%      inf    11,229   374.3       30 / 0
+    19         19 ( 0.8%)  100.0%      inf       998    52.5       19 / 0
+    TOTAL           2,237   97.3%    17.51   125,261    56.0    2,176 / 61
+
+    capped     1,808 trades   $97,410   PF 15.72
+    uncapped   2,237 trades  $125,261   PF 17.51
+
+  THE 6-LOT JAR IS TURNING AWAY 429 TRADES WORTH $27,851, AND THEY ARE BETTER THAN
+  AVERAGE — PF rises to 17.51 uncapped. Depth 8 averages $274 a trade, depth 14 $354,
+  depth 15 $374. The DEEPEST convergences in the book are the ones the jar cannot hold.
+
+  THIS REFRAMES THE BUILD ITEM. It is not only "which six qualifying entries get the
+  slots on a deep bar" — it is whether SIX IS THE RIGHT NUMBER AT ALL. The cap was never
+  derived (NOT RECORDED, see the Manager's B7). Raising it is a survival question that
+  must be answered on the tail, not on the net.
+
+  ONE ANOMALY FOR THE QUANT: uncapped depth 6 shows 18 losses and PF 2.76 sitting between
+  two perfect tiers. It is the ONLY non-monotone cell in the ladder. It may be a single
+  bad day rather than a property — establish which.
+
+================================================================================
+ 5D. OPTION B MONTH BY MONTH — ADOPTED CONFIGURATION
+================================================================================
+
+    month          n     W     L      WR%       PF  gross win gross loss        NET worst day
+    2026.01       87    87     0   100.00   999.00      3,724          0      3,724     +446
+    2026.02      357   349     8    97.76    15.58     19,658     -1,262     18,396      +34
+    2026.03      422   410    12    97.16    12.92     24,041     -1,861     22,179      +32
+    2026.04      322   316     6    98.14    17.95     14,211       -792     13,420      +69
+    2026.05      219   212     7    96.80    12.83     13,622     -1,062     12,560     -236
+    2026.06      248   241     7    97.18    15.05     14,972       -995     13,977     -273
+    2026.07      153   149     4    97.39    21.34     13,801       -647     13,154      +65
+    TOTAL      1,808 1,764    44    97.57    15.72    104,028     -6,618     97,410     -273
+
+    month     days   winning   losing   avg day
+    2026.01      5        5        0      $745
+    2026.02     18       18        0    $1,022
+    2026.03     22       22        0    $1,008
+    2026.04     20       20        0      $671
+    2026.05     19       17        2      $661
+    2026.06     20       19        1      $699
+    2026.07     13       13        0    $1,012
+
+  JANUARY HAS ZERO LOSING TRADES. FOUR OF SEVEN MONTHS HAVE NO LOSING DAY AT ALL.
+  Every month clears PF 12.8; July is strongest at 21.34.
+
+  THE THREE LOSING DAYS, IN FULL:
+    2026.05.05   -$96.9    4 trades, 3 losing
+    2026.05.26  -$235.6    6 trades, 1 losing
+    2026.06.10  -$272.9    3 trades, 1 losing
+    TOTAL DAMAGE ACROSS SIX MONTHS: $605.40
+
+  PEAK-TO-TROUGH EQUITY DRAWDOWN: $272.9 — the maximum drawdown IS one day. The equity
+  curve never has two bad days in a row.
+
+  avg win $58.97 | avg loss -$150.41 | win/loss 0.392
+  break-even WR 71.83% vs actual 97.57% -> MARGIN 25.7pp
+
+================================================================================
+ 5E. THE NON-F0 EXPERIMENT — A SECOND BOOK, NOT A GAP FILLER
+================================================================================
+
+  A book was built from EVERYTHING EXCEPT F0: F1, F3, F9, F11, F2, F4. Field of 2,184
+  VALID signals (top 1,000 F1 per direction by price, plus all of the small families),
+  scored in batches, decorrelated per direction on minimum shared loss days.
+
+    book        trades    WR%      PF        net  worstday  w/l3+   families
+    30L/20S      3,153  88.99    3.28     70,013    -635.8   0.85   F1 40 F9 9 F3 1
+    50L/50S      6,867  87.64    2.73    113,933    -638.4   0.53   F1 83 F9 16 F3 1
+    70L/50S      8,098  87.19    2.56    129,356  -1,069.5   0.52   F1 101 F9 18 F3 1
+
+  Gated, best found: 2,764 trades, WR 94.83%, PF 7.33, $90,025, worst day -$157.8.
+
+  F1 CARRIES THE ENTIRE NON-F0 BOOK — 83 of 100 signals. The family that contributes
+  three slots to F0's same-bar depth is the one that stands up alone.
+
+  NON-F0 IS WEAKER THAN F0 — PF 4-7 against 15.72, 446 losses against 44 — BUT IT HAS A
+  BETTER WORST DAY at the tighter settings (-$157.8 against -$272.9).
+
+  AND THERE IS ROOM. Option B jar occupancy:
+
+    0 positions open   169,620 bars   95.7%
+    1-5 open             6,843 bars    3.9%
+    6+ open (FULL)         788 bars    0.44%
+
+  Non-F0 quad+ (886 trades, standalone PF 9.39, $31,145) fires when Option B holds
+  nothing 71.8% of the time, and into a FULL jar only 7.3% of the time.
+
+  JOINT RUN — one shared jar, both books competing:
+
+    F0 Option B alone (in joint)   1,733   PF 14.37   $92,894   wd -$435.9   44 L
+    NF0 quad+ only                   542   PF  8.35   $16,342   wd -$348.4   29 L
+    NF0 5+ only                      186   PF 22.22    $6,270   wd -$295.5    5 L
+
+    F0 + NF0 5+                    1,919   PF 14.69   $99,164   wd -$272.9   49 L
+    F0 + NF0 quad+                 2,275   PF 12.91  $109,235   wd -$348.4   73 L
+    F0 + NF0 triple+               3,115   PF  9.06  $125,835   wd -$681.4  145 L
+
+  F0 + NF0 5+ BEATS F0 ALONE IN THE SAME RUN ON EVERY AXIS — more net, higher PF, and a
+  worst day $163 BETTER. Adding 186 trades improved the tail. They win on F0's bad days.
+
+  BUT NOTE THE COST THAT IS EASY TO MISS: F0 alone IN THE JOINT RUN is worse than F0
+  standalone ($92,894 / -$435.9 against $97,410 / -$272.9), because the non-F0 signals
+  take jar slots and change F0's admission. Part of what non-F0 "adds" is returning what
+  its presence cost.
+
+  AGAINST THE TRUE STANDALONE BASELINE ($97,410, PF 15.72, wd -$272.9, 44 losses):
+    + NF0 5+     roughly neutral  (+$1,754, -1.03 PF, +3 losing days)
+    + NF0 quad+  +$11,825 for -2.81 PF and a 28% worse tail
+
+  AND THE OTHER FAMILIES DO NOT WORK AS GAP FILLERS — see section 8.2. On flat bars F3
+  loses $38,753, F9 -$1,143, F11 -$674, F2 -$366. The role is a SECOND BOOK ALONGSIDE F0,
+  not a filler inside it.
+
+================================================================================
  6. WALK-FORWARD — GATES FITTED ON JAN-MAY, APPLIED UNCHANGED TO JUN-JUL
 ================================================================================
 
