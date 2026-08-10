@@ -1263,6 +1263,9 @@ def s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha, 
     cl, mix = fe.cross_family_cofiring(bk, f1_names, 5, n)
     if len(mix):
         _write_with_header(os.path.join(out, 'cross_family_cofiring.csv'), mix, [
+        'COVERS ONLY F0+F1 BECAUSE THAT IS WHAT BOOK-50 CONTAINS. Extending it to F9 and F3 needs '
+        'a BOOK containing them; it is a COMPOSITION DECISION for the Quant and the operator, not '
+        'a build item. The absence of F9/F3 rows is not a failure of this artifact.',
             'DOT S3B cross-family co-firing (spec A.4) — PROPERTY OF THE BOOK',
             f'dataset_rows={attest["rows"]}',
             'population = BOOK (F0+F1 executed, gap fillers excluded). Tolerance N=5.'])
@@ -2001,6 +2004,12 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
         'NETS and the mixed-versus-single ordering is non-monotone across depth as a consequence. '
         'THE BOOK-SCALE ANSWER IS book_margin_by_tier.csv and book_gated_by_tier.csv, emitted by '
         'score_book.py against an assembled book, where depth is real and the nets are the book\'s.',
+        'THE QUESTION IS OPEN AND THIS IS WHY: re-emitting at book scale does not answer it '
+        'either. book_margin_by_tier.csv and book_gated_by_tier.csv ARE book-scale, but they '
+        'measure whatever book score_book.py is handed, and Option B is 119 F0 + 1 F1 - there is '
+        'almost no family mixing in it to detect. MIXED-VERSUS-SINGLE-FAMILY AT DEPTH NEEDS A BOOK '
+        'CONTAINING F9 AND F3. That is a COMPOSITION DECISION for the Quant and the operator, not '
+        'a build item, and no artifact can settle it until such a book exists.',
         'Mixed-versus-single-family at depth is the strongest available argument for or against a '
         'multi-family book, and it must be read at BOOK scale to be made.',
         f'dataset_rows={attest["rows"]}',

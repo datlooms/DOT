@@ -145,7 +145,14 @@ PROGRESS_INTERVAL = 30.0
 FLUSH = 4
 
 # Outcome-map grid (stage 4): the discriminating band, step 1, fully covered.
-K_MIN, K_MAX, K_STEP = 15, 81, 1
+K_MIN, K_MAX, K_STEP = 1, 8, 1
+# THE EXECUTED LADDER IS DEPTH 1-6 AND THAT IS WHERE EVERY EDGE IN THIS PROJECT LIVES:
+# solo PF 3.14, dual 8.54, triple 14.31, and ZERO LOSSES at depth 4, 5 and 6. The old
+# grid started at 15, where bars_at_config was 175,310 of 177,251 - 98.9% OF ALL BARS -
+# so the whole surface sat in saturation and the outcome map never looked where the
+# structure is. The old grid is RETAINED as a contrast stratum so the saturation result
+# stays on the record rather than being deleted.
+K_SATURATION_STRATUM = [15, 20, 30, 40, 50, 60]
 DURATIONS = [1, 2, 3, 4, 5, 6, 7, 8]
 DIRECTIONS = ['LONG', 'SHORT']
 D2D_MODES = ['confirm', 'invert', 'exempt']
@@ -196,9 +203,11 @@ REGIME_MODES = ['confirm', 'invert']
 # Stage 8 (null baseline). CIRCULAR SHIFT preserves depth autocorrelation, event
 # shape and marginal distribution while destroying alignment with price. An
 # i.i.d. shuffle would destroy event structure and give an unfairly weak null.
-N_PERM = 20
+CLUSTER_BASIS_NOTE = (
+    "CLUSTER BASIS: basis 1 (executed) - the eligible-bar jar the run executed on. A depth-5+ population is 128 clusters on basis 1, 346 on basis 2 (pre-jar) and 1,958 on basis 3 (price-anchored) - a factor of 15 - so ANY depth or cluster figure is unreadable without its basis named.")
+N_PERM = 200
 MIN_SHIFT = 5000          # offsets drawn from [MIN_SHIFT, n - MIN_SHIFT]
-NULL_K = [20, 30, 40, 50, 60]
+NULL_K = [1, 2, 3, 4, 5, 6, 7, 8] + [20, 40, 60]
 NULL_DURATIONS = [1, 2]
 NULL_MODES = ['confirm']
 
@@ -302,12 +311,14 @@ def score_mask(df, mask, direction, d2d_mode, orig, month, adaptive, structural,
     pf_base, pf_stress = wf.spread_stress(all_trades)
     out = {'trades': n,
            'WR': round((pnls > 0).sum() / n * 100.0, 1) if n else 0.0,
-           'agg_pf': round(wf.pf_from_pnls(pnls), 2),
+           'agg_pf': _blank_pf(wf.pf_from_pnls(pnls)),
+           'n_losses': int((pnls < 0).sum()),
            'worst_day_usd': round(float(daily_usd.min()), 1) if len(daily_usd) else 0.0,
            'hard_stop_days': int((daily_usd <= -wf.DAILY_LOSS_CEILING_USD).sum()),
            'folds_plus': sum(1 for r in fold_rows if r['total_pnl'] > 0),
-           'min_fold_pf': min(fold_pfs) if fold_pfs else 0.0,
-           'spread_pf': f"{pf_base}->{pf_stress}"}
+           'min_fold_pf': _blank_pf(min(fold_pfs)) if fold_pfs else 0.0,
+           'spread_pf': f"{pf_base}->{pf_stress}",
+           'cluster_basis': 'basis-1-executed'}
     # Per-fold PF and trade counts, in wf.FOLDS order (Jan..Jun). folds_plus says a
     # cell was profitable each fold; these say whether the DEPTH -> OUTCOME relation
     # held each fold. Trade counts expose folds too thin to be meaningful, which an
@@ -1426,7 +1437,8 @@ def _parity_generic_cfgs(ctx, n_workers, proof):
 def run(proof=False, n_workers=N_WORKERS):
     os.makedirs(RESULTS_DIR, exist_ok=True)
     t0 = time.time()
-    k_vals = [20, 30] if proof else list(range(K_MIN, K_MAX + 1, K_STEP))
+    k_vals = ([20, 30] if proof
+              else list(range(K_MIN, K_MAX + 1, K_STEP)) + K_SATURATION_STRATUM)
     durs = [1, 2] if proof else DURATIONS
     floors = [30, 40] if proof else ONSET_FLOORS
     nsw = [2, 3, 4] if proof else CLUSTER_N_SWEEP
