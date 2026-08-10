@@ -712,41 +712,55 @@ def stage3_entry_order(ctx, ev_index, write=True):
     t0 = time.time()
     pool = ctx['pool']
     lab_desc = ctx['lab_desc']
+    lab_causal = ctx.get('lab_causal')
     rows = []
-    # regime=-1 is the global aggregate (retained); regimes 0..n-1 slice the same
-    # events by the DESCRIPTIVE regime at onset. Gates nothing -> causal=False.
-    for (direction, floor), evs in ev_index.items():
-        lbls = ctx['long_lbls'] if direction == 'LONG' else ctx['short_lbls']
-        depth = ctx['depth_long'] if direction == 'LONG' else ctx['depth_short']
-        for regime in [-1] + list(range(ctx['n_desc'])):
-            sel = [(s, e) for s, e in evs if regime == -1 or int(lab_desc[s]) == regime]
-            if not sel:
-                continue
-            stats = {l: {'n': 0, 'early': 0, 'late': 0, 'offs': []} for l in lbls}
-            for s, e in sel:
-                pk_off = int(depth[s:e + 1].argmax())
-                build_len = max(pk_off, 1)
-                q1 = build_len / 4.0
-                for l in lbls:
-                    seg = pool[l][s:e + 1]
-                    if not seg.any():
-                        continue
-                    off = int(np.argmax(seg))
-                    st = stats[l]
-                    st['n'] += 1
-                    st['offs'].append(off)
-                    if off <= q1:
-                        st['early'] += 1
-                    elif off > build_len:
-                        st['late'] += 1
-            for l, st in stats.items():
-                if st['n'] == 0:
+    # BOTH ARMS ARE EMITTED. causal is stamped FROM THE LOOP VARIABLE, never a literal.
+    # causal=False slices events by the DESCRIPTIVE regime at onset - full-sample, so it
+    # gates nothing and cannot be used live. causal=True slices by lab_causal, the
+    # forward-only burn-in fit, and SKIPS bars where lab_causal == -1 because no fit was
+    # available yet. The leader/confirmer split this stage produces is an A->k->B
+    # specification for F1, and full-sample it could not be applied live; that is why the
+    # causal arm exists.
+    for causal in (False, True):
+        labs_r = lab_causal if causal else lab_desc
+        if causal and labs_r is None:
+            continue
+        n_reg = int(ctx['n_causal']) if causal else int(ctx['n_desc'])
+        for (direction, floor), evs in ev_index.items():
+            lbls = ctx['long_lbls'] if direction == 'LONG' else ctx['short_lbls']
+            depth = ctx['depth_long'] if direction == 'LONG' else ctx['depth_short']
+            for regime in [-1] + list(range(n_reg)):
+                sel = [(s, e) for s, e in evs
+                       if (not causal or int(labs_r[s]) >= 0)
+                       and (regime == -1 or int(labs_r[s]) == regime)]
+                if not sel:
                     continue
-                rows.append({'direction': direction, 'onset_floor': floor, 'regime': regime,
-                             'causal': False, 'condition': l, 'events_joined': st['n'],
-                             'early_joiner_frac': round(st['early'] / st['n'], 4),
-                             'late_joiner_frac': round(st['late'] / st['n'], 4),
-                             'mean_join_offset': round(float(np.mean(st['offs'])), 3)})
+                stats = {l: {'n': 0, 'early': 0, 'late': 0, 'offs': []} for l in lbls}
+                for s, e in sel:
+                    pk_off = int(depth[s:e + 1].argmax())
+                    build_len = max(pk_off, 1)
+                    q1 = build_len / 4.0
+                    for l in lbls:
+                        seg = pool[l][s:e + 1]
+                        if not seg.any():
+                            continue
+                        off = int(np.argmax(seg))
+                        st = stats[l]
+                        st['n'] += 1
+                        st['offs'].append(off)
+                        if off <= q1:
+                            st['early'] += 1
+                        elif off > build_len:
+                            st['late'] += 1
+                for l, st in stats.items():
+                    if st['n'] == 0:
+                        continue
+                    rows.append({'direction': direction, 'onset_floor': floor, 'regime': regime,
+                                     'causal': causal, 'condition': l,
+                                 'events_joined': st['n'],
+                                 'early_joiner_frac': round(st['early'] / st['n'], 4),
+                                 'late_joiner_frac': round(st['late'] / st['n'], 4),
+                                 'mean_join_offset': round(float(np.mean(st['offs'])), 3)})
     if write:
         p = os.path.join(RESULTS_DIR, 'concurrence_entry_order.csv')
         pd.DataFrame(rows, columns=COLS3).to_csv(p, index=False, lineterminator='\n')

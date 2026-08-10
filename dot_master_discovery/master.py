@@ -1484,6 +1484,123 @@ def _s5d_score_items(items, fam, workers, frame_path, scope, rl, ctx=None):
     return [r for k, _c in chunks for r in got[k]]
 
 
+_NULLD_CTX = {}
+
+
+def _nulld_init(frame_path):
+    """Frame + oracle + conviction ONCE per worker. NO rng here, deliberately.
+
+    THE SEED MUST NOT CROSS INTO A WORKER. Every draw's mask AND its direction are
+    decided in the PARENT from the blake2b per-family seed, then shipped; a worker
+    that reseeded locally would reintroduce exactly the defect that made the
+    pricing column non-reproducible - F0 seeded 20284991 / 20330271 / 20266910 on
+    three consecutive interpreters off the same nominal base. Workers do
+    arithmetic only, so the result cannot depend on worker count.
+    """
+    import sys as _s
+    for _d in ('engine', 'scanners', 'orchestrator', '.'):
+        _p = os.path.join(_S5D_ROOT, _d)
+        if _p not in _s.path:
+            _s.path.insert(0, _p)
+    import pandas as _pd
+    import dots_thresholds as _dt
+    import portfolio_simulation_engine as _eng
+    import conviction as _C
+    df = _pd.read_csv(frame_path)
+    w = _eng.warmup_floor(df, verbose=False)
+    _NULLD_CTX.update({'df': df, 'w': w,
+                       'ad': _dt.compute_adaptive_thresholds(df),
+                       'st': _dt.compute_structural_gates(df),
+                       'conv': _C.build_conviction(df, True, True, True, d2d_conviction=True,
+                                                   d2d_gap=True)})
+
+
+def _nulld_chunk(payload):
+    """Score a chunk of null draws. Returns compact arrays, never a DataFrame."""
+    idx, items = payload
+    import numpy as _np
+    import pandas as _pd
+    import portfolio_simulation_engine as _eng
+    import cluster_profiler as _cp
+    c = _NULLD_CTX
+    df = c['df']
+    out = []
+    for j, bars, direction in items:
+        col = f'__NULL_W_{j}'
+        m = _np.zeros(len(df), dtype=int)
+        m[_np.asarray(bars, dtype=_np.int64)] = 1
+        df[col] = m
+        nsig = _pd.DataFrame([{'feat_1': col, 'thresh_1': '==1', 'feat_2': col,
+                               'thresh_2': '==1', 'feat_3': col, 'thresh_3': '==1',
+                               'direction': direction}])
+        ntd = _eng.run_portfolio(df, nsig, adaptive=c['ad'], structural=c['st'],
+                                 warmup=c['w'], verbose=False, conviction=c['conv'])
+        ntd = ntd[~ntd['signal_name'].isin(_cp.GAP_NAMES)]
+        df.drop(columns=[col], inplace=True)
+        out.append((j, _np.asarray(ntd['pnl'].values, dtype=float),
+                    _np.asarray(ntd['exit_time'].astype(str).values, dtype=object),
+                    _np.asarray(ntd['entry_bar'].values, dtype=_np.int64)))
+    return idx, out
+
+
+def _null_frames_for(drawn, dirs, df, ad, st, w, conv, workers, frame_path, fam, rl):
+    """Serial or pooled, with the C1 fallback. Results reassembled in DRAW ORDER."""
+    n = len(drawn)
+    if n == 0:
+        return []
+    items = [(j, np.flatnonzero(np.asarray(nd['mask'], dtype=bool)).astype(np.int64), dirs[j])
+             for j, nd in enumerate(drawn)]
+    frames = [None] * n
+
+    def _absorb(part):
+        for j, pnl, xt, eb in part:
+            frames[j] = pd.DataFrame({'signal_name': 'NULL', 'pnl': pnl, 'exit_time': xt,
+                                      'entry_bar': eb})
+
+    def _run_serial(pg):
+        for it in items:
+            _i, part = _nulld_chunk((0, [it]))
+            _absorb(part)
+            if pg is not None:
+                pg.step(1)
+
+    use_pool = bool(workers and workers > 1 and frame_path and n >= 32)
+    used = 'serial'
+    if use_pool:
+        import multiprocessing as _mp
+        from concurrent.futures import ProcessPoolExecutor
+        from concurrent.futures.process import BrokenProcessPool
+        size = max(1, -(-n // (int(workers) * 4)))
+        chunks = [(k, items[i:i + size]) for k, i in enumerate(range(0, n, size))]
+        pg = rl.Progress(f'S5D {fam} null draw ({workers} workers)', len(chunks))
+        pg.__enter__()
+        try:
+            with ProcessPoolExecutor(max_workers=min(int(workers), len(chunks)),
+                                     mp_context=_mp.get_context('spawn'),
+                                     initializer=_nulld_init,
+                                     initargs=(frame_path,)) as ex:
+                for _idx, part in ex.map(_nulld_chunk, chunks):
+                    _absorb(part)
+                    pg.step(1)
+            used = f'pool({workers})'
+        except (BrokenProcessPool, OSError, MemoryError, Exception) as exc:
+            frames = [None] * n
+            print(f'  S5D {fam} null draw: pool failed ({type(exc).__name__}: '
+                  f'{str(exc)[:70]}) - FALLING BACK TO SERIAL.', flush=True)
+            used = f'serial (pool fell back: {type(exc).__name__})'
+            pg.__exit__(None, None, None)
+            pg = rl.Progress(f'S5D {fam} null draw (serial fallback)', n)
+            pg.__enter__()
+            _run_serial(pg)
+        pg.__exit__(None, None, None)
+    else:
+        _NULLD_CTX.update({'df': df, 'w': w, 'ad': ad, 'st': st, 'conv': conv})
+        with rl.Progress(f'S5D {fam} null draw (serial)', n) as pg:
+            _run_serial(pg)
+    print(f'  S5D {fam} null draw: ran via {used} - {n} draws', flush=True)
+    return [f for f in frames if f is not None]
+
+
 NULL_SEED_BASE = 20260728
 
 
@@ -1652,18 +1769,9 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
             drawn, nstats = cat.draw_matched_null_masks(pool, fire_targets, rng, k=fam_k)
             long_share = float((g['direction'].astype(str).str.upper() == 'LONG').mean()) \
                 if len(g) else 0.5
-            null_frames = []
-            for j, nd in enumerate(drawn):
-                col = f'__NULL_{fam}_{j}'
-                df[col] = np.asarray(nd['mask'], dtype=bool).astype(int)
-                nsig = pd.DataFrame([{'feat_1': col, 'thresh_1': '==1', 'feat_2': col,
-                                      'thresh_2': '==1', 'feat_3': col, 'thresh_3': '==1',
-                                      'direction': ('LONG' if rng.random() < long_share
-                                                    else 'SHORT')}])
-                ntd = engine.run_portfolio(df, nsig, adaptive=ad, structural=st, warmup=w,
-                                           verbose=False, conviction=conv)
-                null_frames.append(ntd[~ntd['signal_name'].isin(cp.GAP_NAMES)])
-                df.drop(columns=[col], inplace=True)
+            _dirs = ['LONG' if rng.random() < long_share else 'SHORT' for _ in drawn]
+            null_frames = _null_frames_for(drawn, _dirs, df, ad, st, w, conv, workers,
+                                           frame_path, fam, rl)
             null_rate, null_pfs = cat.matched_null_rate(null_frames, bar_day)
             qflag, qwhy = cat.null_quality(len(null_frames), fam_k, nstats)
             print(f'    {fam:4} matched null: requested K={fam_k}, IN-BAND {nstats["matched"]} '
