@@ -488,8 +488,8 @@ def pricing_blank(reason):
 MECHANISM_D_LOCKS = {
     'engine/dots_thresholds.py': '518862bf19fb',
     'engine/terrain.py': 'dcaecaf7e8e1',
-    'engine/cluster_profiler.py': '070bb2aa7aaa',
-    'scanners/concurrence_profiler.py': '554019e93069',
+    'engine/cluster_profiler.py': '60984ad7e6a1',
+    'scanners/concurrence_profiler.py': 'ed3f4d524a1c',
 }
 
 
