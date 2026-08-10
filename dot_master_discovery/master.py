@@ -87,12 +87,133 @@ def done_path(out, key):
     return os.path.join(out, '.markers', f'{key}.done')
 
 
+STAGE_REQUIRED_COLUMNS = {
+    'wf_book_arm_entities.csv': ('in_denominator', 'train_passes', 'test_passes',
+                                 'traded_on_test', 'persisted'),
+    'wf_null_arm_entities.csv': ('in_denominator', 'train_passes', 'test_passes'),
+    'catalogues/cohort_scored.csv': ('win_loss_ratio', 'breakeven_wr', 'margin_pp', 'n_losses'),
+}
+
+
+STAGE_ARTIFACTS = {
+    'S3': ['regime_labels.csv'],
+    'S3B': ['family_evidence.csv', 'cross_family_cofiring.csv'],
+    'S5D': ['catalogues/unclaimed_reachable.csv', 'catalogues/same_bar_cohort.csv',
+            'catalogues/cohort_scored.csv', 'catalogues/dilution_curve_agg_pf.csv',
+            'catalogues/dilution_curve_EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF.csv'],
+    'S5C': ['wf_pass_criterion.csv', 'wf_book_arm_entities.csv', 'wf_null_arm_entities.csv',
+            'wf_splits.csv'],
+    'S8B': ['cluster_participation_profile.csv', 'cluster_basis_summary.csv',
+            'reach_D01_directional_baseline.csv', 'reach_D02_D2_coverage.csv',
+            'reach_D02_book_depth_structure.csv', 'reach_D0_missed_decomposition.csv'],
+}
+
+
+def _artifact_columns(path):
+    """The artifact's column names, for the explicit required-column check."""
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path, 'r', encoding='utf-8', errors='replace') as f:
+            for ln in f:
+                if ln.startswith('#'):
+                    continue
+                return [c.strip() for c in ln.rstrip('\n').split(',')]
+    except OSError:
+        return []
+    return []
+
+
+def _artifact_schema(path):
+    """sha of an artifact's COLUMN NAMES. Detects a schema change without a column list.
+
+    A gate that checks a file EXISTS cannot detect a file that is STALE, and a
+    schema change makes every prior artifact stale by definition. This has now
+    bitten six times - S3B, S5D, S5C, S8B, S3's regime_labels, and S5C again -
+    and each fix was "check the deliverable exists", which was always too weak.
+
+    Hashing the header is cheaper and stricter than a hand-maintained per-stage
+    column list: it needs no maintenance, and it catches EVERY future column
+    addition automatically rather than only the ones somebody remembered to list.
+    """
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, 'r', encoding='utf-8', errors='replace') as f:
+            for ln in f:
+                if ln.startswith('#'):
+                    continue
+                cols = [c.strip() for c in ln.rstrip('\n').split(',')]
+                return hashlib.sha256(','.join(sorted(cols)).encode('utf-8')).hexdigest()[:12]
+    except OSError:
+        return None
+    return None
+
+
 def mark_done(out, key, meta):
+    """Records each artifact's SCHEMA HASH alongside the meta.
+
+    A marker written by an older build carries no 'artifact_schemas' key, so
+    is_done treats it as STALE and the stage re-runs exactly once, writing a
+    marker that does. That is what makes this self-healing on a tree that
+    already has stale artifacts - no marker delete, no --force, no manual step.
+    """
     os.makedirs(os.path.join(out, '.markers'), exist_ok=True)
+    rec = dict(meta)
+    schemas = {}
+    for rel in STAGE_ARTIFACTS.get(key, []):
+        sc = _artifact_schema(os.path.join(out, rel))
+        if sc is not None:
+            schemas[rel] = sc
+    rec['artifact_schemas'] = schemas
     tmp = done_path(out, key) + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
-        json.dump(meta, f)
+        json.dump(rec, f, sort_keys=True)
     os.replace(tmp, done_path(out, key))
+
+
+def stale_artifacts(out, key):
+    """Which of a stage's artifacts no longer match the schema recorded at mark_done.
+
+    Returns a list of human-readable reasons; empty means every recorded artifact
+    is present with the same columns it had when the stage completed.
+    """
+    p = done_path(out, key)
+    if not os.path.exists(p):
+        return ['no marker']
+    try:
+        rec = json.load(open(p, encoding='utf-8'))
+    except Exception:
+        return ['marker unreadable']
+    out_reasons = []
+    for rel in STAGE_ARTIFACTS.get(key, []):
+        need = STAGE_REQUIRED_COLUMNS.get(rel)
+        if not need:
+            continue
+        fp = os.path.join(out, rel)
+        if not os.path.exists(fp):
+            continue
+        cols = _artifact_columns(fp)
+        miss = [c for c in need if c not in cols]
+        if miss:
+            out_reasons.append(f'{rel} is missing column(s) {miss}')
+    if 'artifact_schemas' not in rec:
+        out_reasons.append(
+            'marker predates schema recording - every artifact it wrote is stale by definition, '
+            'so the stage re-runs once to establish the baseline')
+        return out_reasons
+    for rel in STAGE_ARTIFACTS.get(key, []):
+        want = rec['artifact_schemas'].get(rel)
+        got = _artifact_schema(os.path.join(out, rel))
+        if want is None and got is None:
+            continue
+        if got is None:
+            out_reasons.append(f'{rel} ABSENT (was present at mark_done)')
+        elif want is None:
+            out_reasons.append(f'{rel} present but was NOT recorded at mark_done')
+        elif got != want:
+            out_reasons.append(f'{rel} SCHEMA CHANGED (columns {want} -> {got})')
+    return out_reasons
 
 
 COLLECT_EXTS = ('.csv', '.md', '.txt', '.jsonl')
@@ -1011,7 +1132,10 @@ def s3b_family_evidence(df, ad, st, w, pool, anchor, book_file, out, input_sha, 
                                                      'cross_family_cofiring.csv'])
     if is_done(out, 'S3B', input_sha) and not _s3b_ok:
         print(f'  S3B marker present but deliverables missing {_s3b_missing} - RE-RUNNING.')
-    if is_done(out, 'S3B', input_sha) and _s3b_ok:
+    _s3b_stale = stale_artifacts(out, 'S3B')
+    if is_done(out, 'S3B', input_sha) and _s3b_ok and _s3b_stale:
+        print(f'  S3B marker present but STALE - RE-RUNNING: {_s3b_stale}', flush=True)
+    if is_done(out, 'S3B', input_sha) and _s3b_ok and not _s3b_stale:
         print('  S3B already complete for this input (checkpoint) — resuming past it.')
         return None
     bk_path = book_file if book_file else os.path.join(_ENGINE, 'book50_signals.csv')
@@ -1415,7 +1539,12 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
               f'{_s5d_missing + ([] if _s5d_cats else ["catalogue_*.csv"])} - RE-RUNNING. The '
               f'gate previously checked only that the catalogue directory was non-empty, which '
               f'cannot tell a complete emission from one that died after the first family.')
-    if is_done(out, 'S5D', input_sha) and _s5d_cats and _s5d_ok:
+    _s5d_stale = stale_artifacts(out, 'S5D')
+    if is_done(out, 'S5D', input_sha) and _s5d_cats and _s5d_ok and _s5d_stale:
+        print('  S5D marker present and deliverables complete, but STALE - RE-RUNNING:', flush=True)
+        for _r in _s5d_stale:
+            print(f'      {_r}', flush=True)
+    if is_done(out, 'S5D', input_sha) and _s5d_cats and _s5d_ok and not _s5d_stale:
         have = sorted(f for f in os.listdir(cat_dir_chk) if f.startswith('catalogue_'))
         print(f'  S5D already complete for this input_sha - {len(have)} catalogues on disk, '
               f'RESUMING PAST IT. The per-candidate scoring loop is the longest single-threaded '
@@ -2239,11 +2368,22 @@ def s5c_walk_forward(df, ad, st, w, pool, anchor, book_file, out, input_sha, att
                 _ent_ok = len(pd.read_csv(_ent_path, comment='#')) > 0
             except Exception:
                 _ent_ok = False
-        if _crit_ok and _ent_ok:
+        _stale = stale_artifacts(out, 'S5C')
+        if _crit_ok and _ent_ok and not _stale:
             print(f'  S5C resumed from marker: the criterion EXISTS and is evaluable '
-                  f'({_why_gate}) AND wf_book_arm_entities.csv is present and non-empty '
-                  f'— skipping.')
+                  f'({_why_gate}), every deliverable is present, and every recorded SCHEMA still '
+                  f'matches — skipping.')
             return None
+        if _crit_ok and _ent_ok and _stale:
+            print('  S5C marker present and criterion evaluable, but the artifacts are STALE - '
+                  'RE-RUNNING:', flush=True)
+            for _r in _stale:
+                print(f'      {_r}', flush=True)
+            print('      A gate that checks a file EXISTS cannot detect a file that is STALE, and '
+                  'a schema change makes every prior artifact stale by definition. The columns the '
+                  'audit trail needs (in_denominator, train_passes, test_passes) were added after '
+                  'the last run, so the file on disk cannot answer the question it exists to '
+                  'answer.', flush=True)
         if _crit_ok and not _ent_ok:
             print('  S5C marker present and criterion evaluable, but wf_book_arm_entities.csv is '
                   'absent/empty - RE-RUNNING. A gate that does not check EVERY deliverable will '
@@ -2607,7 +2747,10 @@ def s8b_cluster_profile(df, ad, st, w, pool, anchor, book_file, committed, out, 
         'reach_D02_book_depth_structure.csv', 'reach_D0_missed_decomposition.csv'])
     if is_done(out, 'S8B', input_sha) and not _s8b_ok:
         print(f'  S8B marker present but deliverables missing {_s8b_missing} - RE-RUNNING.')
-    if is_done(out, 'S8B', input_sha) and _s8b_ok:
+    _s8b_stale = stale_artifacts(out, 'S8B')
+    if is_done(out, 'S8B', input_sha) and _s8b_ok and _s8b_stale:
+        print(f'  S8B marker present but STALE - RE-RUNNING: {_s8b_stale}', flush=True)
+    if is_done(out, 'S8B', input_sha) and _s8b_ok and not _s8b_stale:
         print('  S8B already complete for this input (checkpoint) — resuming past it.')
         return None
     if committed is not None and 'executed' in committed:

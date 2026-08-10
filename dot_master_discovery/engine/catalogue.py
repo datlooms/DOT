@@ -366,7 +366,7 @@ def dilution_curve_reference(order_keys, entries_by_id, dirs_by_id, ranking_key_
 
 
 NULL_K_DEFAULT = 200
-NULL_K_BY_FAMILY = {'F0': 500}
+NULL_K_BY_FAMILY = {'F0': 5000, 'F1': 5000, 'F9': 2000}
 NULL_K_ATTEMPT_MULTIPLIER = 60
 
 
