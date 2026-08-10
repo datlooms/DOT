@@ -1,5 +1,7 @@
 import os
 import numpy as np
+
+PF_UNDEFINED = float('nan')
 import pandas as pd
 import dots_thresholds as dt
 import portfolio_simulation_engine as engine
@@ -118,7 +120,7 @@ def _pf(pnls):
     g = pnls[pnls > 0].sum()
     l = -pnls[pnls < 0].sum()
     if l == 0:
-        return 999.0 if g > 0 else 0.0
+        return PF_UNDEFINED if g > 0 else 0.0
     return round(float(g / l), 3)
 
 

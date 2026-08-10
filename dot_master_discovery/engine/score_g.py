@@ -9,6 +9,8 @@ for _d in (_HERE, os.path.join(_ROOT, 'scanners')):
         sys.path.insert(0, _d)
 
 import numpy as np
+
+PF_UNDEFINED = float('nan')
 import pandas as pd
 import dots_thresholds as dt
 import portfolio_simulation_engine as engine
@@ -259,7 +261,7 @@ def score(df, sigs, ad, st, w, conv, tag):
                               verbose=False, conviction=conv)
     p = td['pnl'].values
     wd = wf.daily_pnl_points(td)['pnl'].min()
-    pf = round(p[p > 0].sum() / -p[p < 0].sum(), 2) if (p < 0).any() else 999.0
+    pf = round(p[p > 0].sum() / -p[p < 0].sum(), 2) if (p < 0).any() else PF_UNDEFINED
     wr = round((p > 0).sum() / len(td) * 100, 1)
     pop = population(td)
     mdd = _daily_mdd(td)

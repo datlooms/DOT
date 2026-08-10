@@ -46,6 +46,8 @@ import time
 
 import os
 import numpy as np
+
+PF_UNDEFINED = float('nan')
 import pandas as pd
 
 MIN_MONTH_BUCKETS = 3
@@ -312,16 +314,28 @@ class TestSegmentGuard:
         return self._touch_count
 
 
+def _pf_ok_floor(pf, floor):
+    """A zero-loss signal passes the PERSIST floor. Same rule as the S5 gate."""
+    try:
+        v = float(pf)
+    except (TypeError, ValueError):
+        return True
+    if not np.isfinite(v):
+        return True
+    return v >= float(floor)
+
+
 def persistence_flags(pnl):
     p = np.asarray(pnl, dtype=float)
     if len(p) == 0:
         return {'net': 0.0, 'PF': 0.0, 'WR': 0.0, 'passes': False}
     loss = -p[p < 0].sum()
-    pf = float(p[p > 0].sum() / loss) if loss > 0 else (999.0 if p.sum() > 0 else 0.0)
+    pf = float(p[p > 0].sum() / loss) if loss > 0 else (PF_UNDEFINED if p.sum() > 0 else 0.0)
     wr = float((p > 0).mean() * 100.0)
     net = float(p.sum())
     return {'net': net, 'PF': pf, 'WR': wr,
-            'passes': bool(net > 0 and pf >= PERSIST_MIN_PF and wr >= PERSIST_MIN_WR)}
+            'passes': bool(net > 0 and _pf_ok_floor(pf, PERSIST_MIN_PF)
+                           and wr >= PERSIST_MIN_WR)}
 
 
 def _pnl_by_entity(frame, key):

@@ -77,7 +77,7 @@ def _pf(pnl):
         return 0.0, True
     loss = -p[p < 0].sum()
     if loss <= 0:
-        return float('inf'), True
+        return PF_UNDEFINED, True
     return float(p[p > 0].sum() / loss), False
 
 
@@ -118,7 +118,7 @@ def evaluate_valid(trades, bar_day=None):
     if n < MIN_TRADES:
         return 'UNEVALUABLE', REASON_INSUFFICIENT_TRADES, stats
     pf, undefined = _pf(pnl)
-    stats['agg_pf'] = pf
+    stats['agg_pf'] = blank_sentinel_ratio(pf)
     stats['pf_undefined'] = bool(undefined)
     if undefined:
         return 'UNEVALUABLE', REASON_PF_UNDEFINED, stats
@@ -193,8 +193,13 @@ def matched_null_rate(null_frames, bar_day):
 
 def pricing_columns(pf_value, n_trials, null_rate, null_pfs):
     """Appendix A's eight columns. EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF does the work."""
-    arr = np.asarray(null_pfs, dtype=float)
-    exceed = float((arr >= pf_value).mean()) if len(arr) else float('nan')
+    arr0 = np.asarray([float(x) for x in null_pfs if not pf_is_undefined(x)], dtype=float)
+    n_excluded = len(list(null_pfs)) - len(arr0)
+    arr = arr0
+    if pf_is_undefined(pf_value):
+        exceed = 0.0
+    else:
+        exceed = float((arr >= float(pf_value)).mean()) if len(arr) else float('nan')
     return {
         'n_trials_family': int(n_trials),
         'null_valid_rate_family': round(float(null_rate), 6),
@@ -203,6 +208,7 @@ def pricing_columns(pf_value, n_trials, null_rate, null_pfs):
         'pf_null_p90_family': round(float(np.percentile(arr, 90)), 4) if len(arr) else '',
         'pf_null_p99_family': round(float(np.percentile(arr, 99)), 4) if len(arr) else '',
         'pf_null_exceedance_pct': round(exceed, 6) if exceed == exceed else '',
+        'pf_null_undefined_excluded': int(n_excluded),
         'EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF': (round(n_trials * exceed, 3)
                                               if exceed == exceed else ''),
     }
@@ -238,7 +244,7 @@ def segment_fold_stats(trades):
         if not und:
             pfs.append(pf)
     return {'folds_plus': int(sum(1 for v in b.values() if v > 0)),
-            'min_fold_pf': round(min(pfs), 4) if pfs else '',
+            'min_fold_pf': blank_sentinel_ratio(round(min(pfs), 4)) if pfs else '',
             'fold_buckets': len(months)}
 
 
@@ -765,7 +771,7 @@ def solo_gated_arm(trades, gate_bars):
     pf, und = _pf(p)
     return {'gated_solo_trades': int(len(keep)),
             'gated_solo_WR': round(float((p > 0).mean() * 100), 2),
-            'gated_solo_PF': ('inf' if und else round(pf, 4)),
+            'gated_solo_PF': ('' if und else round(pf, 4)),
             'gated_solo_net': round(float(p.sum()), 2),
             'gated_solo_worst_day_usd': round(float(_daily(keep).min()), 2)}
 
@@ -795,3 +801,53 @@ def blank_sentinel_ratio(value, n_losses=None):
     if v in RATIO_SENTINELS or not np.isfinite(v):
         return ''
     return value
+
+
+PF_UNDEFINED = float('nan')
+
+
+def pf_is_undefined(pf):
+    """True when PF has no denominator. ONE definition, used by every consumer."""
+    if pf is None or pf == '':
+        return True
+    try:
+        v = float(pf)
+    except (TypeError, ValueError):
+        return False
+    return (not np.isfinite(v)) or v in RATIO_SENTINELS
+
+
+def pf_passes_floor(pf, floor, n_losses=None):
+    """A ZERO-LOSS SIGNAL PASSES ANY PF FLOOR, BY AN EXPLICIT BRANCH.
+
+    Never by a magic value that happens to compare high. 999.0 >= 2.0 was true by
+    accident of the sentinel's size; with PF undefined a bare comparison returns
+    False and THE STRONGEST SIGNALS IN THE CATALOGUE WOULD BE SILENTLY DROPPED by
+    a change intended to improve honesty. A signal with no losses cannot fail a
+    profit-factor test - there is nothing for the factor to divide by.
+    """
+    if n_losses is not None and int(n_losses) == 0:
+        return True
+    if pf_is_undefined(pf):
+        return True
+    return float(pf) >= float(floor)
+
+
+def pf_aggregate(values, how='mean'):
+    """Aggregate a PF column, EXCLUDING undefined and REPORTING the excluded count.
+
+    A mean over 999s was meaningless and always was. Returns (value, n_used,
+    n_excluded) so the exclusion is never silent.
+    """
+    vals = [float(v) for v in values if not pf_is_undefined(v)]
+    n_ex = len(list(values)) - len(vals)
+    if not vals:
+        return '', 0, n_ex
+    fn = {'mean': np.mean, 'median': np.median, 'min': np.min, 'max': np.max}[how]
+    return round(float(fn(vals)), 4), len(vals), n_ex
+
+
+def pf_sort_key(pf):
+    """Undefined sorts HIGHEST on PF - it means no losses at all. Visibly so:
+    consumers pair this with a flag column rather than hiding the distinction."""
+    return float('inf') if pf_is_undefined(pf) else float(pf)

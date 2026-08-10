@@ -54,7 +54,7 @@ F0_INPUT = os.path.join(RESULTS_DIR_ABS, 'results_F0_triple_convergence_and_d2dd
 #  a light quality gate. Scope is F0 triple-convergence ONLY (the validated
 #  diamond book and the EA's native design).
 #
-#  GATE (write only if ALL): trades >= 30 AND agg_pf >= 2.0 AND folds_plus >= 4.
+#  GATE (write only if ALL): trades >= 30 AND (agg_pf >= 2.0 OR zero-loss) AND folds_plus >= 4.
 #  UNITS: $1/point/lot (P&L is in points; USD == points at lot 1.0). Figures
 #  here are in POINTS; multiply by lot afterwards.
 #

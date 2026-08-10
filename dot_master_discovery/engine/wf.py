@@ -1,5 +1,7 @@
 import sys
 import numpy as np
+
+PF_UNDEFINED = float('nan')
 import pandas as pd
 import dots_thresholds as dt
 import portfolio_simulation_engine as engine
@@ -53,7 +55,7 @@ def fold_metrics(trades_df, label):
     pnls = trades_df['pnl'].values
     gw = pnls[pnls > 0].sum()
     gl = abs(pnls[pnls <= 0].sum())
-    pf = (999.0 if gw > 0 else 0.0) if gl == 0 else gw / gl
+    pf = (PF_UNDEFINED if gw > 0 else 0.0) if gl == 0 else gw / gl
     wr = (pnls > 0).sum() / n * 100.0
     daily = daily_pnl_points(trades_df)
     daily_usd = points_to_usd(daily['pnl'].values)
@@ -70,7 +72,7 @@ def pf_from_pnls(pnls):
         return 0.0
     gw = pnls[pnls > 0].sum()
     gl = abs(pnls[pnls <= 0].sum())
-    return (999.0 if gw > 0 else 0.0) if gl == 0 else gw / gl
+    return (PF_UNDEFINED if gw > 0 else 0.0) if gl == 0 else gw / gl
 
 def spread_stress(all_trades_df):
     # Spread is a flat per-trade deduction in the engine and does not alter any

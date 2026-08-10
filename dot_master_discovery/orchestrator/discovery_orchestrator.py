@@ -1033,8 +1033,15 @@ def ingest_f1():
 
 def sort_master(master_df):
     # persistence PRIMARY, then within-fold floor, then survival axis, then PF/WR
-    return master_df.sort_values(
-        by=['folds_plus', 'min_fold_pf', 'worst_day_usd', 'agg_pf', 'WR'],
+    _mdf = master_df.copy()
+    _mdf['_mfp_sort'] = _mdf['min_fold_pf'].map(
+        lambda v: float('inf') if (v is None or v == '' or
+                                   not np.isfinite(float(v)) if isinstance(v, (int, float))
+                                   else False) else float(v))
+    _mdf['_pf_undefined'] = _mdf['min_fold_pf'].map(
+        lambda v: bool(isinstance(v, (int, float)) and not np.isfinite(float(v))))
+    return _mdf.sort_values(
+        by=['folds_plus', '_mfp_sort', 'worst_day_usd', 'agg_pf', 'WR'],
         ascending=[False, False, True, False, False]).reset_index(drop=True)
 
 

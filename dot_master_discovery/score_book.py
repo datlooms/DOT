@@ -250,7 +250,7 @@ def score(book_path, data_path, out_dir):
             mo = cat.margin_of_safety(p)
             row = {'direction': lab, 'tier': tname, 'trades': int(p.size),
                    'WR': round(float((p > 0).mean() * 100), 2),
-                   'PF': (round(float(p[p > 0].sum() / pf_l), 4) if pf_l > 0 else 'inf'),
+                   'PF': (round(float(p[p > 0].sum() / pf_l), 4) if pf_l > 0 else ''),
                    'net': round(float(p.sum()), 2)}
             row.update(mo)
             _mrows.append(row)
@@ -302,7 +302,7 @@ def score(book_path, data_path, out_dir):
                 _grows.append({'direction': lab, 'tier': tname, 'arm': arm,
                                'trades': int(p.size),
                                'WR': round(float((p > 0).mean() * 100), 2),
-                               'PF': (round(float(p[p > 0].sum() / loss), 4) if loss > 0 else 'inf'),
+                               'PF': (round(float(p[p > 0].sum() / loss), 4) if loss > 0 else ''),
                                'net': round(float(p.sum()), 2),
                                'worst_day_usd': round(float(sd.groupby('day')['pnl'].sum().min()), 2),
                                'n_losses': int((p < 0).sum())})

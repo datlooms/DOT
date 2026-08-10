@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+
+PF_UNDEFINED = float('nan')
 import os
 import sys
 import time
@@ -368,7 +370,7 @@ def report(trades_df, signals_df):
     pnls = trades_df['pnl'].values
     gross_wins = pnls[pnls > 0].sum()
     gross_losses = abs(pnls[pnls <= 0].sum())
-    pf = gross_wins / gross_losses if gross_losses > 0 else 999.0
+    pf = gross_wins / gross_losses if gross_losses > 0 else PF_UNDEFINED
     wr = (pnls > 0).sum() / n_trades * 100
     total_pnl = pnls.sum()
 

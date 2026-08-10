@@ -47,7 +47,7 @@ import numpy as np
 import pandas as pd
 import cluster_profiler as cp
 
-S5_GATE = 'trades>=30 & folds_plus>=4 & agg_pf>=2.0'
+S5_GATE = 'trades>=30 & folds_plus>=4 & (agg_pf>=2.0 OR zero-loss)'
 FAMILY_REGISTRY = [
     ('F0', 'triple_convergence_and_d2ddir.py', ('results_F0*.csv', 'deduped_survivors.csv', 'raw_survivors.csv')),
     ('F1', 'sequential_temporal.py', ('results_F1_*.csv',)),
@@ -101,7 +101,9 @@ def _rows_and_s5(paths):
             continue
         rows += len(t)
         if {'trades', 'folds_plus', 'agg_pf'}.issubset(t.columns):
-            k = int(((t['trades'] >= 30) & (t['folds_plus'] >= 4) & (t['agg_pf'] >= 2.0)).sum())
+            import catalogue as _cat
+            _ok = t['agg_pf'].map(lambda v: _cat.pf_passes_floor(v, 2.0))
+            k = int(((t['trades'] >= 30) & (t['folds_plus'] >= 4) & _ok).sum())
             passing = k if passing == '' else passing + k
         for c in ('signal_def', 'condition'):
             if c in t.columns:

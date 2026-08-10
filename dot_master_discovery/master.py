@@ -570,6 +570,7 @@ def s4_schema(out, input_sha):
 
 
 def s5_filter(out, input_sha, pool):
+    import catalogue as cat
     results = os.path.join(out, 'results')
     src = os.path.join(results, 'discovery_master.csv')
     if not os.path.exists(src):
@@ -577,9 +578,18 @@ def s5_filter(out, input_sha, pool):
         return
     r = pd.read_csv(src)
     n_total = len(r)
-    keep = r[(r['trades'] >= 30) & (r['folds_plus'] >= 4) & (r['agg_pf'] >= 2.0)].copy()
+    _pf_ok = r['agg_pf'].map(lambda v: cat.pf_passes_floor(v, 2.0))
+    keep = r[(r['trades'] >= 30) & (r['folds_plus'] >= 4) & _pf_ok].copy()
+    _zl = int(_pf_ok.sum() - (pd.to_numeric(r['agg_pf'], errors='coerce') >= 2.0).sum())
+    print(f'  S5 gate: agg_pf floor 2.0 admitted {int(_pf_ok.sum())} rows, of which {_zl} are '
+          f'ZERO-LOSS and pass by an EXPLICIT BRANCH. 999.0 >= 2.0 was true by accident of the '
+          f'sentinel\'s size; with PF undefined a bare comparison returns False and the strongest '
+          f'signals in the catalogue would be silently dropped.')
     if 'worst_day_usd' in keep.columns:
-        keep = keep.sort_values(['worst_day_usd', 'agg_pf'], ascending=[True, False])
+        keep['_pf_undefined'] = keep['agg_pf'].map(cat.pf_is_undefined)
+    keep['_pf_sort'] = keep['agg_pf'].map(cat.pf_sort_key)
+    keep = keep.sort_values(['worst_day_usd', '_pf_sort'], ascending=[True, False])
+    keep = keep.drop(columns=['_pf_sort'])
     import score_g
     unscoreable = set(score_g.UNSCOREABLE_FAMILIES)
     if 'family' in keep.columns and len(keep):
@@ -1911,7 +1921,7 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
         'touched by the 1,818 VALID F0 rows, 2,092 episodes are unclaimed, INTERSECTION = 0.',
         'n_prefilter_candidates_touching IS THE REAL DIAGNOSTIC AND IS NOT TAUTOLOGICAL: it counts '
         'candidates from the FULL pre-filter pool (discovery_master.csv, before S5 cut on '
-        'trades>=30 & folds_plus>=4 & agg_pf>=2.0) whose firing bars fall inside the episode. A '
+        'trades>=30 & folds_plus>=4 & (agg_pf>=2.0 OR zero-loss)) whose firing bars fall inside the episode. A '
         'HIGH count means the search DID find things there and the QUALITY FILTER cut them - a '
         'QUALITY gap, reachable by loosening the filter. ZERO means nothing in the 249-condition '
         'vocabulary expresses that episode at all - a GRAMMAR gap, not reachable without new '

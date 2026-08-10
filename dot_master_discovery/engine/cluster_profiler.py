@@ -80,6 +80,8 @@ at runtime and restored.
 """
 
 import numpy as np
+
+PF_UNDEFINED = float('nan')
 import pandas as pd
 import dots_thresholds as dt
 import portfolio_simulation_engine as engine
@@ -244,7 +246,7 @@ def _pf(x):
         return 0.0
     loss = -x[x < 0].sum()
     if loss <= 0:
-        return 999.0 if x.sum() > 0 else 0.0
+        return PF_UNDEFINED if x.sum() > 0 else 0.0
     return round(float(x[x > 0].sum() / loss), 3)
 
 
