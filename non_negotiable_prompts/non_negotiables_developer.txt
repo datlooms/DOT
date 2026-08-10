@@ -728,7 +728,7 @@ all three regimes; CME maintenance break 17:05-18:04; 08:30 ET release step at 0
 open 03:00 (04:00 in the 2026.03.09-03.27 EU/US window); Asia open 20:00.
 
 FRIDAY GATE — SACRED FILE, NO CODE CHANGE, DO NOT TOUCH.
-portfolio_simulation_engine.py is byte-locked at bb498eb13ce3. Its L148 Friday gate reads
+portfolio_simulation_engine.py is byte-locked at 7f66273011a2. Its L148 Friday gate reads
 EST_DayOfWeek / EST_Hour / EST_Minute FROM THE EXPORT. On the broken clock it blocked 3,835
 bars at true EST 16:00-19:00 — which, because the exported hour ran 2-3h fast, meant it fired
 from true 13:00 and removed roughly the final three hours of every Friday cash session.

@@ -64,9 +64,9 @@ Item 4 sets the cluster count; items 11 and 12 consume it; items 5-10 share the 
 Sacred five BYTE-LOCKED, verified before and after every change:
 
     dots_thresholds.py             518862bf19fb
-    wf.py                          793e6e5f8d9a
+    wf.py                          4ac888f3af9d
     core.py                        6530e2508b17
-    portfolio_simulation_engine.py bb498eb13ce3
+    portfolio_simulation_engine.py 7f66273011a2
     conviction.py                  27af7acee824
 
 No scanner edited. No objective, no argmax, no quota, no floor, no target.

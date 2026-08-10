@@ -168,12 +168,12 @@ The `reproduce_dot.py` role, folded in:
 
 | Group | Files (sha256[:12]) |
 |---|---|
-| Oracle / SACRED | `dots_thresholds.py` `518862bf19fb`, `wf.py` `793e6e5f8d9a`, `core.py` `6530e2508b17` |
-| Ratified engine | `portfolio_simulation_engine.py` `bb498eb13ce3`, `conviction.py` `27af7acee824`, `score_g.py` `3129aecec634`, `score_book50.py` `f2db7eb592a6` |
-| F0 scoring | `analysis_engine.py` `fb1a30341e88`, `run_full_analysis.py` `110767ea58dd` (current engine — regenerates S6 fresh) |
-| Scanners (13) | `triple_convergence_and_d2ddir.py`(F0) `5ed2221e5339`, `sequential_temporal.py`(F1) `cda5b7459077`, `state_transition.py`(F2) `8cb42c9d9891`, `conditional_interaction.py`(F3) `7908ed0c5fbc`, `divergence_nonconfirm.py`(F4) `a95c521cd55c`, `persistence_autocorr.py`(F5) `cd3afbfe6994`, `threshold_crossing.py`(F6) `147deb44d1b5`, `mean_reversion.py`(F7) `868bc7edf5fe`, `cross_variable_structure.py`(F8) `5594fa73a7d3`, `session_temporal.py`(F9) `2e5f1703aaa2`, `rolling_leadlag.py`(F11) `08848774ca1c`, `concurrence_profiler.py`(F12) `188a5794bce5`, `single_variable_extremes.py`(F13) `0ca336cdf9df` |
-| Runners / schema | `run_f0_full.py` `8a8a276cfbef`, `run_f1_parallel.py` `47bf4d0ce4b9`, `f0_to_schema.py` `f878d3b46c8b` |
-| Orchestration | `discovery_orchestrator.py` `31165e9a17df` (its scan→filter→schema drive logic is the S3–S4 backbone `master.py` absorbs), `stage8.py` `8e8f59d80e23` (path/baseline resolver — its CWD-relative resolution logic informs S0) |
+| Oracle / SACRED | `dots_thresholds.py` `518862bf19fb`, `wf.py` `4ac888f3af9d`, `core.py` `6530e2508b17` |
+| Ratified engine | `portfolio_simulation_engine.py` `7f66273011a2`, `conviction.py` `27af7acee824`, `score_g.py` `61299d41d864`, `score_book50.py` `1bdf9ceec75f` |
+| F0 scoring | `analysis_engine.py` `6e1009d7f03b`, `run_full_analysis.py` `9c719b39dd72` (current engine — regenerates S6 fresh) |
+| Scanners (13) | `triple_convergence_and_d2ddir.py`(F0) `eb3f58ad19fa`, `sequential_temporal.py`(F1) `6c89c865fff1`, `state_transition.py`(F2) `8cb42c9d9891`, `conditional_interaction.py`(F3) `7908ed0c5fbc`, `divergence_nonconfirm.py`(F4) `87dcf068036b`, `persistence_autocorr.py`(F5) `cd3afbfe6994`, `threshold_crossing.py`(F6) `147deb44d1b5`, `mean_reversion.py`(F7) `868bc7edf5fe`, `cross_variable_structure.py`(F8) `5594fa73a7d3`, `session_temporal.py`(F9) `2e5f1703aaa2`, `rolling_leadlag.py`(F11) `08848774ca1c`, `concurrence_profiler.py`(F12) `ed3f4d524a1c`, `single_variable_extremes.py`(F13) `37e3a9075aea` |
+| Runners / schema | `run_f0_full.py` `8a8a276cfbef`, `run_f1_parallel.py` `230427fcbd04`, `f0_to_schema.py` `f878d3b46c8b` |
+| Orchestration | `discovery_orchestrator.py` `0a0c75f4f3ae` (its scan→filter→schema drive logic is the S3–S4 backbone `master.py` absorbs), `stage8.py` `8e8f59d80e23` (path/baseline resolver — its CWD-relative resolution logic informs S0) |
 | Book + reproduction | `book50_signals.csv` `e86a52244501` (frozen US30 book), `reproduce_dot.py` (S8 logic, folded in) |
 
 **DROP (superseded / stale — must NOT be carried as canonical):**
@@ -196,9 +196,9 @@ Byte-locked, printed at startup, **abort on any drift**:
 | File | sha256[:12] | Role |
 |---|---|---|
 | `dots_thresholds.py` | `518862bf19fb` | oracle — sole threshold source (export=live) |
-| `wf.py` | `793e6e5f8d9a` | walk-forward folds + daily series |
+| `wf.py` | `4ac888f3af9d` | walk-forward folds + daily series |
 | `core.py` | `6530e2508b17` | reconstruction (only the S0a raw-export path) |
-| `portfolio_simulation_engine.py` | `bb498eb13ce3` | ratified TM — sole trade path |
+| `portfolio_simulation_engine.py` | `7f66273011a2` | ratified TM — sole trade path |
 
 The master prints the oracle sha at S1 and the full sacred-registry shas in the S9 report. No stage may compute a threshold except through the oracle; no stage may open a trade except through the ratified engine. Any behaviour-changing edit to a sacred file invalidates the run regardless of merit.
 

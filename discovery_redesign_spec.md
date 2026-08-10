@@ -7,7 +7,7 @@
 **Revision 2:** amended 2026-07-23 following external-review assessment and its correction round. Nine verified changes applied (§C.2, §C.3, §D.0, §F.4, §F.5, §F.6, §G.2, §H.1, §J); three provisionally-accepted items refuted by measurement and recorded as withdrawn (§10C).
 **Revision 3:** amended 2026-07-23 following Supervisor verification (APPROVE WITH AMENDMENTS). Defects A1–A5 corrected, gaps G1–G8 answered or assigned, three implementability blockers and three fake-step loopholes closed. **§0.1 is new and is the root fix**: depth, population and tolerance are now defined once and every depth-dependent figure is re-derived against them. Two Supervisor findings are disputed with measurement rather than absorbed — see §F.1.
 **Revision 9:** amended 2026-07-24 with five corrections, landing before pipeline consolidation. Items 1, 2 and 4 documentation; **items 3 and 5 design**. §C.1 records that `CoFire` is **not consumed by the objective at all** (neither pooled nor per-direction) — no numerical code change, one naming/signature fix specified to close a latent hazard. §I.1 specifies **equal partition** of the post-floor remainder. §I.3's pass criterion is **restated as a ratio to each split's own measured null**, with a derived minimum denominator of **80 qualifying triples (hard floor 40)** — a code change the Developer applies at consolidation. Items 1 and 2 confirmed already applied at Revision 8; the build was correct throughout and the spec now matches it.
-**Revision 8:** amended 2026-07-23 with three corrections raised by the Developer and confirmed by the Auditor (documentation only; Build 2 is ratified at `master.py 296d612b7e9f` and Build 3 is authorised — these do not gate it). **§C.2's exclusion-bias direction is corrected to ANTI-CONSERVATIVE** and its root cause traced one level deeper than the notice reached — to the series definition, not only the k<3 degeneracy. **§C.2's independence annotation is corrected** (`lambda_L = 1.0` is perfect tail dependence; independence reads `tau`) and every λ figure re-derived on the corrected series, moving the headline lift from 3.548x to **1.69x**. **§C.1's `CoFire` gains the within-direction treatment `DepthYield` already had**, with cross-direction zero recorded as a property of the D2D alternating-bias design rather than as a market finding. Two provenance items recorded in §10C.
+**Revision 8:** amended 2026-07-23 with three corrections raised by the Developer and confirmed by the Auditor (documentation only; Build 2 is ratified at `master.py aa08a4cceaad` and Build 3 is authorised — these do not gate it). **§C.2's exclusion-bias direction is corrected to ANTI-CONSERVATIVE** and its root cause traced one level deeper than the notice reached — to the series definition, not only the k<3 degeneracy. **§C.2's independence annotation is corrected** (`lambda_L = 1.0` is perfect tail dependence; independence reads `tau`) and every λ figure re-derived on the corrected series, moving the headline lift from 3.548x to **1.69x**. **§C.1's `CoFire` gains the within-direction treatment `DepthYield` already had**, with cross-direction zero recorded as a property of the D2D alternating-bias design rather than as a market finding. Two provenance items recorded in §10C.
 **Revision 7:** amended 2026-07-23, Supervisor amendment C (documentation only, non-blocking; the Developer is building from `2b7f36d407f6` and this does not gate that). §D.0.1's reconciliation block restated against the current doctrine `fae943d40231` (305 lines): the recorded divergence **no longer exists** — the doctrine now states the six-cell robustness range this spec's figures sit inside — and the returned observation on unlabelled parameters is **closed, actioned in the doctrine as M3**. The doctrine's ≥15-trade filter claim is independently verified here and the standing "the filter is part of the finding" construction is adopted document-wide.
 **Revision 6:** amended 2026-07-23 following Supervisor CONFIRM. `DOT_signal_discovery_mantra.md` is now **binding doctrine** over this document; §D.0.1 records the reconciliation. §F.3.1 gains the N=5 tolerance table and withdraws the ungeneralised monotonic-decline claim. The MARKET/BOOK labelling construction is extended to five further sections. No figure changed except by addition.
 **Revision 5:** amended 2026-07-23 with four measured findings arising from an operator challenge to circular reasoning — market properties had been inferred *through* BOOK-50, which is the output of the funnel being replaced. §D.0.1 establishes a price-only **directional coverage baseline (50/50)** and **retires the upward-drift assumption** previously recorded in §C.3.1a. §D.0.2 separates reach from depth on the short side. §F.3.1 records the cluster arc and rules a normalised-position taper **unimplementable**. §C.3 gains the measured premise for weighting depth over standalone signal quality. Every finding is labelled MARKET (price-only) or BOOK. Three reproduction discrepancies are reported rather than smoothed — see §D.0.2 and §F.3.1.
@@ -21,7 +21,7 @@
 |---|---|
 | repo | `github.com/datlooms/DOT` @ `852c7e0`, 140 files |
 | `engine/dots_thresholds.py` | `518862bf19fb` (expected — MATCH) |
-| `master.py` | `8ccff8d0df91` (expected — MATCH) |
+| `master.py` | `aa08a4cceaad` (expected — MATCH) |
 | dataset | `DOT_stitched172_jan19_jul21_part01..09.csv` → 177,251 × 172, 2026.01.19 15:49 → 2026.07.21 17:09, strictly increasing, 0 dup, 0 NaN |
 | S8B output | `cluster_participation_profile.csv`, 2,988 × 69 |
 | harness sanity | 3,057 trades / net $98,205 on the full stitched series |
@@ -260,7 +260,7 @@ Per-stage audit. `feeds selection today` is a factual statement about the curren
 
 ### B.1 — `wf.FOLDS` and `OOS_MONTHS` are hardcoded and cannot be used as-is
 
-**`wf.py` is SACRED and byte-locked (`793e6e5f8d9a`). `FOLDS` is hardcoded to the Jan–Jun months. It cannot be edited, so the SELECTION LAYER must handle it explicitly — this is specified, not left to the build.**
+**`wf.py` is SACRED and byte-locked (`4ac888f3af9d`). `FOLDS` is hardcoded to the Jan–Jun months. It cannot be edited, so the SELECTION LAYER must handle it explicitly — this is specified, not left to the build.**
 
 Two concrete failures:
 1. **On the full stitched series**, 300 July trades (9.8% of the book) are scored against a fold set that does not contain July. A signal trading only in July scores `folds_plus = 0` and is culled for a reason that has nothing to do with its quality.
@@ -1008,7 +1008,7 @@ This also **refutes** the related concern that concurrence measures duplicated i
 
 ### F.5 — Depth-dependent position cap — SPECIFIED OPTION, SACRED-TOUCHING
 
-**AUTHORISATION REQUIRED BEFORE BUILD.** `MAX_POSITIONS` lives in `portfolio_simulation_engine.py`, which is **byte-locked** (`bb498eb13ce3`). Any behaviour-changing edit without documented human authorisation is INVALID regardless of merit. This section specifies the option; it does not authorise it.
+**AUTHORISATION REQUIRED BEFORE BUILD.** `MAX_POSITIONS` lives in `portfolio_simulation_engine.py`, which is **byte-locked** (`7f66273011a2`). Any behaviour-changing edit without documented human authorisation is INVALID regardless of merit. This section specifies the option; it does not authorise it.
 
 §F.2 framed the choice as filter-or-size and measured that filtering costs **48–70% of book net at N=5** ($77,239 → $40,429 at position≥3 → $23,102 at position≥5; §F.1). A depth-conditional **cap** is a third mechanism: take every first entry, but limit how much shallow risk can accumulate concurrently.
 
@@ -1405,7 +1405,7 @@ Three items were proposed during external review, provisionally accepted, and th
 
 ## 11. SCRIPTS THAT CHANGE
 
-Sacred five stay **byte-locked**: `dots_thresholds.py` `518862bf19fb`, `wf.py` `793e6e5f8d9a`, `core.py` `6530e2508b17`, `portfolio_simulation_engine.py` `bb498eb13ce3`, `conviction.py` `27af7acee824`. `verify_sacred()` must still abort on drift. `build_condition_pool` (S.10) is not modified (§G.1).
+Sacred five stay **byte-locked**: `dots_thresholds.py` `518862bf19fb`, `wf.py` `4ac888f3af9d`, `core.py` `6530e2508b17`, `portfolio_simulation_engine.py` `7f66273011a2`, `conviction.py` `27af7acee824`. `verify_sacred()` must still abort on drift. `build_condition_pool` (S.10) is not modified (§G.1).
 
 | script | change |
 |---|---|

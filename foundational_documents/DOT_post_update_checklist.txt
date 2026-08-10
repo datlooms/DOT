@@ -262,7 +262,7 @@
 [ ] L.13 DAY-OF-WEEK INVARIANT: Sun + Fri = one full trading day under the CME
          week (34,570 against a Mon-Thu mean of 35,670). Flat Mon-Fri is NOT the
          invariant and must not be "fixed" toward.
-[ ] L.14 portfolio_simulation_engine.py is STILL bb498eb13ce3. Its L148 Friday gate
+[ ] L.14 portfolio_simulation_engine.py is STILL 7f66273011a2. Its L148 Friday gate
          needs NO change: on corrected data it blocks 115 bars at true 16:45-16:49.
          DO NOT TOUCH THAT FILE.
 [ ] L.15 Harness re-baselined and the new figures recorded: stitched 177,251 ->
