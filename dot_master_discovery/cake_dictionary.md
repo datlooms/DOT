@@ -760,6 +760,80 @@ at 1,000 signals 97.1% of bars reach depth ≥3.
 
 ---
 
+# 4H. THE ADAPTIVE CONVERGENCE ENGINE — THE OPEN ARCHITECTURAL QUESTION
+
+**Everything measured in this project so far rests on FROZEN COMBINATIONS. There is an
+alternative architecture that has never been properly tested, and the operator's terrain work
+may have removed the reason it failed the first time.**
+
+## THE TWO ARCHITECTURES
+
+    FROZEN (current)     search C(239,3) -> ratify the triple as a SIGNAL
+                         -> count how many frozen signals co-fire on a bar
+                         the COMBINATION is the unit of discovery
+
+    ADAPTIVE (proposed)  license each CONDITION per direction against the terrain
+                         -> count how many LICENSED conditions agree on a bar
+                         -> any bar reaching k+ agreement IS the signal
+                         the CONDITION is the unit; clusters form themselves
+
+**No `signal_def`. No book. No selection step at all.** The vocabulary becomes the system and
+depth emerges from whatever aligns.
+
+## WHY IT FAILED BEFORE
+
+F10 was built as a density-band family (`count >= k`, k = 2..5) and **was FUSED INTO F0 rather
+than run** — see section 4G. The recorded reason raw density does not work:
+
+> *"~24 features are always at extremes on any bar (120 thresholds x 20% = 24 expected). So raw
+> density doesn't work."*
+
+Confirmed independently: **at 1,000 signals, 97.1% of bars reach depth >= 3.** Raw density over
+the whole vocabulary is a volatility proxy, not a signal.
+
+## WHY THAT REASON MAY NO LONGER HOLD
+
+**The prior attempt had no filter. Now one exists.** The terrain map did not exist when F10 was
+designed. There are now **2,298 reachable episodes with directional labels — 1,143 UP, 1,155
+DOWN** — so for the first time each condition can be asked: *does this fire disproportionately
+in UP terrain, in DOWN terrain, or neither?*
+
+**Filter the vocabulary FIRST on directional licence, and density is measured over a smaller,
+directionally-coherent set. Whether that set is small enough to stop saturating is the whole
+question — and it is now answerable.**
+
+## THE TEST THAT DECIDES IT
+
+**Run the saturation test before anything else.** With the licensed set only, report the share
+of bars reaching k+ simultaneous agreement, per direction, for k = 2..10. **If k=3 still occurs
+on a large share of bars, the filter has not solved the problem and the architecture fails again
+for the same reason.** That is the fastest possible kill and it costs almost nothing to run.
+
+## WHAT WOULD MAKE IT WORTH ADOPTING — NOT NET
+
+1. **COVERAGE.** Option B touches 4.11% UP / 4.16% DOWN against a catalogue ceiling of 9.01% /
+   7.71%. **An adaptive engine is not bound by which combinations happened to be searched.**
+   Coverage is where the frozen architecture is weakest and this is the axis to judge it on.
+2. **THE DEPTH LADDER SURVIVING.** Option B shows all 44 losses at depth 1-3, 739 trades at
+   depth 4+ with zero losses, average trade climbing $37 -> $97. **If licensed-condition depth
+   reproduces that shape, the gradient belongs to AGREEMENT rather than to frozen selection** —
+   a finding well beyond this project.
+3. **NO SELECTION STEP.** A licensed vocabulary needs no book, no decorrelation, no argmax. It
+   removes the entire class of failure that produced BOOK-50's collapse: **a selection process
+   that was never validated.**
+
+## THE TRAP THAT WOULD PRODUCE A SPECTACULAR AND WORTHLESS RESULT
+
+**`terrain_episodes.csv` is built on the FULL SAMPLE.** A licence derived from full-sample
+episode labels and then used to gate entries is **look-ahead**. A causal licence must be derived
+on a training segment only and applied forward. **Any adaptive result that does not state how
+this was avoided should be discarded on sight.**
+
+**This is Phase 8 of the Quant brief.** Either answer is worth having: the first changes the
+architecture, the second closes a question open since F10 was designed and never run.
+
+---
+
 # 5. THE STANDING RULINGS
 
 **The matched-null tolerance band is ±35% and MUST NEVER BE WIDENED.** If a family blanks its

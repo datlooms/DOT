@@ -851,6 +851,135 @@ measured cost of balance against concentration, and the specification for a pric
 
 ---
 
+# PHASE 8 — THE ADAPTIVE CONVERGENCE ENGINE
+
+**THIS IS AN ARCHITECTURAL ALTERNATIVE, NOT A REFINEMENT. It is the operator's own design and it
+may replace the frozen-triple architecture entirely. Treat it as the most consequential open
+question in the project.**
+
+## 8.1 — THE PROPOSITION
+
+Everything in this project so far freezes a combination. F0 searches `A + B + C`, ratifies the
+triple as a SIGNAL, and then measures how many of those frozen signals co-fire on a bar. The
+combination is the unit of discovery.
+
+**The alternative inverts it. Do not discover signals. Discover which CONDITIONS are permitted
+to speak in each direction, then let any stack of permitted conditions form its own cluster.**
+
+    CURRENT      search C(239,3) -> freeze the triple -> count frozen signals per bar
+    PROPOSED     license each CONDITION per direction -> count LICENSED conditions per bar
+                 -> any bar where k+ licensed conditions agree IS the signal
+
+No frozen combinations. No `signal_def`. The vocabulary itself becomes the book, and depth
+emerges from whatever happens to align on a bar.
+
+## 8.2 — WHY IT FAILED BEFORE, AND WHY THAT REASON MAY NO LONGER HOLD
+
+This was attempted. F10 was built as a density-band family (`count >= k`, k = 2..5) and was
+FUSED INTO F0 rather than run — see `cake_dictionary.md` section 4G. The recorded reason it
+does not work naively:
+
+> *"~24 features are always at extremes on any bar (120 thresholds x 20% = 24 expected). So raw
+> density doesn't work."*
+
+**Raw density over the whole vocabulary is a volatility proxy, not a signal.** Confirmed
+independently: at 1,000 signals, 97.1% of bars reach depth >= 3. Density saturates.
+
+**THE OPERATOR'S INSIGHT IS THAT THE PRIOR ATTEMPT HAD NO FILTER, AND NOW ONE EXISTS.** The
+terrain map did not exist when F10 was designed. There are now 2,298 reachable episodes with
+directional labels — 1,143 UP, 1,155 DOWN — so for the first time it is possible to ask of each
+condition: **does this fire disproportionately in UP terrain, in DOWN terrain, or neither?**
+
+Filter the vocabulary FIRST on directional licence, and density is measured over a smaller,
+directionally-coherent set. **Whether that is small enough to stop saturating is the whole
+question, and it is answerable.**
+
+## 8.3 — WHAT TO MEASURE
+
+**STEP 1 — LICENCE EVERY CONDITION AGAINST THE TERRAIN.** For each of the 249 conditions in the
+pool, using `terrain_episodes.csv` and `regime_labels.csv`:
+
+    fires_in_UP_episodes / total_fires        directional share
+    fires_in_DOWN_episodes / total_fires
+    fires_outside_any_episode / total_fires
+    lift vs the base rate of UP/DOWN terrain
+
+**Report the full distribution before applying any threshold.** If most conditions sit near
+50/50, the licence carries no information and the phase ends there — say so.
+
+**STEP 2 — PRICE THE LICENCE.** A condition firing 51% in UP terrain is not licensed, it is
+noise. Use the project's own random-subset method (see `cake_dictionary.md` 4D): draw random
+subsets of the same size from the same episode population and read where the candidate lands.
+**A licence must clear a stated percentile, be OOS-positive, and have a stated mechanism** — the
+same five gates the D2D conditioner sweep used.
+
+**STEP 3 — THE SATURATION TEST, AND THIS IS THE ONE THAT DECIDES IT.** With the licensed set
+only, report the base rate of k+ simultaneous agreement, per direction, for k = 2..10:
+
+    licensed conditions per direction:  N_long, N_short
+    bars where k+ licensed LONG conditions are simultaneously true, as a share of all bars
+    same for SHORT
+
+**If k=3 still occurs on a large share of bars, the filter has not solved the saturation problem
+and the architecture fails again for the same reason.** Say so plainly and stop. If the licensed
+set is small enough that k=3 is genuinely rare, proceed.
+
+**STEP 4 — SCORE IT.** Treat every bar reaching k+ licensed agreement as an entry, gated by D2D
+as usual, and run it through `portfolio_simulation_engine.py` with the full conviction stack and
+the jar. Produce the same depth ladder every other book in this project has:
+
+    k        trades    WR    PF    net    worst day    wins / losses    avg trade
+
+**STEP 5 — COMPARE IT LIKE FOR LIKE.** Against Option B's ladder (`cake_dictionary.md` §5C):
+same frame, same engine, same conviction, same jar, 1 lot. The comparison is not "does it make
+money" — it is **does an adaptive engine reach the same payoff structure as a frozen-triple one,
+and does it reach terrain the frozen book cannot?**
+
+## 8.4 — WHAT WOULD MAKE THIS WORTH ADOPTING
+
+**Not net.** Three things, in order:
+
+1. **COVERAGE.** Option B touches 4.11% of reachable UP terrain and 4.16% of DOWN. The catalogue
+   ceiling is 9.01% / 7.71%. **An adaptive engine is not bound by which combinations happened to
+   be searched**, so if it reaches materially more terrain at comparable quality, that is the
+   argument for it. Coverage is the axis where the frozen architecture is weakest.
+2. **THE DEPTH LADDER SURVIVING.** Option B shows all 44 losses at depth 1-3 and 739 trades at
+   depth 4+ with zero losses, average trade climbing $37 -> $97. **If licensed-condition depth
+   reproduces that shape, the gradient is a property of AGREEMENT and not of frozen signal
+   selection** — which would be a finding well beyond this project.
+3. **NO SELECTION STEP.** A licensed vocabulary needs no book, no decorrelation, no argmax. It
+   would remove the entire class of failure that produced BOOK-50's collapse — the selection
+   process that was never validated.
+
+## 8.5 — WHAT WOULD KILL IT, AND SAY SO EARLY IF IT DOES
+
+- **Saturation survives the filter** (step 3). The most likely outcome and the fastest to test.
+  Run step 3 BEFORE step 4 and stop there if it fails.
+- **Licences do not price.** If no condition clears the random-subset bar, there is no licensed
+  set to work with.
+- **The ladder is flat.** If k+ agreement among licensed conditions shows no PF gradient, then
+  the gradient really does belong to the frozen combination and the frozen architecture is
+  vindicated.
+- **The terrain labels leak.** `terrain_episodes.csv` is built on the FULL sample. A licence
+  derived from full-sample episode labels and then used to gate entries is look-ahead. **State
+  how you avoided that** — a causal licence must be derived on a training segment only.
+
+**That last point is not optional. It is the single most likely way this produces a spectacular
+and worthless result.**
+
+## 8.6 — DELIVER
+
+The licence distribution across all 249 conditions. The priced licensed set per direction. The
+saturation table for k = 2..10. If and only if saturation is beaten: the scored depth ladder and
+the terrain coverage, compared like-for-like against Option B.
+
+**And a plain verdict: does the adaptive engine reach terrain the frozen book cannot, at
+comparable quality — or does it saturate again?** Either answer is worth having. The first
+changes the architecture; the second closes a question that has been open since F10 was designed
+and never run.
+
+---
+
 ## WHAT YOU DO NOT DO
 
 - **You do not select the book.** Item 15: the catalogue is emitted from VALID, never from an
