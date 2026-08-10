@@ -288,6 +288,19 @@ def s10_collect(out, data_dir, input_sha):
          added later is collected without editing this function.
     COPY ONLY. Nothing outside data_for_analysis is created, modified or removed.
     """
+    try:
+        import sweep_artifacts as _sw
+        _rep = _sw.sweep(out)
+        _sp = os.path.join(out, 'sweep_report.csv')
+        _rep.to_csv(_sp, index=False, lineterminator='\n')
+        _esc = _rep[_rep['finding'].isin(('CONSTANT-ESCALATED', 'SENTINEL', 'SCALE', 'NO-BASIS',
+                                          'MISSING-REQUIRED', 'UNREADABLE'))]
+        print(f'  sweep_report.csv: {_rep["file"].nunique()} artifacts audited, '
+              f'{len(_esc)} escalated finding(s). THE PROVENANCE RECORD FOR EVERY ARTIFACT IN THE '
+              f'TREE, emitted as a file rather than printed to a terminal that closes - six '
+              f'inert-artifact defects reached the operator before this existed.')
+    except Exception as _swe:
+        print(f'  sweep_report.csv NOT written: {type(_swe).__name__}: {str(_swe)[:80]}')
     dst = os.path.join(out, 'data_for_analysis')
     if os.path.isdir(dst):
         for f in os.listdir(dst):
@@ -1964,20 +1977,32 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
             _p.extend(_pnl_by_bar.get(_key, []))
         _pa = np.asarray(_p, dtype=float)
         _loss = -_pa[_pa < 0].sum()
-        _pf = (float('inf') if _loss <= 0 else round(float(_pa[_pa > 0].sum() / _loss), 4))
+        _pf = (cat.PF_UNDEFINED if _loss <= 0 else round(float(_pa[_pa > 0].sum() / _loss), 4))
+        _mo = cat.margin_of_safety(_pa)
         _cohort_rows.append({
             'direction': 'LONG' if _d == 1 else 'SHORT', 'depth': _lab,
             'family_composition': _comp, 'purity': _pure, 'bars': len(_bars),
             'trades': int(_pa.size),
             'WR': round(float((_pa > 0).mean() * 100), 2) if _pa.size else '',
-            'PF': ('inf' if _pf == float('inf') else _pf) if _pa.size else '',
+            'PF': (cat.blank_sentinel_ratio(_pf) if _pa.size else ''),
             'net': round(float(_pa.sum()), 2) if _pa.size else 0.0,
             'avg_trade': round(float(_pa.mean()), 2) if _pa.size else '',
             'worst_day_usd': '',
             'sufficient': bool(_pa.size >= 10),
-            'population': 'POOL', 'basis': 'trades occurring ON THOSE BARS, distinct-signal depth'})
+            'population': 'POOL', 'basis': 'trades occurring ON THOSE BARS, distinct-signal depth',
+            'cluster_basis': 'basis 1 (executed) - eligible-bar jar, the basis the run executed on. '
+                             'A depth-5+ population is 128 clusters on basis 1 and 1,958 on basis 3, '
+                             'a factor of 15, so the figure is unreadable without this.',
+            **_mo})
     _write_with_header(os.path.join(cat_dir, 'cohort_scored.csv'), pd.DataFrame(_cohort_rows), [
         'DOT phase 4 - same-bar cohorts SCORED, not merely counted',
+        'POPULATION: POOL - every VALID catalogue signal, NOT a book. At LONG depth 5+ that is '
+        'hundreds of thousands of trades against a real book\'s ~3,000, so THE NETS ARE NOT BOOK '
+        'NETS and the mixed-versus-single ordering is non-monotone across depth as a consequence. '
+        'THE BOOK-SCALE ANSWER IS book_margin_by_tier.csv and book_gated_by_tier.csv, emitted by '
+        'score_book.py against an assembled book, where depth is real and the nets are the book\'s.',
+        'Mixed-versus-single-family at depth is the strongest available argument for or against a '
+        'multi-family book, and it must be read at BOOK scale to be made.',
         f'dataset_rows={attest["rows"]}',
         'same_bar_cohort.csv answers "do families co-fire". This answers "does a MIXED cohort KEEP '
         'THE EDGE" - the question that decides whether F1 is fuel or noise beside F0.',
@@ -1992,6 +2017,9 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
           f'({_ins} marked insufficient, <10 trades, retained)')
     _write_with_header(os.path.join(cat_dir, 'same_bar_cohort.csv'), cohort, [
         'DOT item 11 - family composition of each bar as a CURVE OVER DEPTH - counts only',
+        'CLUSTER BASIS: basis 1 (executed) - eligible-bar jar. A depth-5+ population is 128 '
+        'clusters on basis 1, 346 on basis 2 (pre-jar) and 1,958 on basis 3 (price-anchored) - a '
+        'factor of 15 - so any depth figure is unreadable without its basis named.',
         f'dataset_rows={attest["rows"]}',
         'Depth is DISTINCT SIGNALS on the same bar, per direction, never pooled (item 4). No P&L: '
         'depth-3 has no discriminating power at pool scale and P&L needs a book.'])

@@ -191,6 +191,11 @@ def matched_null_rate(null_frames, bar_day):
     return len(passed) / float(len(null_frames)), sorted(passed)
 
 
+def _pf_pct(arr, q):
+    """A percentile over a PF vector, undefined already excluded by the caller."""
+    return round(float(np.percentile(arr, q)), 4) if len(arr) else ''
+
+
 def pricing_columns(pf_value, n_trials, null_rate, null_pfs):
     """Appendix A's eight columns. EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF does the work."""
     arr0 = np.asarray([float(x) for x in null_pfs if not pf_is_undefined(x)], dtype=float)
@@ -204,9 +209,9 @@ def pricing_columns(pf_value, n_trials, null_rate, null_pfs):
         'n_trials_family': int(n_trials),
         'null_valid_rate_family': round(float(null_rate), 6),
         'expected_valid_by_chance_family': round(n_trials * float(null_rate), 2),
-        'pf_null_p50_family': round(float(np.percentile(arr, 50)), 4) if len(arr) else '',
-        'pf_null_p90_family': round(float(np.percentile(arr, 90)), 4) if len(arr) else '',
-        'pf_null_p99_family': round(float(np.percentile(arr, 99)), 4) if len(arr) else '',
+        'pf_null_p50_family': _pf_pct(arr, 50),
+        'pf_null_p90_family': _pf_pct(arr, 90),
+        'pf_null_p99_family': _pf_pct(arr, 99),
         'pf_null_exceedance_pct': round(exceed, 6) if exceed == exceed else '',
         'pf_null_undefined_excluded': int(n_excluded),
         'EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF': (round(n_trials * exceed, 3)

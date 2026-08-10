@@ -455,7 +455,13 @@ def final_report(survivors):
               f"{s['feat_3']:<22}{s['thresh_3']:>4} | {s['direction']:<5} | "
               f"Tr {s['trades']:>4} | PF {s['pf']:>7.2f} | WR {s['wr']:>5.1f}")
     pfs = [s['pf'] for s in survivors]
-    print(f"\nPF range: {min(pfs):.2f} - {max(pfs):.2f} | Median: {np.median(pfs):.2f}")
+    import catalogue as _cat9
+    _mn, _n1, _x1 = _cat9.pf_aggregate(pfs, 'min')
+    _mx, _n2, _x2 = _cat9.pf_aggregate(pfs, 'max')
+    _md, _n3, _x3 = _cat9.pf_aggregate(pfs, 'median')
+    print(f"\nPF range: {_mn} - {_mx} | Median: {_md} "
+          f"| {_x3} undefined EXCLUDED of {len(pfs)} (a single NaN would otherwise return NaN "
+          f"for the whole statistic; a 999 previously skewed it)")
 
 # ═══════════════════════════════════════════════════════════════
 #  CONVERGENCE DENSITY — fused F10 dimension of the F0 run

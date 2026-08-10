@@ -30,13 +30,27 @@ import numpy as np
 import pandas as pd
 
 EXPECTED_BLANKED = {
+    'wf_book_arm_entities.csv': {'test_PF': 21996},
+    'results_F0_triple_convergence_and_d2ddir.csv': {'agg_pf': 5688, 'min_fold_pf': 5688},
+    'discovery_master_part_2.csv': {'agg_pf': 3330, 'min_fold_pf': 3330},
+    'discovery_master_part_1.csv': {'agg_pf': 2458, 'min_fold_pf': 2458},
+    'concurrence_outcome_map.csv': {'agg_pf': 86, 'fold1_pf': 156, 'fold2_pf': 281, 'fold3_pf': 123, 'fold4_pf': 76, 'fold5_pf': 176, 'fold6_pf': 251, 'min_fold_pf': 86},
+    'concurrence_outcome_map_secondary.csv': {'agg_pf': 81, 'fold1_pf': 153, 'fold2_pf': 271, 'fold3_pf': 117, 'fold4_pf': 80, 'fold5_pf': 177, 'fold6_pf': 261, 'min_fold_pf': 81},
+    'concurrence_category_depth.csv': {'agg_pf': 133, 'fold2_pf': 193, 'fold3_pf': 157, 'fold4_pf': 189, 'fold5_pf': 214, 'fold6_pf': 149, 'min_fold_pf': 133},
+    'concurrence_regimes.csv': {'agg_pf': 37, 'fold2_pf': 57, 'fold3_pf': 35, 'fold4_pf': 36, 'fold5_pf': 40, 'fold6_pf': 65, 'min_fold_pf': 37},
+    'wf_null_arm_entities.csv': {'test_PF': 57, 'train_PF': 150},
+    'results_F13_single_variable_extremes.csv': {'agg_pf': 137},
+    'results_F1_sequential_temporal_part_1.csv': {'agg_pf': 57, 'min_fold_pf': 57},
     'candidates.csv': {'agg_pf': 50, 'min_fold_pf': 50},
-    'concurrence_category_depth.csv': {'*': 886},
-    'cluster_participation_profile.csv': {'*': 83},
-    'catalogue_F0.csv': {'agg_pf': 7},
-    'catalogue_F1.csv': {'agg_pf': 18},
+    'results_F1_sequential_temporal_part_2.csv': {'agg_pf': 42, 'min_fold_pf': 42},
+    'cluster_participation_profile.csv': {'non_pf_3': 7, 'non_pf_5': 34, 'part_pf_3': 20, 'part_pf_5': 22},
     'cohort_scored.csv': {'PF': 22},
+    'catalogue_F1.csv': {'agg_pf': 18},
+    'concurrence_null_baseline.csv': {'null_agg_pf_max': 4, 'null_agg_pf_p95': 4, 'observed_agg_pf': 1},
+    'catalogue_F0.csv': {'agg_pf': 7},
+    'results_F9_session_temporal.csv': {'agg_pf': 1, 'min_fold_pf': 1},
 }
+EXPECTED_BLANKED_TOTAL = 49662
 SENTINELS = (999.0, 999)
 
 
@@ -133,7 +147,9 @@ def compare(before, after):
     total_before = sum(bc.values())
     total_after = sum(ac.values())
     notes.append(f'sentinel cells: {total_before} -> {total_after} '
-                 f'(cleared {total_before - total_after})')
+                 f'(cleared {total_before - total_after}; EXPECTED {EXPECTED_BLANKED_TOTAL} '
+                 f'from a FULL census of all artifacts - an earlier sampled estimate said ~1,116 '
+                 f'and was 44x low, which would have read a successful change as a failure)')
     for f, exp in EXPECTED_BLANKED.items():
         want = sum(exp.values())
         got = bc.get(f, 0) - ac.get(f, 0)
