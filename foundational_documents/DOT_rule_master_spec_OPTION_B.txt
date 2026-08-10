@@ -539,6 +539,71 @@ conviction stack and the 6-lot jar active.
           the incumbent's own signal earned its place in a fused book.
 
 ================================================================================
+ 8B. FOUR CORRECTIONS FROM THE QUANT'S PHASES 1-3
+================================================================================
+
+ 8B.1  THE GATED ARM IN THE CATALOGUE IS INERT — 39,260 OF 39,260 ROWS.
+       Every gated_* column equals its ungated counterpart on every row of every family, and
+       gated_delta_net is exactly 0 everywhere. NO GATE WAS EVER APPLIED. The gated arm is a
+       duplicate under different column names and no gate spec appears in any catalogue header.
+
+       THIS DOES NOT AFFECT OPTION B'S FIGURES. Option B's gates were applied by the Supervisor
+       to the SIMULATED TRADE TABLE, not read from the catalogue's gated columns. Every number in
+       sections 1, 5B, 5C and 5D stands.
+
+       WHAT IT DOES AFFECT: any claim that a signal's gate response can be read per-signal from
+       the catalogue. It cannot. And there is a SPEC problem before a build one — the gate is
+       indexed by DEPTH TIER and a signal scored ALONE has no depth, so a per-signal gated column
+       is well defined only for the SOLO tier. Nine of ten cells are undefined per-signal.
+
+ 8B.2  EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF IS A FLOOR AT ZERO AND CANNOT ORDER THE SHORTLIST.
+
+           F0 rows with E < 1                     286
+           of those, E == 0.0 EXACTLY             286
+           smallest NON-ZERO E in the family      8.9320   <- nothing between
+           agg_pf span within the E==0 set        5.53 to 48.24
+
+       Every signal that beat the null's MAXIMUM PF prices identically at zero. At n_null median
+       470 the resolution limit is 1/470 = 0.0021. The selection procedure in section 4 ranks on
+       EXPECTED_ROWS then folds_plus then agg_pf — THE FIRST KEY IS FLAT ACROSS THE TOP 286, so
+       the ordering that built this book was effectively driven by the SECOND AND THIRD keys
+       within that set. State that when reproducing it. A larger null (K≈5,000) would restore
+       resolution.
+
+ 8B.3  THE SHORT-SIDE ASYMMETRY IS F0-SPECIFIC.
+           F0 LONG min_fold_pf median 0.785 vs SHORT 0.517   <- asymmetric
+           F1 LONG 0.486 vs SHORT 0.489 on 18,505 / 18,753   <- SYMMETRIC, not noise
+           F9 SHORT 0.127 vs LONG 0.423                      <- INVERTED
+       Thresholds must be per-direction PER FAMILY, not per-direction globally.
+
+ 8B.4  SECTION 8.3'S COVERAGE FIGURES ARE UNGATED SIGNAL-SET REACH, NOT REALISED BOOK REACH.
+       touched_episode_ids is a per-signal column counted from ALL of a signal's fires. Option B's
+       gates remove ~71% of its trades, so the coverage of trades ACTUALLY TAKEN is far lower.
+       Measured on executed gated trades:
+
+           N     covUP ungated -> gated     covDOWN ungated -> gated
+           50       2.89% -> 0.79%             4.85% -> 0.69%
+           100      5.34% -> 1.14%             6.32% -> 1.30%
+           200      8.49% -> 1.84%             8.57% -> 1.99%
+
+       A GATED 200-SIGNAL BOOK REACHES LESS TERRAIN THAN AN UNGATED 20-SIGNAL ONE. Option B's
+       stated 4.11% / 4.16% is its SIGNAL SET's reach; its REALISED reach is nearer 1.1% / 1.3%.
+       Gating buys quality by destroying coverage, and that trade was invisible until it was
+       measured on executed trades rather than on the catalogue column.
+
+ 8B.5  AND ONE PHASE 1 CONCLUSION IS REVERSED. A Supervisor frontier showed OOS PF FLAT at
+       3.34-4.00 across a ten-fold size range and read it as robustness. IT WAS A FLOOR. Gating
+       lifts OOS PF 1.5x to 4x and the GATED curve DECLINES — PF 12.23 -> 5.33 across the same
+       range. THE ANCESTRAL PRIOR IS NOT REFUTED; IT WAS MASKED BY MEASURING UNGATED BOOKS.
+       Also: the payoff-parity break is NOT at N=50. With 55/60/65 filled in it is a plateau at
+       w/l 0.70-0.75 from 50 to 70; parity is lost BEFORE 50 and the cliff is 70 -> 85 -> 100.
+
+       METHOD CAVEAT: the 1,818-signal field was scored in BATCHES OF 120 and the 6-lot jar admits
+       by contention, so each signal's recovered daily P&L depends on its batch-mates. The field
+       is not a property of the signals alone; two independent builds differ 4-10% on net. Treat
+       frontier SHAPES as sound and LEVELS as indicative.
+
+================================================================================
  9. WHAT IS NOT PROVEN
 ================================================================================
 

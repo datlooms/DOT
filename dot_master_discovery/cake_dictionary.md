@@ -834,6 +834,89 @@ architecture, the second closes a question open since F10 was designed and never
 
 ---
 
+### FOUR CORRECTIONS FROM THE QUANT'S PHASES 1-3 — READ THESE BEFORE ANY OF THE FIGURES ABOVE
+
+**1. THE GATED ARM IS INERT. 39,260 OF 39,260 ROWS.** Every `gated_*` column equals its ungated
+counterpart on every row of every family; `gated_delta_net` is exactly 0 everywhere. **No gate was
+ever applied** — the gated arm is a duplicate under different column names, and no gate spec
+appears in any catalogue header.
+
+    family   VALID    gated_trades==trades   gated_delta_net==0
+    F0       1,818          1,818                  1,818
+    F1      37,258         37,258                 37,258
+    F9/F3/F11/F2/F4    185            185                    185
+    TOTAL   39,260         39,260                 39,260
+
+**Any instruction to "report the gate's effect per family from the gated arm columns" is void.**
+There is no gate effect in those columns. This matters more than it looks: the gates carry MOST of
+the performance (applying Option B's spec to a 50-signal book multiplies PF by 2.77x, while adding
+70 more signals buys far less), so the most important lever in the system has no per-signal
+measurement at all.
+
+**And there is a spec problem before there is a build problem:** the gate is INDEXED BY DEPTH TIER
+and a signal scored ALONE has no depth. A per-signal gated column is only well defined for the
+SOLO tier. Nine of the ten cells are undefined per-signal.
+
+**2. `EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF` CANNOT RANK — IT IS A FLOOR AT ZERO.**
+
+    F0 rows with E < 1                      286
+    of those, E == 0.0 EXACTLY              286
+    pf_null_exceedance_pct == 0 exactly     286
+    smallest NON-ZERO E in the family       8.9320    <- nothing between 0 and 8.93
+    agg_pf span within the E==0 set         5.53 to 48.24
+
+Every signal that beat the null's MAXIMUM PF prices identically at zero. At n_null median 470 the
+resolution limit is 1/470 = 0.0021, so a PF-48 signal and a PF-5.5 signal are indistinguishable.
+**"Rank by EXPECTED_ROWS ascending" IDENTIFIES the 286 and then goes flat. It selects; it cannot
+order.** Ranking within the shortlist needs a larger null (K≈5,000) or a second key.
+
+**3. THE SHORT-SIDE ASYMMETRY IS F0-SPECIFIC, NOT PROJECT-WIDE.**
+
+    family  dir    n        agg_pf med   min_fold_pf med
+    F0      LONG   1,445      3.552          0.785
+    F0      SHORT    373      2.888          0.517      <- the asymmetry
+    F1      LONG  18,505      2.349          0.486
+    F1      SHORT 18,753      2.292          0.489      <- SYMMETRIC, and not sample noise
+    F9      SHORT     74      2.187          0.127      <- INVERTED
+
+**So thresholds must be per-direction PER FAMILY, not per-direction globally.** The blanket claim
+that one absolute threshold imposes the long side's standard on the short side is true for F0 and
+false for F1.
+
+**4. COVERAGE FIGURES QUOTED FROM `touched_episode_ids` ARE UNGATED SIGNAL-SET REACH, NOT REALISED
+BOOK REACH.** That column is a per-signal property counted from ALL of a signal's fires. Gating
+removes ~71% of Option B's trades, so the coverage of trades actually taken is far lower:
+
+    N     covUP ungated -> gated     covDOWN ungated -> gated
+    50       2.89% -> 0.79%             4.85% -> 0.69%
+    100      5.34% -> 1.14%             6.32% -> 1.30%
+    200      8.49% -> 1.84%             8.57% -> 1.99%
+
+**A gated 200-signal book reaches less terrain than an UNGATED 20-signal one.** Option B's
+4.11% / 4.16% is its signal set's reach; its realised reach is nearer 1.1% / 1.3%. **Gating buys
+quality by destroying coverage, and that trade was invisible until it was measured on executed
+trades.**
+
+### AND ONE PHASE 1 CONCLUSION IS REVERSED
+
+An earlier Supervisor frontier showed OOS PF FLAT at 3.34-4.00 across a ten-fold range in book
+size and read that as robustness. **It was a floor.** Gating lifts OOS PF by 1.5x to 4x, and the
+GATED curve DOES decline — PF 12.23 -> 5.33 across the same range, gated OOS PF peaking at N=100
+and falling to 5.77 by N=200. **The ancestral prior that four prior expansions all curved down is
+NOT refuted. It was masked by measuring ungated books.**
+
+Related: the payoff-parity break is NOT at N=50. With N=55/60/65 filled in it is a flat plateau at
+w/l 0.70-0.75 from 50 to 70; parity is lost BEFORE 50 and the real cliff is 70 -> 85 -> 100. A
+two-point grid manufactured a cliff that is not there.
+
+**METHOD CAVEAT ON EVERY FRONTIER FIGURE:** the 1,818-signal field was scored in BATCHES OF 120,
+and the 6-lot jar admits by contention — so each signal's recovered daily P&L depends on which
+signals shared its scoring call. **The field is not a property of the signals alone.** Two
+independent builds differ 4-10% on net. Treat the SHAPES as sound and the LEVELS as indicative,
+and do not quote frontier nets to the dollar.
+
+---
+
 # 5. THE STANDING RULINGS
 
 **The matched-null tolerance band is ±35% and MUST NEVER BE WIDENED.** If a family blanks its

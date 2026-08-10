@@ -176,6 +176,24 @@
   **FUSED-50 is the low-fit control** — beats BOOK-50 on FailConc (1.65 vs 3.46), mCVaR (-$2,091 vs -$4,923),
   survival (-$340 vs -$565) and net (+$8,233), with **no gate fitting at all**, and its LONG triple+ tier pays
   above parity (win/loss 1.0349, margin 48.8pp, 7 losses).
+  **QUANT PHASES 1-3 — FOUR CORRECTIONS (full detail in the rd_plan and spec §8B).**
+  **(1) THE CATALOGUE'S GATED ARM IS INERT** — 39,260/39,260 rows identical to ungated, delta_net
+  exactly 0. No gate was ever applied. Option B's figures are unaffected (its gates were applied to
+  the trade table) but no per-signal gate response is readable from the catalogue, and a per-signal
+  gated column is only well defined at the SOLO tier because the gate is depth-indexed.
+  **(2) EXPECTED_ROWS FLOORS AT ZERO** — all 286 F0 rows below E=1 are E==0.0 exactly, next non-zero
+  is 8.93, agg_pf spans 5.53-48.24 and prices identically. It SELECTS but cannot ORDER. K≈5,000
+  restores resolution; null draw only, not a re-scan.
+  **(3) THE SHORT-SIDE ASYMMETRY IS F0-SPECIFIC** — F1 is symmetric on 18,505/18,753 rows, F9
+  inverts. Thresholds must be per-direction PER FAMILY.
+  **(4) COVERAGE FROM touched_episode_ids IS UNGATED SIGNAL REACH.** Realised gated coverage is
+  73-78% lower — a gated 200-signal book reaches less terrain than an ungated 20-signal one. Option
+  B's realised reach is ~1.1%/1.3%, not 4.11%/4.16%.
+  **AND ONE CONCLUSION REVERSED:** flat ungated OOS PF was a FLOOR, not robustness. The gated curve
+  DECLINES (PF 12.23 -> 5.33) and the ancestral prior is NOT refuted, only masked.
+  **PHASE 2 ANSWERED — REGIME, NOT DILUTION.** Fixed population 0.5232 -> 0.3945 -> 0.2987 with no
+  composition change; newly-admitted signals persist BETTER within the hardest window. Tightening
+  VALID would remove the higher-persisting cohort.
   **THE CONCURRENCE LADDER AND THE JAR CEILING (2026-08-02).** All 44 of Option B's losses sit at
   depth 1-3; **depth 4+ is 739 trades with ZERO losses** and the average trade climbs $37 -> $97.
   **Uncapped, the book takes 2,237 trades for $125,261 at PF 17.51 — the 6-lot jar is turning away 429

@@ -131,6 +131,67 @@ architectural decision later supported; it is now a measured result with a null 
 three has never been competed against a same-bar pair or a 4/5-variable grammar.**
 
 
+### QUANT PHASES 1-3 — FOUR CORRECTIONS, AND ONE REVERSED CONCLUSION
+
+**1. THE CATALOGUE'S GATED ARM IS INERT — 39,260 of 39,260 rows.** Every `gated_*` column equals its
+ungated counterpart; `gated_delta_net` is exactly 0 everywhere. No gate was ever applied and no gate
+spec appears in any catalogue header. **Option B's own figures are unaffected** — its gates were
+applied to the simulated trade table, not read from these columns. What IS void is any claim that a
+signal's gate response is readable per-signal from the catalogue. And there is a SPEC problem before
+a build one: the gate is indexed by DEPTH TIER and a signal scored alone has no depth, so a
+per-signal gated column is well defined only for the SOLO tier.
+
+**2. `EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF` IS A FLOOR AT ZERO AND CANNOT ORDER A SHORTLIST.** All 286
+F0 rows below E=1 sit at E == 0.0 EXACTLY; the smallest non-zero E in the family is 8.9320, with
+nothing between. Their agg_pf spans 5.53 to 48.24 and every one prices the same. At n_null median
+470 the resolution limit is 1/470 = 0.0021, so anything above the null's maximum PF hits the floor.
+**The column SELECTS the 286; it cannot ORDER them.** Option B's stated ranking — EXPECTED_ROWS then
+folds_plus then agg_pf — was therefore driven by the second and third keys within the top set. A
+larger null (K≈5,000) restores resolution and is a null draw, not a re-scan.
+
+**3. THE SHORT-SIDE ASYMMETRY IS F0-SPECIFIC, NOT PROJECT-WIDE.** F0 LONG min_fold_pf median 0.785
+vs SHORT 0.517. But F1 is SYMMETRIC — 0.486 vs 0.489 on 18,505 and 18,753 rows, not sample noise —
+and F9 INVERTS (SHORT 0.127 vs LONG 0.423). **Thresholds must be per-direction PER FAMILY.**
+
+**4. COVERAGE FROM `touched_episode_ids` IS UNGATED SIGNAL-SET REACH, NOT REALISED BOOK REACH.** It
+is a per-signal column counted from ALL fires. Measured on executed gated trades:
+
+    N     covUP ungated -> gated     covDOWN ungated -> gated
+    50       2.89% -> 0.79%             4.85% -> 0.69%
+    100      5.34% -> 1.14%             6.32% -> 1.30%
+    200      8.49% -> 1.84%             8.57% -> 1.99%
+
+**A gated 200-signal book reaches less terrain than an ungated 20-signal one.** Option B's stated
+4.11% / 4.16% is its signal set's reach; realised reach is nearer 1.1% / 1.3%. **Gating buys quality
+by destroying coverage** and the trade was invisible until measured on executed trades.
+
+**AND ONE CONCLUSION IS REVERSED.** A Supervisor frontier showed OOS PF flat at 3.34-4.00 across a
+ten-fold size range and read it as robustness. **It was a floor.** Gating lifts OOS PF 1.5x-4x and
+the gated curve DECLINES — PF 12.23 -> 5.33 across the same range, gated OOS PF peaking at N=100.
+**The ancestral prior that four prior expansions curved down is NOT refuted; it was masked by
+measuring ungated books.** The payoff-parity break is also not at N=50 — with 55/60/65 filled in it
+is a plateau at w/l 0.70-0.75 from 50 to 70, parity is lost BEFORE 50, and the cliff is 70 -> 100.
+
+**METHOD CAVEAT ON EVERY FRONTIER FIGURE:** the 1,818-signal field was scored in batches of 120 and
+the 6-lot jar admits by contention, so a signal's recovered daily P&L depends on its batch-mates.
+The field is not a property of the signals alone; two independent builds differ 4-10% on net. Treat
+frontier SHAPES as sound and LEVELS as indicative.
+
+**PHASE 2's ANSWER — REGIME, NOT DILUTION.** Fixed population across worsening windows: 0.5232 ->
+0.3945 -> 0.2987 with ZERO change in composition, reproducing the entire decay. Within the hardest
+window the newly-admitted signals persist BETTER (0.3853 vs 0.3110 on 10,413 and 23,445 entities,
++24% relative). Not directional — LONG and SHORT within 0.0035 in both cohorts. **VALID is not
+degrading as it admits more; it is admitting progressively better signals into progressively harder
+periods, and tightening VALID would remove the higher-persisting cohort.** The prior small-pool
+finding reproduces at 3,000x the sample size.
+
+**AND A PROVENANCE DEFECT FOUND AND FIXED:** the pass criterion's denominator is
+`train_passes AND test_traded` (wf_selection.py L384), where `train_passes` is the PERSIST test on
+train (net>0, PF>=2.0, WR>=75) — NOT the VALID verdict. `train_passes` was never emitted, so the
+artifact could not rebuild its own headline. The console figures 2.86 / 2.13 / 1.51 and mean_ratio
+2.1653 are CORRECT and stand; the entity files now emit `in_denominator` so they self-check. The
+null arm had the identical defect.
+
 ### THE CONCURRENCE LADDER, THE JAR CEILING, AND THE NON-F0 SECOND BOOK
 
 **ALL 44 OF OPTION B'S LOSSES SIT AT DEPTH 1, 2 AND 3. Depth 4+ is 739 trades with ZERO losses.**
