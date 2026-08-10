@@ -768,3 +768,30 @@ def solo_gated_arm(trades, gate_bars):
             'gated_solo_PF': ('inf' if und else round(pf, 4)),
             'gated_solo_net': round(float(p.sum()), 2),
             'gated_solo_worst_day_usd': round(float(_daily(keep).min()), 2)}
+
+
+RATIO_SENTINELS = (999.0, 999)
+
+
+def blank_sentinel_ratio(value, n_losses=None):
+    """THE BLANKING RULE, one implementation. 999/inf is not a measurement.
+
+    The margin-of-safety work established that a zero-loss cell BLANKS rather
+    than printing 999 or inf, because a ratio with no denominator has no value -
+    only an absence of evidence. concurrence_null_baseline.csv shipped a cell
+    reading agg_pf 999 / WR 100 / worst-day +42 on about one trade, which reads
+    like a spectacular result and is a sentinel.
+
+    Returns '' for a sentinel or a non-finite value, otherwise the value
+    unchanged. n_losses, where known, makes the reason explicit: no losses means
+    no measurable ratio.
+    """
+    if n_losses is not None and int(n_losses) == 0:
+        return ''
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return value
+    if v in RATIO_SENTINELS or not np.isfinite(v):
+        return ''
+    return value
