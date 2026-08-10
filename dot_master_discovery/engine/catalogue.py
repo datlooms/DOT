@@ -242,25 +242,6 @@ def segment_fold_stats(trades):
             'fold_buckets': len(months)}
 
 
-def gated_arm(trades, gate_ok_bars):
-    """Item 10: the conviction arm. Both arms emitted, plus the delta."""
-    if len(trades) == 0:
-        return dict({'trades': 0, 'WR': '', 'PF': '', 'worst_day_usd': '', 'net': 0.0},
-                    **margin_of_safety(np.empty(0)))
-    keep = trades[np.isin(np.asarray(trades['entry_bar'].values, dtype=np.int64), gate_ok_bars)]
-    if len(keep) == 0:
-        return dict({'trades': 0, 'WR': '', 'PF': '', 'worst_day_usd': '', 'net': 0.0},
-                    **margin_of_safety(np.empty(0)))
-    p = np.asarray(keep['pnl'].values, dtype=float)
-    pf, und = _pf(p)
-    out = {'trades': int(len(keep)), 'WR': round(float((p > 0).mean() * 100), 2),
-           'PF': ('inf' if und else round(pf, 4)),
-           'worst_day_usd': round(float(_daily(keep).min()), 2),
-           'net': round(float(p.sum()), 2)}
-    out.update(margin_of_safety(p))
-    return out
-
-
 def same_bar_cohort_table(entries_by_dir, ids_by_dir, families_by_id, max_depth=12):
     """Item 11: family composition of each bar as a CURVE OVER DEPTH, counts only.
 
@@ -734,3 +715,56 @@ def margin_of_safety(pnl):
     out['breakeven_wr'] = round(be, 2)
     out['margin_pp'] = round(wr - be, 2)
     return out
+
+
+SOLO_GATE_VAR = 'Micro_Hurst'
+
+
+def solo_gate_bars(df, adaptive, var=SOLO_GATE_VAR):
+    """The SOLO-tier gate. A MISSING THRESHOLD KEY ABORTS - it never defaults to permissive.
+
+    The previous construction read ad.get(('Hurst', 'hi')). The adaptive dict is
+    keyed on 'Micro_Hurst', so the lookup returned None, the else branch produced
+    np.ones(len(df)), and the gate admitted EVERY BAR. The gated arm became a
+    byte-copy of the ungated one under a second set of names - 39,260 of 39,260
+    rows with gated_delta_net exactly 0 - and five documents instructed readers
+    to measure the gate's effect from columns that could not show it.
+
+    THAT IS THE CLASS: A THRESHOLD LOOKUP THAT MISSES MUST ABORT, NOT DEFAULT TO
+    PERMISSIVE. A filter whose failure mode admits everything is indistinguishable
+    from no filter, and it produces a confident wrong result rather than an error.
+
+    THE SCOPE IS IN THE NAME. Option B's gate is indexed by DEPTH TIER and a
+    signal scored ALONE has no depth, so nine of its ten cells are undefined
+    per-signal. Only the solo tier is well defined here; the tier-indexed
+    measurement lives in score_book.py where a book exists and depth is real.
+    """
+    key = (var, 'hi')
+    if adaptive is None or key not in adaptive:
+        raise SystemExit(
+            f'ABORT [solo gate] threshold {key} is not in the adaptive dict. Available keys for '
+            f'{var}: {[k for k in (adaptive or {}) if k[0] == var]}. THIS MUST NOT FALL BACK TO A '
+            f'PERMISSIVE MASK: a gate that admits every bar when its threshold is missing is '
+            f'indistinguishable from no gate, which is exactly how the gated arm shipped inert.')
+    thr = adaptive[key]
+    if var not in df.columns:
+        raise SystemExit(f'ABORT [solo gate] column {var} absent from the frame.')
+    return np.flatnonzero(np.asarray(df[var].values) >= np.asarray(thr)).astype(np.int64)
+
+
+def solo_gated_arm(trades, gate_bars):
+    """Solo-tier gated statistics, prefixed gated_solo_ so the narrow scope is visible."""
+    base = {'gated_solo_trades': 0, 'gated_solo_WR': '', 'gated_solo_PF': '',
+            'gated_solo_net': 0.0, 'gated_solo_worst_day_usd': ''}
+    if trades is None or len(trades) == 0:
+        return base
+    keep = trades[np.isin(np.asarray(trades['entry_bar'].values, dtype=np.int64), gate_bars)]
+    if len(keep) == 0:
+        return base
+    p = np.asarray(keep['pnl'].values, dtype=float)
+    pf, und = _pf(p)
+    return {'gated_solo_trades': int(len(keep)),
+            'gated_solo_WR': round(float((p > 0).mean() * 100), 2),
+            'gated_solo_PF': ('inf' if und else round(pf, 4)),
+            'gated_solo_net': round(float(p.sum()), 2),
+            'gated_solo_worst_day_usd': round(float(_daily(keep).min()), 2)}

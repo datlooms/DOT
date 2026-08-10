@@ -272,6 +272,57 @@ def score(book_path, data_path, out_dir):
         'tier with no losses has no measurable break-even point.',
         'Depth is DISTINCT SIGNALS on the entry bar, per direction. PROPERTY OF THE BOOK.'])
     print(f'    book_margin_by_tier.csv: {len(_mrows)} tier rows')
+    print('  GATED vs UNGATED PER DEPTH TIER PER DIRECTION - the tier-indexed measurement')
+    _gbars = set(cat.solo_gate_bars(df, ad).tolist())
+    _grows = []
+    for d, lab in ((1, 'LONG'), (-1, 'SHORT')):
+        sub = bk[bk['direction'] == lab]
+        if not len(sub):
+            continue
+        by_bar = {}
+        for b_, nm in zip(sub['entry_bar'].values, sub['signal_name'].values):
+            by_bar.setdefault(int(b_), set()).add(nm)
+        depth_of = {b_: len(v) for b_, v in by_bar.items()}
+        for tname, lo, hi in (('solo', 1, 1), ('double', 2, 2), ('triple+', 3, 10 ** 6)):
+            eb = np.asarray(sub['entry_bar'].values, dtype=np.int64)
+            tier = np.array([lo <= depth_of.get(int(x), 0) <= hi for x in eb])
+            if not tier.any():
+                continue
+            gated = np.array([int(x) in _gbars for x in eb]) & tier
+            for arm, msk in (('ungated', tier), ('gated', gated)):
+                p = np.asarray(sub['pnl'].values, dtype=float)[msk]
+                if p.size == 0:
+                    _grows.append({'direction': lab, 'tier': tname, 'arm': arm, 'trades': 0,
+                                   'WR': '', 'PF': '', 'net': 0.0, 'worst_day_usd': '',
+                                   'n_losses': 0})
+                    continue
+                loss = -p[p < 0].sum()
+                sd = sub[msk].copy()
+                sd['day'] = pd.Series(sd['exit_time'].astype(str).values).str[:10].values
+                _grows.append({'direction': lab, 'tier': tname, 'arm': arm,
+                               'trades': int(p.size),
+                               'WR': round(float((p > 0).mean() * 100), 2),
+                               'PF': (round(float(p[p > 0].sum() / loss), 4) if loss > 0 else 'inf'),
+                               'net': round(float(p.sum()), 2),
+                               'worst_day_usd': round(float(sd.groupby('day')['pnl'].sum().min()), 2),
+                               'n_losses': int((p < 0).sum())})
+    for r in _grows:
+        print(f"    {r['direction']:5} {r['tier']:8} {r['arm']:8} n {r['trades']:5} "
+              f"WR {str(r['WR']):>6} PF {str(r['PF']):>8} net {r['net']:>10} "
+              f"worst {str(r['worst_day_usd']):>9} losses {r['n_losses']}")
+    _write(os.path.join(out_dir, 'book_gated_by_tier.csv'), pd.DataFrame(_grows), [
+        'DOT gated vs ungated PER DEPTH TIER PER DIRECTION for an ASSEMBLED BOOK',
+        f'book={os.path.basename(book_path)} signals={len(book)} '
+        f'solo-gate variable={cat.SOLO_GATE_VAR}',
+        'THIS IS WHERE THE TIER-INDEXED GATE CAN BE MEASURED. A signal scored ALONE has no depth, '
+        'so nine of the spec\'s ten cells are undefined per-signal - the catalogue therefore '
+        'carries only gated_solo_* and the tier measurement lives here, where a book exists and '
+        'depth is real.',
+        'The six gated_* catalogue columns were DROPPED: they were built from a threshold lookup '
+        'that missed and fell back to a permissive mask, so every gated column equalled its '
+        'ungated counterpart on all 39,260 rows with gated_delta_net exactly 0.',
+        'PROPERTY OF THE BOOK.'])
+    print(f'    book_gated_by_tier.csv: {len(_grows)} rows')
     print('  F10 CONVERGENCE-DENSITY LADDER')
     density_ladder(df, sigs, ad, st, w, out_dir, book_path)
     breaches = [k for k, v in verdicts.items() if v is False]

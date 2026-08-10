@@ -1287,11 +1287,8 @@ def _s5d_init(frame_path, scope):
         'conv': _C.build_conviction(df, True, True, True, d2d_conviction=True, d2d_gap=True),
         'bar_day': _pd.Series(df['Time'].astype(str).values).str[:10].values,
     })
-    import numpy as _np
-    _hi = ad.get(('Hurst', 'hi'))
-    _S5D_CTX['gate_ok'] = _np.flatnonzero(
-        (df['Hurst'].values >= _hi) if _hi is not None
-        else _np.ones(len(df), dtype=bool)).astype(_np.int64)
+    import catalogue as _cat0
+    _S5D_CTX['gate_ok'] = _cat0.solo_gate_bars(df, ad)
 
 
 def _s5d_score_chunk(payload):
@@ -1324,7 +1321,7 @@ def _s5d_score_chunk(payload):
         if verdict == 'VALID':
             bars = np.asarray(td['entry_bar'].values, dtype=np.int64)
             fold = cat.segment_fold_stats(td)
-            gated = cat.gated_arm(td, c['gate_ok'])
+            gated = cat.solo_gated_arm(td, c['gate_ok'])
             pnl_a = np.asarray(td['pnl'].values, dtype=float)
         out.append((fam, sig, dr, verdict, reason, stx, bars, fold, gated,
                     pnl_a if verdict == 'VALID' else None))
@@ -1572,9 +1569,7 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
           f'UP {raw_tot[1]} DOWN {raw_tot[-1]} | REACHABLE UP {len(reach[1])} '
           f'({100.0*len(reach[1])/max(raw_tot[1],1):.2f}%) DOWN {len(reach[-1])} '
           f'({100.0*len(reach[-1])/max(raw_tot[-1],1):.2f}%)')
-    hurst_hi = ad.get(('Hurst', 'hi'))
-    gate_ok = np.flatnonzero((df['Hurst'].values >= hurst_hi) if hurst_hi is not None
-                             else np.ones(n, dtype=bool)).astype(np.int64)
+    gate_ok = cat.solo_gate_bars(df, ad)
     conv = C.build_conviction(df, True, True, True, d2d_conviction=True, d2d_gap=True)
     _lab_causal = None
     _rl_path = os.path.join(out, 'regime_labels.csv')
@@ -1636,7 +1631,7 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
                 row['terrain_cell'] = f'W{W}/K{int(K*100)}/E{int(E*100)}'
                 row.update(fold_p)
                 row.update(cat.margin_of_safety(pnl_p))
-                row.update({f'gated_{k}': v for k, v in gated_p.items()})
+                row.update(gated_p)
                 _sp, _smod = cat.session_profile(bars, df['EST_Hour'].values, tr.session_of)
                 row.update(_sp)
                 row['session_modal'] = _smod
@@ -1646,8 +1641,7 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
                 _ps, _ss = cat.structure_of(sig)
                 row['market_structure'] = _ps
                 row['market_structure_secondary'] = _ss
-                row['gated_delta_net'] = (round(row['gated_net'] - stx.get('net', 0.0), 2)
-                                          if row['gated_net'] != '' else '')
+
             rows.append(row)
         fr = pd.DataFrame(rows)
         if len(fr):
@@ -1726,6 +1720,13 @@ def s5d_catalogue(df, ad, st, w, pool, anchor, out, input_sha, attest, null_k=No
              'PRICING COLUMNS ARE BLANK for this family: ' + str(_why.get(fam, '')) +
              '. The Appendix A names carry no substitute quantity - reading this catalogue is still '
              'a search of size N_F, and nothing in this file prices it.'),
+            (f'WEAK NULL FOR THIS FAMILY: null_valid_rate {null_rate:.3f} means {100*null_rate:.0f}% '
+             f'of random matched signals pass VALID here, so a low EXPECTED_ROWS is a much weaker '
+             f'claim than the same figure in F0 or F1. This is a property of the family\'s rarity '
+             f'band, not of the sample size - raising K measures the same easy benchmark more '
+             f'precisely.' if null_rate >= 0.60 else
+             f'null_valid_rate {null_rate:.3f} - the matched null is a meaningful benchmark for '
+             f'this family.'),
             cat.CATALOGUE_HEADER_UNSCORED,
             'UNEVALUABLE rows are RETAINED with statistics blank and a reason_code. INVALID rows '
             '(V2 survival breach) do not enter; their count is reported in the run log.'])
