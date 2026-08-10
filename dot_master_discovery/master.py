@@ -2508,6 +2508,12 @@ def s5c_walk_forward(df, ad, st, w, pool, anchor, book_file, out, input_sha, att
             _write_with_header(os.path.join(out, 'wf_book_arm_entities.csv'), _bent, [
                 'DOT S5C BOOK ARM per-entity record - one row per (split, signal)',
                 f'dataset_rows={attest["rows"]} input_sha={input_sha}',
+                'THE DENOMINATOR IS in_denominator = train_passes AND traded_on_test. It is NOT '
+                '`admitted`: admitted records the APPENDIX C VALID verdict on the training '
+                'segment, while the denominator applies the PERSIST test on train (net>0 AND '
+                'PF>=2.0 AND WR>=75) AND at-least-one-trade on test. Two different gates, and only '
+                'the first was emitted, so no single-column rule on this file could rebuild the '
+                'printed rate. persisted.sum() / in_denominator.sum() now reproduces it exactly.',
                 'Mirrors wf_null_arm_entities.csv so both arms read the same way. The aggregate '
                 'counts alone cannot separate DILUTION (later-admitted signals are weaker) from '
                 'REGIME (the later window is harder): that needs to know WHICH signals were '

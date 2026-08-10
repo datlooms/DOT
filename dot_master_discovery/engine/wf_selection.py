@@ -362,6 +362,7 @@ def entity_persistence(train_trades, test_trades, key='signal_name'):
                      'test_net': round(te['net'], 1), 'test_PF': round(te['PF'], 3), 'test_WR': round(te['WR'], 1),
                      'train_passes': tr['passes'], 'test_passes': te['passes'],
                      'test_traded': bool(len(_tep) > 0),
+                     'in_denominator': bool(tr['passes'] and len(_tep) > 0),
                      'persists': bool(tr['passes'] and te['passes'])})
     return pd.DataFrame(rows)
 
@@ -1102,7 +1103,11 @@ def book_arm_from_valid(df, cands, pool, anchor, ad, st, warmup, splits, build_b
                 'test_trades': fr_.get('test_trades', ''), 'test_net': fr_.get('test_net', ''),
                 'test_PF': fr_.get('test_PF', ''), 'test_WR': fr_.get('test_WR', ''),
                 'admitted': True,
+                'train_passes': bool(fr_.get('train_passes', False)),
+                'test_passes': bool(fr_.get('test_passes', False)),
                 'traded_on_test': bool(fr_.get('test_traded', False)),
+                'in_denominator': bool(fr_.get('train_passes', False)
+                                       and fr_.get('test_traded', False)),
                 'persisted': bool(fr_.get('persists', False))})
         out.append({'split': s_i, 'rate': rate, 'k': k, 'n_traded': n,
                     'entities': int(len(frame)), 'note': ''})
