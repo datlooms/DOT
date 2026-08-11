@@ -30,9 +30,14 @@ if dot_frame_binding is not None and dot_frame_binding.is_configured():
     dot_frame_binding.install_if_configured()
     try:
         dot_frame_binding.install_scanner_paths()
-    except Exception:
-        pass
+    except Exception as _exc:
+        print(f'  SCANNER PATH BINDING FAILED: {type(_exc).__name__}: {str(_exc)[:90]} - F13 '
+              f'will write to its hardcoded legacy directory and its shards will not be found.',
+              flush=True)
     try:
-        dot_frame_binding.install_smoke_caps()
-    except Exception:
-        pass
+        _ap, _fl = dot_frame_binding.install_smoke_caps()
+        for _f in _fl:
+            print(f'  SMOKE CAP FAILED: {_f}', flush=True)
+    except Exception as _exc:
+        print(f'  SMOKE CAP INSTALLER RAISED: {type(_exc).__name__}: {str(_exc)[:90]}',
+              flush=True)

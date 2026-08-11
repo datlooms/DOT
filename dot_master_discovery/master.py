@@ -3223,8 +3223,20 @@ def main():
         os.environ['DOT_SMOKE_CAP'] = '6'
         os.environ['DOT_SMOKE_CHUNK_TARGET'] = '1'
         import dot_frame_binding as _fbx
-        for _line in _fbx.install_smoke_caps():
+        _applied, _failed = _fbx.install_smoke_caps()
+        for _line in _applied:
             print(f'    smoke cap: {_line}', flush=True)
+        for _line in _failed:
+            print(f'    *** SMOKE CAP FAILED: {_line}', flush=True)
+        if _failed or len(_applied) != _fbx.EXPECTED_SMOKE_CAPS:
+            raise SystemExit(
+                f'ABORT [--smoke] {len(_applied)} of {_fbx.EXPECTED_SMOKE_CAPS} caps installed, '
+                f'{len(_failed)} failed. A SMOKE RUN WHOSE REDUCTIONS DID NOT APPLY IS A '
+                f'35-MINUTE RUN PRETENDING TO BE A 5-MINUTE ONE, and a cap that silently does '
+                f'not install is indistinguishable from a module that is absent. Fix the named '
+                f'cap or correct EXPECTED_SMOKE_CAPS - do not proceed on a partial reduction.')
+        print(f'    all {len(_applied)} of {_fbx.EXPECTED_SMOKE_CAPS} smoke caps installed.',
+              flush=True)
         globals()['SMOKE'] = True
         import wf_selection as _wfsb
         print(f'  *** SMOKE RUN *** every stage S0-S10 EXECUTES - same functions, same order, '

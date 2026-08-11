@@ -111,10 +111,13 @@ def install_scanner_paths():
     if not rd:
         return []
     done = []
+    _missed = []
     for modname, fields in _SCANNER_PATH_MODULES:
         try:
             mod = __import__(modname)
-        except Exception:
+        except Exception as exc:
+            # A module absent and a rebind that failed were indistinguishable here too.
+            _missed.append(f'{modname}: {type(exc).__name__}: {str(exc)[:70]}')
             continue
         for attr, leaf in fields.items():
             if not hasattr(mod, attr):
@@ -127,145 +130,113 @@ def install_scanner_paths():
 SMOKE_ENV = 'DOT_SMOKE_CAP'
 
 
+EXPECTED_SMOKE_CAPS = 14
+
+
 def install_smoke_caps():
-    """FOURTH INSTANCE of the parent-only-global class. Same transport, same reason.
+    """SIXTH use of the startup-hook transport. EVERY FAILURE IS REPORTED, NEVER SWALLOWED.
 
-    --s3-limit caps ONE axis per family - the one the orchestrator chunks on. For
-    F1 that is the A-label list only, so each of 40 chunks still scanned 239
-    B-labels x 15 lags x 2 directions = 286,800 candidates and the smoke run never
-    finished a chunk. F9 has the same shape on its B-label list; F13 fans over both
-    directions inside its own pool.
+    A cap that failed to install and a module legitimately absent were
+    INDISTINGUISHABLE: every block ended in `except Exception: pass`, so 12 caps
+    installed where 14 were written and the gap was found only by counting. That is
+    the permissive-fallback class - a filter that silently becomes a pass-through -
+    and the standing rule covers it: A LOOKUP THAT MISSES MUST ABORT, NOT DEFAULT
+    TO PERMISSIVE.
 
-    A PARENT-SIDE ATTRIBUTE WRITE DOES NOT SURVIVE SPAWN - that is the whole reason
-    install_scanner_paths exists, and this reuses it rather than editing a scanner.
-    Every worker re-imports the scanner fresh and this hook runs at INTERPRETER
-    STARTUP before any worker code, so the caps are in place before the scan begins.
-    NO SCANNER FILE IS MODIFIED.
-
-    Reachable module attributes only - LAGS is a module list and scorable_pool a
-    module function, so wrapping them is configuration, not a code change.
+    Under --smoke a cap that does not install is a FAILED SMOKE RUN: reductions
+    silently not applying makes a 35-minute run pretend to be a 5-minute one.
+    Returns (applied, failed); the caller asserts the total.
     """
     cap = os.environ.get(SMOKE_ENV)
     if not cap:
-        return []
+        return [], []
     k = max(2, int(cap))
-    done = []
-    try:
-        import sequential_temporal as _st
-    except Exception:
-        _st = None
-    if _st is not None:
-        if hasattr(_st, 'LAGS') and len(_st.LAGS) > 2:
-            _st.LAGS = list(_st.LAGS)[:2]
-            done.append(f'sequential_temporal.LAGS -> {_st.LAGS}')
-        if hasattr(_st, 'scorable_pool') and not getattr(_st, '_SMOKE_WRAPPED', False):
-            _orig = _st.scorable_pool
+    applied, failed = [], []
 
-            def _capped(pool, warmup, _o=_orig, _k=k):
-                return _o(pool, warmup)[:_k]
-
-            _st.scorable_pool = _capped
-            _st._SMOKE_WRAPPED = True
-            done.append(f'sequential_temporal.scorable_pool -> first {k} labels (B axis)')
-    for modname, attr in (('session_temporal', 'scorable_pool'),
-                          ('state_transition', 'scorable_pool'),
-                          ('conditional_interaction', 'scorable_pool')):
+    def _mod(name):
         try:
-            mod = __import__(modname)
-        except Exception:
-            continue
-        if hasattr(mod, attr) and not getattr(mod, '_SMOKE_WRAPPED', False):
-            _o2 = getattr(mod, attr)
+            return __import__(name)
+        except Exception as exc:
+            failed.append(f'{name}: IMPORT FAILED {type(exc).__name__}: {str(exc)[:90]}')
+            return None
 
-            def _capped2(pool, warmup, _o=_o2, _k=k):
-                return _o(pool, warmup)[:_k]
-
-            setattr(mod, attr, _capped2)
-            mod._SMOKE_WRAPPED = True
-            done.append(f'{modname}.{attr} -> first {k}')
-    # F9: the SESSION/WEEKDAY GATE axis. --s3-limit reaches base_labels only, so the
-    # audit predicted 40 x 6 x 2 = 480 and the run printed
-    #   'Search: 40 base x 35 session/weekday gates x 2 dir = 2800 candidates'
-    # F9 took 476.4s of a 69-minute smoke run. IDENTICAL SHAPE TO F1: a two-axis
-    # scanner where the cap reaches one axis. session_masks and weekday_masks are
-    # module functions, so wrapping them is configuration, not a code change.
-    for _mn, _fns in (('session_temporal', ('session_masks', 'weekday_masks')),
-                      ('conditional_interaction', ('build_gate_masks',)),
-                      ('divergence_nonconfirm', ('flow_pool',)),
-                      ('rolling_leadlag', ('pair_pool',))):
+    def _wrap_list(modname, attr, n):
+        m = _mod(modname)
+        if m is None:
+            return
+        if not hasattr(m, attr):
+            failed.append(f'{modname}.{attr}: ATTRIBUTE ABSENT - the cap targets a symbol that '
+                          f'no longer exists')
+            return
         try:
-            _m = __import__(_mn)
-        except Exception:
-            continue
-        for _fn in _fns:
-            if not hasattr(_m, _fn) or getattr(_m, f'_SMOKE_{_fn}', False):
-                continue
-            _o3 = getattr(_m, _fn)
+            v = getattr(m, attr)
+            if isinstance(v, list) and len(v) > n:
+                setattr(m, attr, v[:n])
+            applied.append(f'{modname}.{attr} -> {getattr(m, attr)}')
+        except Exception as exc:
+            failed.append(f'{modname}.{attr}: {type(exc).__name__}: {str(exc)[:70]}')
 
-            def _cap_dict(*a_, _o=_o3, _k=k, **kw_):
+    def _wrap_call(modname, attr, n, note=''):
+        m = _mod(modname)
+        if m is None:
+            return
+        if not hasattr(m, attr):
+            failed.append(f'{modname}.{attr}: ATTRIBUTE ABSENT')
+            return
+        flag = f'_SMOKE_{attr}'
+        if getattr(m, flag, False):
+            applied.append(f'{modname}.{attr} -> already wrapped')
+            return
+        try:
+            orig = getattr(m, attr)
+
+            def _capped(*a_, _o=orig, _k=n, **kw_):
                 r = _o(*a_, **kw_)
                 if isinstance(r, dict):
                     return {kk: r[kk] for kk in list(r)[:_k]}
+                if isinstance(r, tuple) and len(r) == 2 and all(
+                        isinstance(x, (list, tuple)) for x in r):
+                    return list(r[0])[:_k], list(r[1])[:_k]
                 if isinstance(r, (list, tuple)):
                     return type(r)(list(r)[:_k])
                 return r
 
-            setattr(_m, _fn, _cap_dict)
-            setattr(_m, f'_SMOKE_{_fn}', True)
-            done.append(f'{_mn}.{_fn} -> first {k}')
-    for _mn, _attr in (('rolling_leadlag', 'WINDOWS'), ('rolling_leadlag', 'RELATIONS'),
-                       ('divergence_nonconfirm', 'FLOW_FEATS')):
+            setattr(m, attr, _capped)
+            setattr(m, flag, True)
+            applied.append(f'{modname}.{attr} -> first {n}{note}')
+        except Exception as exc:
+            failed.append(f'{modname}.{attr}: {type(exc).__name__}: {str(exc)[:70]}')
+
+    def _set_const(modname, attr, val):
+        m = _mod(modname)
+        if m is None:
+            return
+        if not hasattr(m, attr):
+            failed.append(f'{modname}.{attr}: ATTRIBUTE ABSENT')
+            return
         try:
-            _m2 = __import__(_mn)
-        except Exception:
-            continue
-        _v = getattr(_m2, _attr, None)
-        if isinstance(_v, list) and len(_v) > 2:
-            setattr(_m2, _attr, _v[:2])
-            done.append(f'{_mn}.{_attr} -> first 2')
-    # S5C's RANDOM-TRIPLE NULL ARM. --smoke never reached it: the banner's
-    # 'null K=40/family' is S5D's PRICING null, a different draw in a different
-    # module. This arm draws until NULL_TARGET_QUALIFIERS triples QUALIFY, so at a
-    # low pass rate it scores thousands - 2,424 of the 2,436 signals S5C scored on a
-    # pool of TWELVE, 553s and 26.7% of the smoke run. A target of ~8 with a floor of
-    # 4 proves the code path executes, which is the whole purpose of a smoke run.
-    try:
-        import wf_selection as _wfs
-        for _a, _v in (('NULL_TARGET_QUALIFIERS', 8), ('NULL_FLOOR_QUALIFIERS', 4),
-                       ('NULL_GEN_BATCH', 24), ('NULL_TRIPLES_CAP', 200)):
-            if hasattr(_wfs, _a) and getattr(_wfs, _a) != _v:
-                setattr(_wfs, _a, _v)
-                done.append(f'wf_selection.{_a} -> {_v}')
-    except Exception:
-        pass
-    # F12: THE CONDITION-POOL AXIS. Smoke already sets k=1..2 and n_perm=3, but F12
-    # multiplies over its DIRECTIONAL LABEL LISTS in stages 3, 5 and 5b - 249
-    # conditions - and nothing capped those. S3's stage time was 1253s against a
-    # 169s chunk phase, so ~18 min sat after the family chunks. THIRD INSTANCE of a
-    # cap reaching one axis of a multi-axis stage, after F1's B-labels and F9's
-    # session gates. align_pool is a module function returning (long, short).
-    try:
-        import concurrence_profiler as _cp2
-        if hasattr(_cp2, 'align_pool') and not getattr(_cp2, '_SMOKE_ALIGN', False):
-            _oa = _cp2.align_pool
+            setattr(m, attr, val)
+            applied.append(f'{modname}.{attr} -> {val}')
+        except Exception as exc:
+            failed.append(f'{modname}.{attr}: {type(exc).__name__}: {str(exc)[:70]}')
 
-            def _capped_align(pool, _o=_oa, _k=k):
-                lo, sh = _o(pool)
-                return list(lo)[:_k], list(sh)[:_k]
-
-            _cp2.align_pool = _capped_align
-            _cp2._SMOKE_ALIGN = True
-            done.append(f'concurrence_profiler.align_pool -> first {k} labels per direction')
-        if hasattr(_cp2, 'MIN_STACK_BARS'):
-            _cp2.MIN_STACK_BARS = 1
-            done.append('concurrence_profiler.MIN_STACK_BARS -> 1')
-    except Exception:
-        pass
-    try:
-        import single_variable_extremes as _f13
-        if hasattr(_f13, 'DIRECTIONS') and len(_f13.DIRECTIONS) > 1:
-            _f13.DIRECTIONS = list(_f13.DIRECTIONS)[:1]
-            done.append(f'single_variable_extremes.DIRECTIONS -> {_f13.DIRECTIONS}')
-    except Exception:
-        pass
-    return done
+    _wrap_list('sequential_temporal', 'LAGS', 2)
+    _wrap_call('sequential_temporal', 'scorable_pool', k, ' (B axis)')
+    _wrap_call('session_temporal', 'session_masks', k)
+    _wrap_call('session_temporal', 'weekday_masks', k)
+    _wrap_call('conditional_interaction', 'build_gate_masks', k)
+    _wrap_list('rolling_leadlag', 'WINDOWS', 2)
+    _wrap_list('rolling_leadlag', 'RELATIONS', 2)
+    _wrap_list('divergence_nonconfirm', 'FLOW_FEATS', 2)
+    _set_const('wf_selection', 'NULL_TARGET_QUALIFIERS', 8)
+    _set_const('wf_selection', 'NULL_FLOOR_QUALIFIERS', 4)
+    _set_const('wf_selection', 'NULL_GEN_BATCH', 24)
+    _set_const('wf_selection', 'NULL_TRIPLES_CAP', 200)
+    _wrap_call('concurrence_profiler', 'align_pool', k, ' labels per direction')
+    _set_const('concurrence_profiler', 'MIN_STACK_BARS', 1)
+    # F13's directions are a HARDCODED TUPLE inside a loop at
+    # single_variable_extremes.py L291 - ('LONG', 'SHORT') - with no module-level
+    # symbol to rebind, so the transport cannot reach it without a scanner edit and
+    # F13 keeps both directions under smoke. F13 cost 2:52 of the last run, which is
+    # acceptable; capping it would require authorising that scanner.
+    return applied, failed
