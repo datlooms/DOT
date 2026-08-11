@@ -1055,6 +1055,84 @@ measured cost of balance against concentration, and the specification for a pric
 may replace the frozen-triple architecture entirely. Treat it as the most consequential open
 question in the project.**
 
+## 8.0 — TWO LEVELS OF LICENSING, AND THE SECOND IS THE OPERATOR'S
+
+**PHASE 8 AS ORIGINALLY WRITTEN LICENSES THE CONDITION. THE OPERATOR'S FORMULATION LICENSES THE BAR.**
+Read 8.1-8.6 with that distinction in mind, because it changes what the saturation test is testing.
+
+    CONDITION-LEVEL (8.1 below)   license each of the 249 conditions per direction against terrain
+                                  -> count LICENSED conditions per bar -> k+ agreement is the signal
+                                  the filter acts on the VOCABULARY
+
+    BAR-LEVEL (the operator's)    use the non-F0 families as TERRAIN DESCRIPTORS to establish which
+                                  BARS are in a favourable state -> then ANY convergence cluster
+                                  forming on such a bar is admissible
+                                  the filter acts on the BARS
+
+**WHY THE SECOND MAY SUCCEED WHERE THE FIRST FAILED.** F10's density family was fused into F0 and
+never run because raw density saturates — ~24 of 120 thresholds sit at extremes on any bar by
+construction, and at 1,000 signals 97.1% of bars reach depth 3. Directional licensing of the
+VOCABULARY was proposed as the filter. **The F1 coverage measurement now suggests that filter may not
+bite hard enough: a union of 238 fold-persistent pairs at WR>=96% covers 100% of bars. Pooling
+anything in this system saturates.**
+
+**BAR-LEVEL LICENSING FILTERS A DIFFERENT THING.** It does not ask "which conditions are allowed to
+speak" — it asks "is this bar in a state where agreement means something". A handful of rare terrain
+descriptors, each active on 3-8% of bars, intersected, produces a small set of bars. **On those bars
+the vocabulary needs no filtering at all, because the scarcity has already been supplied by the
+terrain rather than by the licence.**
+
+**THE OPERATOR'S FRAMING, IN HIS WORDS, AND IT IS THE DESIGN SPEC:** every bite of the cake is smelled
+in advance of consumption, so all valid convergence clusters are valid — all well-cooked cake is
+edible. The terrain layers are the nose: a whole-state judgement assembled from many weak signals at
+once, no one of them decisive. **A single-variable threshold is a thermometer. It reads one number
+precisely and says nothing about whether the cake is cooked.**
+
+## WHAT THIS ASKS YOU TO MEASURE, IN THIS ORDER
+
+  **1. BUILD THE TERRAIN STATE FROM PHASE 5's OUTPUT.** Phase 5 asks, per non-F0 family, what it
+     describes and whether it is rare enough to gate. Take the members that pass — rare, causal,
+     fold-persistent — and form a per-bar state array per direction. NOT a union of a family. A
+     handful of members across SEVERAL families, chosen for rarity.
+
+  **2. INTERSECT AND REPORT THE SCARCITY CURVE.** For 1, 2, 3, 4 descriptors intersected: what share
+     of bars survive, per direction? **THIS IS THE SATURATION TEST IN ITS BAR-LEVEL FORM AND IT IS
+     STILL THE FIRST THING TO RUN.** If four rare descriptors intersected still leave 60% of bars,
+     the terrain is not scarce and the architecture fails for the old reason at a new level. Say so
+     and stop.
+
+  **3. THEN ASK WHETHER THE VOCABULARY NEEDS FILTERING AT ALL.** On the surviving bars only, report
+     the raw depth distribution — how many of the 249 conditions agree, per direction, unfiltered.
+     **If depth on well-cooked bars is naturally rare, the licence is unnecessary and the
+     architecture simplifies to: terrain admits the bar, any k+ cluster is the signal.** If depth is
+     still saturated there, condition-level licensing (8.1-8.6) is the fallback and both filters are
+     needed.
+
+  **4. SCORE IT AGAINST OPTION B's LADDER, LIKE FOR LIKE.** Same frame, same engine, same conviction,
+     same jar, 1 lot. Option B: all 44 losses at depth 1-3, 739 trades at depth 4+ with ZERO losses,
+     average trade climbing $37 -> $97. **IF TERRAIN-ADMITTED CLUSTERS REPRODUCE THAT SHAPE, THE
+     GRADIENT IS A PROPERTY OF AGREEMENT ON GOOD TERRAIN RATHER THAN OF FROZEN SIGNAL SELECTION.**
+
+  **5. AND REPORT COVERAGE, BECAUSE THAT IS WHY THIS MATTERS.** Option B's realised gated coverage is
+     ~1.1% UP / 1.3% DOWN against a catalogue ceiling of 9.01% / 7.71%. **A terrain-admitted engine
+     is not bound by which combinations happened to be searched.** If it reaches materially more
+     terrain at comparable quality, that is the argument for it — and coverage is the axis where the
+     frozen architecture is weakest.
+
+**AND THE STANDARD THIS IS JUDGED BY IS NOT PROFIT.** The operator's stated objective is confidence
+that the signals will keep performing, not more money. A terrain layer earns its place by making
+FAILURES LEGIBLE: if a trade loses inside a state that was supposed to be favourable, that is
+information, and the descriptor can be checked independently of P&L. **BOOK-50 went 6.40 -> 2.19 and
+nobody could say why. That is the wound this addresses.** Report what each layer DESCRIBES, not only
+what it scores.
+
+**THE LOOK-AHEAD TRAP APPLIES DOUBLY HERE** and it is now the single most likely way this produces a
+spectacular and worthless result. terrain_episodes.csv is FULL-SAMPLE and carries an eligibility_mask
+and a population column. Four concurrence files carried causal=False on every row until this run;
+concurrence_entry_order.csv now has a causal arm. **A bar-level licence derived from full-sample
+labels and used to admit an entry is look-ahead. State the basis at every use or the result is
+discarded.**
+
 ## 8.1 — THE PROPOSITION
 
 Everything in this project so far freezes a combination. F0 searches `A + B + C`, ratifies the
