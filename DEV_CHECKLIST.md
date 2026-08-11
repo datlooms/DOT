@@ -222,7 +222,7 @@ A token sweep was the first design and it failed twice on its own terms. It miss
       engine/dots_thresholds.py           518862bf19fb   (already sacred)
       engine/terrain.py                   dcaecaf7e8e1
       engine/cluster_profiler.py          60984ad7e6a1
-      scanners/concurrence_profiler.py    a120f75fe5d3
+      scanners/concurrence_profiler.py    3e099e89b563
 
     THESE SHAS ARE CONSTANTS OF THIS DOCUMENT, recorded at HEAD e0eb79a. The
     Developer VERIFIES against them; he does not record his own baseline. A
@@ -242,7 +242,7 @@ These are the FOUR modules that may legitimately define episodes, clusters or st
 
 Item 5's in-run assertion that episode thresholds route through mechanism D is RETAINED and is complementary: the lock is pre-run, the assertion is in-run.
 
-**The table below is a CLASSIFICATION RECORD, not the enforcement mechanism.** It documents why each existing site is sanctioned so a future auditor re-applies the same reasoning. Verified by full sweep at `master.py aa08a4cceaad`: 15 percentile/quantile sites and 19 sorted-index sites, independently reproduced site-for-site by the Auditor.
+**The table below is a CLASSIFICATION RECORD, not the enforcement mechanism.** It documents why each existing site is sanctioned so a future auditor re-applies the same reasoning. Verified by full sweep at `master.py 9f1f6e3b08ee`: 15 percentile/quantile sites and 19 sorted-index sites, independently reproduced site-for-site by the Auditor.
 
 | site | role | status |
 |---|---|---|

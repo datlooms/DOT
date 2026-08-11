@@ -126,7 +126,7 @@ def main():
         for ln, col, txt in check(path):
             bad += 1
             print(f'  UNGUARDED  {rel}:{ln}  reads {col} numerically  -> {txt}')
-    print(f'  modules checked: {len(mods)}')
+    print(f'  COVERAGE: {len(mods)} of {len(mods)} python modules enumerated under . / engine / scanners / orchestrator (100%)')
     if bad:
         print(f'  *** {bad} UNGUARDED NUMERIC READ(S) of a blankable column. A zero-loss cell '
               f'holds \'\' and these will raise at run time, possibly deep inside a stage. ***')

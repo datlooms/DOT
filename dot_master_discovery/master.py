@@ -291,10 +291,20 @@ def s10_collect(out, data_dir, input_sha):
     try:
         import sweep_artifacts as _sw
         _rep = _sw.sweep(out)
+        _n_exist, _n_aud, _cov_ok = _sw.coverage(out, _rep['file'].nunique())
         _sp = os.path.join(out, 'sweep_report.csv')
         _rep.to_csv(_sp, index=False, lineterminator='\n')
         _esc = _rep[_rep['finding'].isin(('CONSTANT-ESCALATED', 'SENTINEL', 'SCALE', 'NO-BASIS',
                                           'MISSING-REQUIRED', 'UNREADABLE'))]
+        _rep = pd.concat([_rep, pd.DataFrame([{
+            'file': '<COVERAGE>', 'finding': ('OK' if _cov_ok else 'COVERAGE-GAP'),
+            'detail': f'audited {_n_aud} of {_n_exist} artifacts present under {out}'}])],
+            ignore_index=True)
+        if not _cov_ok:
+            print(f'  *** SWEEP COVERAGE GAP: audited {_n_aud} of {_n_exist} artifacts. '
+                  f'A provenance record covering part of the tree reads as clean evidence for '
+                  f'files it never opened. ***', flush=True)
+        print(f'  sweep coverage: {_n_aud} of {_n_exist} artifacts present')
         print(f'  sweep_report.csv: {_rep["file"].nunique()} artifacts audited, '
               f'{len(_esc)} escalated finding(s). THE PROVENANCE RECORD FOR EVERY ARTIFACT IN THE '
               f'TREE, emitted as a file rather than printed to a terminal that closes - six '

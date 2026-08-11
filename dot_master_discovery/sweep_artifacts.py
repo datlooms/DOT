@@ -29,6 +29,7 @@ whose whole purpose is to discriminate.
 import argparse
 import glob
 import os
+import sys
 import re
 
 import numpy as np
@@ -154,10 +155,44 @@ def check_required(name, df):
     return [{'missing': miss}] if miss else []
 
 
+SKIP_DIRS = ('.markers', '_f13_shards', '__pycache__')
+
+
+def enumerate_artifacts(directory):
+    """EVERY artifact under the tree, RECURSIVELY.
+
+    This was glob('<dir>/*.csv') - NON-RECURSIVE - so it audited the 32 files in
+    discovery/full/ and never saw the 44 in discovery/full/results/ or
+    catalogues/. All six known defects lived in the unaudited two thirds:
+    n_valid_triples_touching, cohort_scored's POOL-scale nets, the inert gated_*
+    columns, candidates.csv's 50 rows at 999, the null-baseline sentinel, and
+    causal=False across the concurrence files.
+
+    THE DETECTION LOGIC WAS ALWAYS CORRECT AND THE SCOPE WAS SHORT. That is the
+    third auditor-coverage failure of the week - the never-called sweep's file
+    list omitted a scanner, the contract gate missed a loop-variable read - and
+    every time the thing the tool could not see was where the defect was. A
+    provenance record that silently covers a third of the tree is WORSE than
+    none, because it reads as clean evidence.
+    """
+    out = []
+    for dp, dirs, files in os.walk(directory):
+        dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+        for fn in files:
+            if fn.endswith(('.csv', '.jsonl')):
+                out.append(os.path.join(dp, fn))
+    return sorted(out)
+
+
+def coverage(directory, audited):
+    """How many artifacts EXIST vs how many were audited. Fails loudly on a gap."""
+    exist = len(enumerate_artifacts(directory))
+    return exist, audited, (exist == audited)
+
+
 def sweep(directory):
     rows = []
-    files = sorted(glob.glob(os.path.join(directory, '*.csv')) +
-                   glob.glob(os.path.join(directory, '*.jsonl')))
+    files = enumerate_artifacts(directory)
     for p in files:
         name = os.path.basename(p)
         df, header, err = read_artifact(p)
@@ -198,6 +233,12 @@ def main():
     rep = sweep(a.dir)
     esc = rep[rep['finding'].isin(('CONSTANT-ESCALATED', 'SENTINEL', 'SCALE', 'NO-BASIS',
                                    'MISSING-REQUIRED', 'UNREADABLE'))]
+    n_exist, n_audited, ok = coverage(a.dir, rep['file'].nunique())
+    print(f'  COVERAGE: audited {n_audited} of {n_exist} artifacts present under {a.dir}')
+    if not ok:
+        print(f'  *** COVERAGE GAP: {n_exist - n_audited} artifact(s) EXIST AND WERE NOT '
+              f'AUDITED. A provenance record covering part of the tree reads as clean '
+              f'evidence for files it never opened. THIS IS A FAILURE, NOT A WARNING. ***')
     print(f'  files swept: {rep["file"].nunique()}')
     for k, v in rep['finding'].value_counts().items():
         print(f'    {k:22} {v}')
@@ -211,9 +252,14 @@ def main():
     print()
     print(f'  CLEAN ({len(clean)} files): none found')
     if a.out:
+        rep = pd.concat([rep, pd.DataFrame([{
+            'file': '<COVERAGE>', 'finding': ('OK' if ok else 'COVERAGE-GAP'),
+            'detail': f'audited {n_audited} of {n_exist} artifacts present under {a.dir}'}])],
+            ignore_index=True)
         rep.to_csv(a.out, index=False, lineterminator='\n')
         print(f'  report -> {a.out}')
+    return 0 if ok else 1
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main() or 0)

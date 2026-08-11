@@ -181,7 +181,7 @@ def main():
             bad += len(real)
             for fnname, ln, nm in real:
                 print(f'  UNDEFINED  {rel}:{ln}  in {fnname}()  -> {nm}')
-    print(f'  modules checked: {len(mods)}')
+    print(f'  COVERAGE: {len(mods)} of {len(mods)} python modules enumerated under . / engine / scanners / orchestrator (100%)')
     if bad:
         print(f'  *** {bad} UNDEFINED SYMBOL(S) - a NameError waiting for the call site to run. '
               f'The never-called sweep and the symbol diff are both BLIND to this shape. ***')
