@@ -183,6 +183,46 @@ def install_smoke_caps():
             setattr(mod, attr, _capped2)
             mod._SMOKE_WRAPPED = True
             done.append(f'{modname}.{attr} -> first {k}')
+    # F9: the SESSION/WEEKDAY GATE axis. --s3-limit reaches base_labels only, so the
+    # audit predicted 40 x 6 x 2 = 480 and the run printed
+    #   'Search: 40 base x 35 session/weekday gates x 2 dir = 2800 candidates'
+    # F9 took 476.4s of a 69-minute smoke run. IDENTICAL SHAPE TO F1: a two-axis
+    # scanner where the cap reaches one axis. session_masks and weekday_masks are
+    # module functions, so wrapping them is configuration, not a code change.
+    for _mn, _fns in (('session_temporal', ('session_masks', 'weekday_masks')),
+                      ('conditional_interaction', ('build_gate_masks',)),
+                      ('divergence_nonconfirm', ('flow_pool',)),
+                      ('rolling_leadlag', ('pair_pool',))):
+        try:
+            _m = __import__(_mn)
+        except Exception:
+            continue
+        for _fn in _fns:
+            if not hasattr(_m, _fn) or getattr(_m, f'_SMOKE_{_fn}', False):
+                continue
+            _o3 = getattr(_m, _fn)
+
+            def _cap_dict(*a_, _o=_o3, _k=k, **kw_):
+                r = _o(*a_, **kw_)
+                if isinstance(r, dict):
+                    return {kk: r[kk] for kk in list(r)[:_k]}
+                if isinstance(r, (list, tuple)):
+                    return type(r)(list(r)[:_k])
+                return r
+
+            setattr(_m, _fn, _cap_dict)
+            setattr(_m, f'_SMOKE_{_fn}', True)
+            done.append(f'{_mn}.{_fn} -> first {k}')
+    for _mn, _attr in (('rolling_leadlag', 'WINDOWS'), ('rolling_leadlag', 'RELATIONS'),
+                       ('divergence_nonconfirm', 'FLOW_FEATS')):
+        try:
+            _m2 = __import__(_mn)
+        except Exception:
+            continue
+        _v = getattr(_m2, _attr, None)
+        if isinstance(_v, list) and len(_v) > 2:
+            setattr(_m2, _attr, _v[:2])
+            done.append(f'{_mn}.{_attr} -> first 2')
     try:
         import single_variable_extremes as _f13
         if hasattr(_f13, 'DIRECTIONS') and len(_f13.DIRECTIONS) > 1:

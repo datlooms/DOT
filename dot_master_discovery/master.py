@@ -3207,7 +3207,7 @@ def main():
         import concurrence_profiler as _cpx
         import triple_convergence_and_d2ddir as _f0x
         import catalogue as _catx
-        args.s3_limit = args.s3_limit or 40
+        args.s3_limit = args.s3_limit or 8
         _cpx.N_PERM = 3
         _cpx.K_MIN, _cpx.K_MAX, _cpx.K_STEP = 1, 2, 1
         _cpx.K_SATURATION_STRATUM = []
