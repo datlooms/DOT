@@ -130,6 +130,72 @@ def install_scanner_paths():
 SMOKE_ENV = 'DOT_SMOKE_CAP'
 
 
+def _cap_align_pool(k, applied, failed):
+    """Cap F12's label lists WITHOUT emptying the secondary view.
+
+    A HEAD-SLICE OF A SORTED LIST IS THE MOST BIASED POSSIBLE CHOICE, and it
+    composed with a downstream filter to an empty collection:
+
+        L1352  long_lbls, short_lbls = align_pool(pool)      <- cap: first 6 sorted
+        L1353  if secondary:
+        L1354      keep = survivor_conditions()
+        L1355/6    long/short_lbls = [l for l in ... if l in keep]   <- EMPTY
+        L1358  dl, ds, da = depth_arrays(...)  -> np.vstack([]) raises
+
+    None of the first 6 sorted short labels is an F0 survivor, so the secondary
+    view emptied and vstack raised. At the full 249 labels the intersection is
+    never empty, which is why this is SMOKE-ONLY - and why two earlier smoke runs
+    never saw it: the F12 caps were silently failing then, and the reporting fix
+    is what exposed it.
+
+    THE CAP'S PURPOSE IS TO REDUCE COUNT, NOT TO BIAS WHICH LABELS. So survivors
+    are taken first and the remainder fills from the rest, which guarantees the
+    intersection is non-empty whenever the direction has any survivor at all.
+    Real-run behaviour is untouched: this wrapper only exists when DOT_SMOKE_CAP
+    is set.
+    """
+    m = None
+    try:
+        m = __import__('concurrence_profiler')
+    except Exception as exc:
+        failed.append(f'concurrence_profiler: IMPORT FAILED {type(exc).__name__}: '
+                      f'{str(exc)[:90]}')
+        return
+    if not hasattr(m, 'align_pool'):
+        failed.append('concurrence_profiler.align_pool: ATTRIBUTE ABSENT')
+        return
+    if getattr(m, '_SMOKE_align_pool', False):
+        applied.append('concurrence_profiler.align_pool -> already wrapped')
+        return
+    try:
+        orig = m.align_pool
+
+        def _survivors_first(seq, keep, n):
+            surv = [x for x in seq if x in keep]
+            rest = [x for x in seq if x not in keep]
+            out = surv[:n]
+            if len(out) < n:
+                out += rest[:n - len(out)]
+            return [x for x in seq if x in set(out)]
+
+        def _capped(pool, _o=orig, _k=k, _m=m):
+            lo, sh = _o(pool)
+            try:
+                keep = _m.survivor_conditions()
+            except Exception:
+                keep = set()
+            if not keep:
+                return list(lo)[:_k], list(sh)[:_k]
+            return _survivors_first(list(lo), keep, _k), _survivors_first(list(sh), keep, _k)
+
+        m.align_pool = _capped
+        m._SMOKE_align_pool = True
+        applied.append(f'concurrence_profiler.align_pool -> first {k} per direction, '
+                       f'SURVIVORS FIRST so the secondary view cannot empty')
+    except Exception as exc:
+        failed.append(f'concurrence_profiler.align_pool: {type(exc).__name__}: {str(exc)[:70]}')
+
+
 EXPECTED_SMOKE_CAPS = 14
 
 
@@ -232,7 +298,7 @@ def install_smoke_caps():
     _set_const('wf_selection', 'NULL_FLOOR_QUALIFIERS', 4)
     _set_const('wf_selection', 'NULL_GEN_BATCH', 24)
     _set_const('wf_selection', 'NULL_TRIPLES_CAP', 200)
-    _wrap_call('concurrence_profiler', 'align_pool', k, ' labels per direction')
+    _cap_align_pool(k, applied, failed)
     _set_const('concurrence_profiler', 'MIN_STACK_BARS', 1)
     # F13's directions are a HARDCODED TUPLE inside a loop at
     # single_variable_extremes.py L291 - ('LONG', 'SHORT') - with no module-level
