@@ -3221,6 +3221,7 @@ def main():
         _catx.NULL_K_DEFAULT = 40
         _f0x.DENSITY_K_BANDS = [1, 2]
         os.environ['DOT_SMOKE_CAP'] = '6'
+        os.environ['DOT_SMOKE_CHUNK_TARGET'] = '1'
         import dot_frame_binding as _fbx
         for _line in _fbx.install_smoke_caps():
             print(f'    smoke cap: {_line}', flush=True)

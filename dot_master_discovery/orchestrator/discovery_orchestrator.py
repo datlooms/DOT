@@ -818,7 +818,18 @@ CHUNK_AXIS = {'F0': '__combos__', 'F1': ('cond_labels', 'lags'), 'F2': 'cond_lab
               'F4': 'price_feats', 'F5': 'cond_labels', 'F6': 'cross_feats',
               'F7': 'stretch_feats', 'F8': 'pairs', 'F9': 'base_labels', 'F11': 'pairs'}
 COST_ORDER = ['F1', 'F0', 'F3', 'F9', 'F11', 'F4', 'F2', 'F7', 'F5', 'F8', 'F6']
-TARGET_CHUNKS_PER_FAMILY = 64
+TARGET_CHUNKS_PER_FAMILY = int(os.environ.get('DOT_SMOKE_CHUNK_TARGET', '64'))
+# ONE PARAMETER, READ FROM THE ENVIRONMENT - the orchestrator is NOT a scanner and is
+# not locked, so a direct read here is less code than routing it through
+# dot_frame_binding, and the environment is already inherited by every spawned worker.
+#
+# WHY IT MATTERS AT SMOKE SCALE. _chunk_bounds does:
+#     size = 1 if n_items <= target else -(-n_items // target)
+# With target=64 and n_items small, size collapses to 1 and you get ONE CHUNK PER ITEM:
+# 144 F1 candidates produced 12 chunks, ~100 across eleven families. Each chunk spawns a
+# worker that rebuilds the oracle - MEASURED AT 38.1s, not the 4.0s frame read - so the
+# FIXED COST WAS THE ENTIRE RUNTIME: ~71 minutes of setup to scan a few hundred
+# candidates. At target=1 that is ~11 chunks and ~1.9 min wall at 4 workers.
 TARGET_CHUNKS_F0 = 512
 _WCACHE = {}
 
