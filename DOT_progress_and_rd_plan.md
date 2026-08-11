@@ -941,7 +941,7 @@ The scattered stage8_discovery pipeline (many scripts across families/folders + 
 
 **STATUS:** Phase-1 blind audit CLOSED (system independently confirmed real). Master program RATIFIED as the sole discovery entry point. reproduce_dot + master-analyst layer delivered. The path to live is unchanged (Stage 9 EA build → sim↔MT4 parity → demo → live); the discovery/analysis infrastructure is now a single ratified command runnable on any data.
 
-**Post-ratification patches (2026-07-18):** master.py received two fixes after the Auditor's PASS on sha 9f1f6e3b08ee — (a) Windows UTF-8 file-I/O (all writes encoding='utf-8'; cp1252 crashed on the '→' char), and (b) natural-sort + S0 header-handling for >9 split parts, plus rebuild.py integration (shared _packutil.py). Current master.py sha: 9f1f6e3b08ee. The committed-path logic is unchanged; $92,347 re-verified REPRODUCED on Windows and from a clean clone. A fresh Auditor pass on db8957587844 is pending to re-bless the new sha.
+**Post-ratification patches (2026-07-18):** master.py received two fixes after the Auditor's PASS on sha 93f1bdcdb0db — (a) Windows UTF-8 file-I/O (all writes encoding='utf-8'; cp1252 crashed on the '→' char), and (b) natural-sort + S0 header-handling for >9 split parts, plus rebuild.py integration (shared _packutil.py). Current master.py sha: 93f1bdcdb0db. The committed-path logic is unchanged; $92,347 re-verified REPRODUCED on Windows and from a clean clone. A fresh Auditor pass on db8957587844 is pending to re-bless the new sha.
 
 ---
 
@@ -1191,11 +1191,11 @@ the Quant, verified across four Supervisor rounds, final verdict SHIP. Amended n
 |---|---|---|
 | **1** | S3B family evidence review, `trades.csv`, D2D measurement, §D reach, data-relative OOS, F10 map correction | RATIFY `eea3e3fe931a` |
 | **2** | `selection.py`, stage S5B, the objective, per-direction greedy/CELF | REJECT, then RATIFY `02cd79ad914b` |
-| **3** | `wf_selection.py`, stage S5C, walk-forward on the selection process, attestation, single-touch guard | RATIFY, then remediation RATIFY `eb7c5aa2e0a2` |
+| **3** | `wf_selection.py`, stage S5C, walk-forward on the selection process, attestation, single-touch guard | RATIFY, then remediation RATIFY `e0a6d884e477` |
 | **Consolidation** | one authoritative directory, 105 files | RATIFY `2c11b70871c4` |
 | **S3 operability** | six defects — see §5 | REJECT, then RATIFY `17acb49571fa` |
 
-**Final pipeline sha: `master.py 9f1f6e3b08ee`.** Sacred five byte-locked throughout every pass.
+**Final pipeline sha: `master.py 93f1bdcdb0db`.** Sacred five byte-locked throughout every pass.
 
 ### 3. WHAT THE PIPELINE NOW CONTAINS
 

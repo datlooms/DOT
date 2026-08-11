@@ -638,8 +638,18 @@ def score_null_arm(df, pool_keys, adaptive, structural, warmup, split, guard, ru
                      'test_trades': int(len(pnl)), 'test_net': round(te['net'], 1),
                      'test_PF': round(te['PF'], 3), 'test_WR': round(te['WR'], 1),
                      'train_passes': True, 'test_passes': te['passes'],
+                     'traded_on_test': bool(len(pnl) > 0),
+                     'in_denominator': True,
                      'persists': bool(te['passes'])})
     n_null = len(qualifiers)
+    # THE NULL ARM'S DENOMINATOR IS NOT THE BOOK ARM'S. The book arm divides by
+    # train_passes AND test_traded (persistence_rate). The null arm divides by
+    # n_null = EVERY TRAIN QUALIFIER, whether or not it fired on test, because a
+    # random triple that goes silent on test is a null failure and must stay in the
+    # denominator - excluding it would flatter the null and deflate every ratio.
+    # So in_denominator == train_passes here, and rows are only appended for
+    # qualifiers, which is why train_passes reads True on every row: that is the
+    # file's definition, not a collapsed flag.
     rate = float(persisted / n_null) if n_null else np.nan
     if n_null >= target:
         status = 'EVALUABLE - target denominator met'

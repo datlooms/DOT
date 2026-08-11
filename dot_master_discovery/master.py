@@ -90,7 +90,8 @@ def done_path(out, key):
 STAGE_REQUIRED_COLUMNS = {
     'wf_book_arm_entities.csv': ('in_denominator', 'train_passes', 'test_passes',
                                  'traded_on_test', 'persisted'),
-    'wf_null_arm_entities.csv': ('in_denominator', 'train_passes', 'test_passes'),
+    'wf_null_arm_entities.csv': ('in_denominator', 'train_passes', 'test_passes',
+                                'traded_on_test'),
     'catalogues/cohort_scored.csv': ('win_loss_ratio', 'breakeven_wr', 'margin_pp', 'n_losses'),
 }
 
@@ -436,7 +437,7 @@ def _pf(x):
     x = np.asarray(x, dtype=float)
     if (x < 0).any():
         return round(x[x > 0].sum() / -x[x < 0].sum(), 2)
-    return 999.0 if len(x) else 0.0
+    return PF_UNDEFINED if len(x) else 0.0
 
 
 def _is_header_row(first_line):
@@ -1637,6 +1638,7 @@ def _null_frames_for(drawn, dirs, df, ad, st, w, conv, workers, frame_path, fam,
     return [f for f in frames if f is not None]
 
 
+PF_UNDEFINED = float('nan')
 NULL_SEED_BASE = 20260728
 
 
@@ -2719,6 +2721,13 @@ def s5c_walk_forward(df, ad, st, w, pool, anchor, book_file, out, input_sha, att
     if len(nulls):
         _write_with_header(os.path.join(out, 'wf_null_arm_entities.csv'), nulls, [
             'DOT S5C spec I.3 random-triple NULL ARM, per split — THIS IS A MEASUREMENT, NOT A PASS CRITERION',
+            'THE DENOMINATOR IS in_denominator == train_passes, WHICH IS NOT THE BOOK ARM\'S '
+            'RULE. The book arm divides by train_passes AND traded_on_test; the null arm divides '
+            'by EVERY train qualifier, because a random triple that goes silent on test is a null '
+            'FAILURE and excluding it would flatter the null and deflate every ratio. '
+            'persisted.sum() / in_denominator.sum() reproduces the printed rate.',
+            'train_passes reads True on every row because rows are appended ONLY for qualifiers - '
+            'that is this file\'s definition, not a collapsed flag.',
             f'dataset_rows={attest["rows"]} dataset_range={attest["range"]}',
             f'oracle_sha256_12={oracle_sha}',
             'Random triples are drawn from the existing 249-condition pool; NO S3 output is required, so this',

@@ -61,6 +61,24 @@ def read_artifact(path):
     return df, header, ''
 
 
+KNOWN_GOOD_INVARIANT = {
+    # A constant that is the CORRECT RESULT, not a collapsed flag. Escalating these
+    # trains the reader to ignore the report, which is how six real defects survived.
+    'null_WR_n_used': 'every permutation was used - no null distribution lost a draw',
+    'null_agg_pf_n_used': 'every permutation was used',
+    'null_folds_plus_n_used': 'every permutation was used',
+    'null_worst_day_usd_n_used': 'every permutation was used',
+    'train_passes': 'the null arm appends rows ONLY for qualifiers, so True is this '
+                    'file\'s definition',
+    'in_denominator': 'the null arm divides by every train qualifier, so this equals '
+                      'train_passes by design',
+    'causal': 'only stage3_entry_order carries a causal arm by ruling; the other stages '
+              'are full-sample and say so in their headers',
+    'population': 'genuinely constant - the file has one population',
+    'cluster_basis': 'genuinely constant - the run executed on one basis',
+}
+
+
 PER_FILE_SCALAR = ('_family', 'terrain_cell', 'null_seed', 'null_matched_fraction',
                    'null_rejected_out_of_band', 'null_direction_long_share', 'dataset_rows',
                    'input_sha', 'run_id', 'oracle_sha', 'scanner_sha', 'split_definition',
@@ -90,6 +108,10 @@ def check_constant(df):
         if any(h in lc for h in PER_FILE_SCALAR):
             continue
         val = s.iloc[0]
+        if str(c) in KNOWN_GOOD_INVARIANT:
+            out.append({'column': c, 'value': repr(val)[:34], 'escalated': False,
+                        'known_good': KNOWN_GOOD_INVARIANT[str(c)]})
+            continue
         esc = any(h in lc for h in DISCRIMINATOR_HINT) or any(h in lc for h in COUNT_HINT)
         out.append({'column': c, 'value': repr(val)[:34], 'escalated': esc})
     return out
@@ -155,7 +177,14 @@ def check_required(name, df):
     return [{'missing': miss}] if miss else []
 
 
-SKIP_DIRS = ('.markers', '_f13_shards', '__pycache__')
+SKIP_DIRS = ('.markers', '_f13_shards', '__pycache__', 'data_for_analysis')
+# S10's OWN exclusion rule, imported rather than re-stated. Two enumerators
+# disagreeing about what an artifact is is how the scope went wrong in BOTH
+# directions: first 32 of 76 (non-recursive), then 4,370 (chunk shards counted as
+# artifacts). S10 skipped 13,205 and collected 90; that is the reader's set.
+_SKIP_NAME = re.compile(
+    r'(_c\d{4}\.(csv|pkl|done|cand)$)|(\.done$)|(\.cand$)|(\.provenance$)'
+    r'|(^_frame_.*\.csv$)|(^_s3_frame.*\.csv$)|(^shard_\d+\.csv$)|(^_f0_kept\.pkl$)')
 
 
 def enumerate_artifacts(directory):
@@ -179,13 +208,17 @@ def enumerate_artifacts(directory):
     for dp, dirs, files in os.walk(directory):
         dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
         for fn in files:
-            if fn.endswith(('.csv', '.jsonl')):
-                out.append(os.path.join(dp, fn))
+            if not fn.endswith(('.csv', '.jsonl')):
+                continue
+            if _SKIP_NAME.search(fn):
+                continue
+            out.append(os.path.join(dp, fn))
     return sorted(out)
 
 
 def coverage(directory, audited):
-    """How many artifacts EXIST vs how many were audited. Fails loudly on a gap."""
+    """ONE enumerator. A second walk with different rules is how a 69-file gap appeared
+    at 4,370: whatever enumerate_artifacts skipped, the coverage count still counted."""
     exist = len(enumerate_artifacts(directory))
     return exist, audited, (exist == audited)
 
@@ -203,8 +236,12 @@ def sweep(directory):
         for h in check_constant(df):
             found = True
             rows.append({'file': name,
-                         'finding': 'CONSTANT-ESCALATED' if h['escalated'] else 'constant',
-                         'detail': f"{h['column']} == {h['value']} on all {len(df)} rows"})
+                         'finding': ('CONSTANT-ESCALATED' if h['escalated']
+                                     else ('constant-KNOWN-GOOD' if h.get('known_good')
+                                           else 'constant')),
+                         'detail': (f"{h['column']} == {h['value']} on all {len(df)} rows"
+                                    + (f" | KNOWN GOOD: {h['known_good']}"
+                                       if h.get('known_good') else ''))})
         for h in check_sentinel(df):
             found = True
             rows.append({'file': name, 'finding': 'SENTINEL',
@@ -230,6 +267,21 @@ def main():
     ap.add_argument('--out', default=None)
     ap.add_argument('--summary-only', action='store_true')
     a = ap.parse_args()
+    if a.out:
+        if os.path.isdir(a.out):
+            a.out = os.path.join(a.out, 'sweep_report.csv')
+        parent = os.path.dirname(os.path.abspath(a.out))
+        if not os.path.isdir(parent):
+            print(f'  ABORT: --out parent directory does not exist: {parent}')
+            return 2
+        try:
+            with open(a.out, 'a', encoding='utf-8'):
+                pass
+        except OSError as exc:
+            print(f'  ABORT: --out is not writable BEFORE doing the work: {a.out} '
+                  f'({type(exc).__name__}). The previous form discovered this at the LAST line '
+                  f'and discarded the whole audit.')
+            return 2
     rep = sweep(a.dir)
     esc = rep[rep['finding'].isin(('CONSTANT-ESCALATED', 'SENTINEL', 'SCALE', 'NO-BASIS',
                                    'MISSING-REQUIRED', 'UNREADABLE'))]

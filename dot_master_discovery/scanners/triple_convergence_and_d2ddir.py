@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+
+PF_UNDEFINED = float('nan')
 from itertools import combinations
 import time
 import os
@@ -237,7 +239,7 @@ def compute_metrics(trades):
     pnls = np.array([t['pnl'] for t in trades])
     gross_wins = pnls[pnls > 0].sum()
     gross_losses = abs(pnls[pnls <= 0].sum())
-    pf = 999.0 if gross_losses == 0 and gross_wins > 0 else (0.0 if gross_losses == 0 else gross_wins / gross_losses)
+    pf = PF_UNDEFINED if gross_losses == 0 and gross_wins > 0 else (0.0 if gross_losses == 0 else gross_wins / gross_losses)
     n = len(trades)
     wins = int(np.sum(pnls > 0))
     wr = wins / n if n > 0 else 0
