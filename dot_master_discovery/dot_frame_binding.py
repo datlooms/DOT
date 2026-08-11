@@ -122,3 +122,72 @@ def install_scanner_paths():
             setattr(mod, attr, rd if not leaf else os.path.join(rd, leaf))
         done.append(modname)
     return done
+
+
+SMOKE_ENV = 'DOT_SMOKE_CAP'
+
+
+def install_smoke_caps():
+    """FOURTH INSTANCE of the parent-only-global class. Same transport, same reason.
+
+    --s3-limit caps ONE axis per family - the one the orchestrator chunks on. For
+    F1 that is the A-label list only, so each of 40 chunks still scanned 239
+    B-labels x 15 lags x 2 directions = 286,800 candidates and the smoke run never
+    finished a chunk. F9 has the same shape on its B-label list; F13 fans over both
+    directions inside its own pool.
+
+    A PARENT-SIDE ATTRIBUTE WRITE DOES NOT SURVIVE SPAWN - that is the whole reason
+    install_scanner_paths exists, and this reuses it rather than editing a scanner.
+    Every worker re-imports the scanner fresh and this hook runs at INTERPRETER
+    STARTUP before any worker code, so the caps are in place before the scan begins.
+    NO SCANNER FILE IS MODIFIED.
+
+    Reachable module attributes only - LAGS is a module list and scorable_pool a
+    module function, so wrapping them is configuration, not a code change.
+    """
+    cap = os.environ.get(SMOKE_ENV)
+    if not cap:
+        return []
+    k = max(2, int(cap))
+    done = []
+    try:
+        import sequential_temporal as _st
+    except Exception:
+        _st = None
+    if _st is not None:
+        if hasattr(_st, 'LAGS') and len(_st.LAGS) > 2:
+            _st.LAGS = list(_st.LAGS)[:2]
+            done.append(f'sequential_temporal.LAGS -> {_st.LAGS}')
+        if hasattr(_st, 'scorable_pool') and not getattr(_st, '_SMOKE_WRAPPED', False):
+            _orig = _st.scorable_pool
+
+            def _capped(pool, warmup, _o=_orig, _k=k):
+                return _o(pool, warmup)[:_k]
+
+            _st.scorable_pool = _capped
+            _st._SMOKE_WRAPPED = True
+            done.append(f'sequential_temporal.scorable_pool -> first {k} labels (B axis)')
+    for modname, attr in (('session_temporal', 'scorable_pool'),
+                          ('state_transition', 'scorable_pool'),
+                          ('conditional_interaction', 'scorable_pool')):
+        try:
+            mod = __import__(modname)
+        except Exception:
+            continue
+        if hasattr(mod, attr) and not getattr(mod, '_SMOKE_WRAPPED', False):
+            _o2 = getattr(mod, attr)
+
+            def _capped2(pool, warmup, _o=_o2, _k=k):
+                return _o(pool, warmup)[:_k]
+
+            setattr(mod, attr, _capped2)
+            mod._SMOKE_WRAPPED = True
+            done.append(f'{modname}.{attr} -> first {k}')
+    try:
+        import single_variable_extremes as _f13
+        if hasattr(_f13, 'DIRECTIONS') and len(_f13.DIRECTIONS) > 1:
+            _f13.DIRECTIONS = list(_f13.DIRECTIONS)[:1]
+            done.append(f'single_variable_extremes.DIRECTIONS -> {_f13.DIRECTIONS}')
+    except Exception:
+        pass
+    return done

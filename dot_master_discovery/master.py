@@ -3220,6 +3220,10 @@ def main():
         _catx.NULL_K_BY_FAMILY = {k: 40 for k in _catx.NULL_K_BY_FAMILY}
         _catx.NULL_K_DEFAULT = 40
         _f0x.DENSITY_K_BANDS = [1, 2]
+        os.environ['DOT_SMOKE_CAP'] = '6'
+        import dot_frame_binding as _fbx
+        for _line in _fbx.install_smoke_caps():
+            print(f'    smoke cap: {_line}', flush=True)
         globals()['SMOKE'] = True
         print('  *** SMOKE RUN *** every stage S0-S10 EXECUTES - same functions, same order, '
               'same pool spawn. Reduced: s3_limit=40/family, F12 k=1..2, n_perm=3, onset floor '
