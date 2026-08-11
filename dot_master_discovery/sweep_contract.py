@@ -40,11 +40,11 @@ NUMERIC = re.compile(
     r"\bfloat\(|np\.sort\(|np\.mean\(|np\.median\(|np\.std\(|np\.percentile\(|"
     r"\bmin\(|\bmax\(|\.mean\(\)|\.std\(\)|\.median\(\)|\.sum\(\)|"
     r":[<>^]?\d*\.\d+f\})")
-GUARDS = ('pf_is_undefined(o[', 'pf_aggregate', 'pf_is_undefined', 'pf_passes_floor', 'pf_sort_key',
+GUARDS = ('pf_is_undefined', 'pf_aggregate', 'pf_passes_floor', 'pf_sort_key',
           'blank_sentinel_ratio', '_blank_pf', 'to_numeric', 'errors=', 'if not ',
           '_pf_ok_floor', 'pf_is_undef')
 # Producers that never emit '' - a literal dict of zeros, or the definition itself.
-BENIGN = ("pf_passes_floor", "float('nan')", "'agg_pf': 0.0", "'min_fold_pf': 0.0", 'def blank_sentinel_ratio',
+BENIGN = ("pf_passes_floor", "float('nan')", "int(_pf_ok.sum()", "'agg_pf': 0.0", "'min_fold_pf': 0.0", 'def blank_sentinel_ratio',
           'def pf_is_undefined', 'def pf_aggregate', 'def pf_passes_floor',
           'def pf_sort_key', 'BLANKABLE', 'S5_GATE', 'GATE (write only')
 
@@ -85,8 +85,9 @@ def check(path):
             body = lines[j]
             if body.strip() and (len(body) - len(body.lstrip())) <= ind:
                 break
+            prev_b = lines[j - 1] if j >= 1 else ''
             if re.search(rf"\[\s*{var}\s*\]", body) and INDIRECT.search(body) and \
-                    not any(g in body for g in GUARDS):
+                    not any(g in body or g in prev_b for g in GUARDS):
                 out.append((j + 1, f'{items.split(",")[0].strip()} (via loop var {var})',
                             body.strip()[:66]))
     for i, ln in enumerate(lines, 1):
@@ -98,7 +99,11 @@ def check(path):
             continue
         if not NUMERIC.search(ln):
             continue
-        if any(g in ln for g in GUARDS) or any(b in ln for b in BENIGN):
+        # A guard may sit on the PREVIOUS physical line of a wrapped conditional -
+        # L1125 reads `else round(float(...))` with `if not pf_is_undefined(...)` above
+        # it. Checking only the offending line reports a site that IS guarded.
+        prev = lines[i - 2] if i >= 2 else ''
+        if any(g in ln or g in prev for g in GUARDS) or any(b in ln for b in BENIGN):
             continue
         out.append((i, cols[0], st[:66]))
     return out
