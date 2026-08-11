@@ -3229,6 +3229,8 @@ def main():
         _f0x.DENSITY_K_BANDS = [1, 2]
         os.environ['DOT_SMOKE_CAP'] = '24'
         os.environ['DOT_SMOKE_CHUNK_TARGET'] = '1'
+        import discovery_orchestrator as _orchx
+        _orchx.set_smoke_mode(True)
         import dot_frame_binding as _fbx
         _applied, _failed = _fbx.install_smoke_caps()
         for _line in _applied:

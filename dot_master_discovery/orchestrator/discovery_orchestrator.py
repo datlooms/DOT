@@ -872,6 +872,23 @@ def _slice_axis(kw, axis, lo, hi):
     return out
 
 
+SMOKE_MODE = False
+
+
+def set_smoke_mode(on):
+    """Set ONLY by master.py when --smoke is passed. NEVER an environment variable.
+
+    An env var is a manual step the operator has to remember, and it is banned. He
+    must be able to run
+
+        python master.py --data data --workers 14 --out discovery\\full
+
+    and get the correct geometry with nothing else set.
+    """
+    global SMOKE_MODE
+    SMOKE_MODE = bool(on)
+
+
 def _chunk_target():
     """READ AT CALL TIME, NOT AT IMPORT.
 
@@ -880,6 +897,8 @@ def _chunk_target():
     --smoke and exports DOT_SMOKE_CHUNK_TARGET. The env was therefore set AFTER
     the value it was meant to change had already frozen at 64.
     """
+    if not SMOKE_MODE:
+        return TARGET_CHUNKS_PER_FAMILY
     try:
         return int(os.environ.get('DOT_SMOKE_CHUNK_TARGET', TARGET_CHUNKS_PER_FAMILY))
     except (TypeError, ValueError):
@@ -901,10 +920,17 @@ def _bounds_for(fam, kw):
     axis = CHUNK_AXIS[fam]
     n_units, sizes = _axis_units(kw, axis)
     if axis == '__combos__':
-        return _chunk_bounds(n_units, target=min(TARGET_CHUNKS_F0, _chunk_target())), n_units
+        _t = min(TARGET_CHUNKS_F0, _chunk_target()) if SMOKE_MODE else TARGET_CHUNKS_F0
+        return _chunk_bounds(n_units, target=_t), n_units
     if isinstance(axis, tuple):
-        return _chunk_bounds(n_units, target=min(n_units, _chunk_target()),
-                             unit_cap=sizes[1]), n_units
+        # target=n_units gives size=1: ~7,170 single-unit chunks for F1. THAT IS THE
+        # REAL RUN'S GEOMETRY AND IT MUST NOT CHANGE. Routing this through
+        # _chunk_target() made target 64, size 15 and 485 chunks - and per-chunk cost
+        # went ~58s to ~1,900s, so TOTAL CPU WORK MORE THAN DOUBLED, 116 -> 256
+        # CPU-hours. The smoke reduction is gated behind SMOKE_MODE so it cannot
+        # reach a real run again.
+        _t = min(n_units, _chunk_target()) if SMOKE_MODE else n_units
+        return _chunk_bounds(n_units, target=_t, unit_cap=sizes[1]), n_units
     return _chunk_bounds(n_units), n_units
 
 
@@ -1312,7 +1338,17 @@ def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=Non
               f"(axis split, {TARGET_CHUNKS_PER_FAMILY} chunks max per family, "
               f"independent of worker count):", flush=True)
         for fam, script, n_axis, bounds in plan:
-            print(f"    {fam:4} axis '{CHUNK_AXIS[fam]}' = {n_axis} items -> {len(bounds)} chunks", flush=True)
+            _sz = (bounds[0][1] - bounds[0][0]) if bounds else 0
+            _geo = 'SMOKE' if SMOKE_MODE else 'REAL'
+            print(f"    {fam:4} axis '{CHUNK_AXIS[fam]}' = {n_axis} items -> {len(bounds)} chunks"
+                  f" | unit size {_sz} | geometry {_geo}", flush=True)
+            if not SMOKE_MODE and isinstance(CHUNK_AXIS[fam], tuple) and _sz != 1:
+                raise SystemExit(
+                    f'ABORT [chunk geometry] {fam} is a tuple-axis family and a REAL run must '
+                    f'produce unit size 1 ({n_axis} single-unit chunks). It produced size {_sz} '
+                    f'in {len(bounds)} chunks. A larger F1 chunk cost ~1,900s against ~58s for a '
+                    f'single unit, so TOTAL CPU WORK MORE THAN DOUBLED (116 -> 256 CPU-hours) - '
+                    f'this is visible in the first minute instead of at hour two.')
         if already:
             print(f"  RESUME: {already} of {total_chunks} chunks already complete on disk", flush=True)
         nw = min(workers, max(1, len(queue)))
