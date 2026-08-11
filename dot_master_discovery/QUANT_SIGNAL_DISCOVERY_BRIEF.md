@@ -841,6 +841,83 @@ the evidence supports.
 
 **F0 IS THE TRADE SIGNAL. EVERY OTHER FAMILY IS TERRAIN CONTEXT UNTIL PROVEN OTHERWISE.**
 
+## D2D IS THE PROOF OF CONCEPT, AND IT IS ALREADY IN PRODUCTION
+
+**D2D was built as a TRADE MECHANISM — a break-of-structure entry — and it fails as one.** Backtested
+on the corrected frame it is roughly 77% WR at PF ~1.7. On the evidence bar this project applies, that
+is not a signal.
+
+**AS A DESCRIPTOR IT IS THE MOST LOAD-BEARING ELEMENT IN THE SYSTEM.** `D2D_Trend_Dir` is the mandatory
+fourth directional term on every entry in every family. It answers one question — *which trend
+direction is the market currently within* — and it answers it well enough that nothing trades without
+it.
+
+**THE SAME OBJECT FAILED ONE TEST AND PASSED ANOTHER, AND THE DIFFERENCE WAS THE QUESTION ASKED.**
+That is the precedent, it is in production, and it has been for the life of this project. **Every
+non-F0 family has been evaluated only against the test D2D FAILS.**
+
+## AND SIX FAMILIES WERE DELETED FOR FAILING THAT SAME TEST
+
+S5's filter is `agg_pf >= 2.0`. It cut every row of six families:
+
+    family                                rows   med PF   med WR   med trades
+    F5  persistence / autocorrelation       16     1.08    78.0%       494
+    F6  threshold crossing                  10     1.11    79.3%       283
+    F7  mean reversion                      28     1.26    79.2%       579
+    F8  cross-variable structure            10     1.08    78.1%       810
+    F4  divergence / NOT-CONFIRMED-BY       66     1.21    79.2%       166
+    F2  state transition                    47     1.13    78.6%       139
+
+**177 signals. Read what they describe rather than what they score:**
+
+    F5   Micro_AutoCorr:hi                                   -> trending, or chopping
+    F7   FADE VWAP_Z:hi                                      -> stretched from value
+    F8   Slope_EMA_ST > Slope_EMA_LT                         -> short-term outrunning long-term
+    F4   VWAP_Z:hi NOT-CONFIRMED-BY Micro_OrderFlowDelta:lo  -> PRICE EXTENDED, FLOW ABSENT
+
+**READ THAT LAST ONE ALOUD. "Price is stretched high and order flow is not confirming it" IS BULLISH
+EXHAUSTION**, and it was deleted because its median profit factor is 1.21.
+
+**PF ~1.1 AT 78-79% WR ON 500-800 TRADES IS EXACTLY WHAT A NEUTRAL DESCRIPTOR LOOKS LIKE.** It fires
+often, it is directionally agnostic, and it survives folds. Those are the properties you want in a
+state label and precisely the properties that fail an entry filter. **A structure descriptor is not
+supposed to predict direction. It is supposed to describe a state.** Asking "is the market trending"
+to be profitable on its own is asking a thermometer to make money.
+
+## WHY F0 IS THE EXCEPTION AND STAYS THE TRIGGER
+
+F0 is not a better descriptor. **It is a different kind of object: SAME-BAR CONCURRENCE DEPTH MEASURES
+THE MAGNITUDE OF A PRICE-ACTION EVENT.** Six independent patterns agreeing on one bar is not a
+description of a state — it is an event large enough to move several unrelated measurements at once. A
+massive directional NY open registers as depth; a quiet drift does not.
+
+**The measured ladder is that claim's evidence:** all 44 of Option B's losses sit at depth 1-3, depth 4
+and above is 739 trades with ZERO losses, and the average trade climbs $37 -> $34 -> $47 -> $57 -> $65
+-> $97. **Depth is not a confidence score. It is a size measurement.** And a random-triple null shows no
+gradient at all, so the size is real rather than an artifact of clustering.
+
+## THE ARCHITECTURE THIS IMPLIES, AND IT IS WHAT PHASES 5, 7 AND 8 SHOULD TEST
+
+    STATE      every family except F0, composed into named market structures
+               "bullish exhaustion" = F4 divergence + F5 low autocorrelation + F8 slope rollover
+               nameable, checkable, and diagnosable when it stops working
+
+    EVENT      F0 concurrence depth, which measures how large the price-action event is
+
+    TRIGGER    an F0 cluster, admitted because the STATE says clusters of this shape are valid here
+
+**THE PAYOFF IS NOT PROFIT, IT IS DIAGNOSIS.** BOOK-50 went 6.40 -> 2.19 and nobody could say why. With
+named states the question becomes answerable and checkable independently of P&L: *is the market still
+producing exhaustion the way it did in January?* **A book you cannot diagnose cannot be held through a
+bad month, because you have no way to tell a bad month from a broken assumption.**
+
+**SO EVALUATE EVERY FAMILY TWICE.** Once as it has always been evaluated, and once as a descriptor —
+and note that the second evaluation has NO PF BAR, because a descriptor with an edge would be a signal
+and a descriptor without one is doing its job. **The scan has already run. The 177 cut rows exist in
+the results files. Nobody has ever looked at them this way.**
+
+
+
 This is the operator's ruling and it reverses how every prior pass approached the non-F0 families.
 They were evaluated as CANDIDATE ENTRY TRIGGERS — scored on their own trades, ranked on their own PF,
 and asked to earn a place in the book. On that basis F1 looks like 37,258 signals nobody can
