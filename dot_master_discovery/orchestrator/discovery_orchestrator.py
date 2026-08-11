@@ -611,7 +611,7 @@ def collate_f0(script, n_chunks, df, adaptive, structural, warmup, expected_tota
         rows = f0_rows_from_raw(df, adaptive, structural, warmup, raw)
     csv, done = _family_paths('F0', script)
     _write_atomic_csv(pd.DataFrame(rows, columns=SCHEMA), csv)
-    _mark_family_done(csv, done, len(rows))
+    _mark_family_done(csv, done, len(rows), script)
     if input_sha is not None:
         stamp_provenance(csv, input_sha)
     with open(os.path.splitext(csv)[0] + '.note', 'w', encoding='utf-8') as f:
@@ -662,9 +662,38 @@ def _write_atomic_csv(frame, path):
     os.replace(tmp, path)
 
 
-def _mark_family_done(csv_path, done_path, n_rows):
+def scanner_sha(script):
+    """sha of the SCANNER that produced an artifact. A code change must invalidate
+    its own output.
+
+    The marker recorded rows, csv_sha256 and schema_cols - all properties of the
+    ARTIFACT, none of the PRODUCER. So when F13's and F0's scanners changed (999 ->
+    blank), the schema gate could not fire (same columns, same row counts) and the
+    family resume read the stale CSVs straight off disk. `--stage S3` would have
+    silently skipped exactly the two families that changed.
+
+    Recording the producing scanner's sha closes that: F0 and F13 re-scan because
+    their scanners moved, the other nine resume because theirs did not, and there
+    is NO MANUAL MARKER DELETE - the marker invalidates itself.
+
+    A marker written before this existed carries no scanner_sha and is treated as
+    STALE, so the first run after this change re-scans once and every run after
+    that resumes correctly.
+    """
+    if not script:
+        return None
+    _here = os.path.dirname(os.path.abspath(__file__))
+    for cand in (os.path.join(_here, '..', 'scanners', f'{script}.py'),
+                 os.path.join(_here, 'scanners', f'{script}.py'),
+                 os.path.join(os.getcwd(), 'scanners', f'{script}.py')):
+        if os.path.exists(cand):
+            return _sha_file(cand)[:12]
+    return None
+
+
+def _mark_family_done(csv_path, done_path, n_rows, script=None):
     payload = {'rows': int(n_rows), 'csv_sha256': _sha_file(csv_path),
-               'schema_cols': len(SCHEMA)}
+               'schema_cols': len(SCHEMA), 'scanner_sha': scanner_sha(script)}
     tmp = done_path + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(payload, f, sort_keys=True)
@@ -682,6 +711,13 @@ def family_is_complete(fam, script):
     except Exception:
         return False, None
     if meta.get('csv_sha256') != _sha_file(csv):
+        return False, None
+    want = scanner_sha(script)
+    got = meta.get('scanner_sha')
+    if want is not None and got != want:
+        print(f'  {fam}: marker STALE - scanner {script}.py sha {got} -> {want}. The output '
+              f'schema is unchanged, so no schema gate can see this; the PRODUCER moved. '
+              f'RE-SCANNING.', flush=True)
         return False, None
     return True, meta
 
@@ -773,7 +809,7 @@ def run_family(fam, script, mod, fmt, kw_builder, df, adaptive, structural, warm
                  else " | no candidate expectation for this family"), flush=True)
     csv, done = _family_paths(fam, script)
     _write_atomic_csv(pd.DataFrame(common, columns=SCHEMA), csv)
-    _mark_family_done(csv, done, len(common))
+    _mark_family_done(csv, done, len(common), script)
     print(f"[{fam}] {len(common)} rows -> {csv}  ({time.time() - t0:.1f}s)", flush=True)
     return common
 
@@ -937,7 +973,7 @@ def _chunk_worker(payload):
         os.replace(tmpc, cpath)
     csv, done = orch._chunk_paths(fam, script, idx)
     orch._write_atomic_csv(pd.DataFrame(common, columns=SCHEMA), csv)
-    orch._mark_family_done(csv, done, len(common))
+    orch._mark_family_done(csv, done, len(common), script)
     return (fam, idx, len(common), time.time() - t0, hi - lo)
 
 

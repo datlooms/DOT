@@ -3191,12 +3191,40 @@ def main():
     ap.add_argument('--market-label', default='US30 (sealed baseline)')
     ap.add_argument('--parity', default=None,
                     help="run the chunking parity harness and exit: a family (e.g. F0) or 'all'")
+    ap.add_argument('--smoke', action='store_true',
+                    help='SMOKE RUN: every stage S0-S10 executes, same functions, same stage '
+                         'order, same pool spawn - only the WORK is reduced. Finishes in '
+                         'single-digit minutes on the real frame. It exists because three '
+                         'consecutive eleven-hour runs died inside a pool worker at F12, and '
+                         'every one would have been caught here in seconds.')
     ap.add_argument('--s3-limit', type=int, default=0,
                     help='bound each family to its first N axis units in S3 (0 = unbounded); for '
                          'smoke-testing the stage without committing days')
     ap.add_argument('--parity-limit', type=int, default=200,
                     help='cap each family to the first N axis units, applied to BOTH parity legs')
     args = ap.parse_args()
+    if args.smoke:
+        import concurrence_profiler as _cpx
+        import triple_convergence_and_d2ddir as _f0x
+        import catalogue as _catx
+        args.s3_limit = args.s3_limit or 40
+        _cpx.N_PERM = 3
+        _cpx.K_MIN, _cpx.K_MAX, _cpx.K_STEP = 1, 2, 1
+        _cpx.K_SATURATION_STRATUM = []
+        _cpx.NULL_K = [1, 2]
+        _cpx.NULL_DURATIONS = [1]
+        _cpx.DURATIONS = [1, 2]
+        _cpx.ONSET_FLOORS = [30]
+        _cpx.CAT_DURATIONS = [1]
+        _cpx.CAT_DOM_DURATIONS = [1]
+        _catx.NULL_K_BY_FAMILY = {k: 40 for k in _catx.NULL_K_BY_FAMILY}
+        _catx.NULL_K_DEFAULT = 40
+        _f0x.DENSITY_K_BANDS = [1, 2]
+        globals()['SMOKE'] = True
+        print('  *** SMOKE RUN *** every stage S0-S10 EXECUTES - same functions, same order, '
+              'same pool spawn. Reduced: s3_limit=40/family, F12 k=1..2, n_perm=3, onset floor '
+              '[30], null K=40/family, density bands [1,2]. NO STAGE IS SKIPPED: a stage that '
+              'does not execute is a stage that can still crash at hour nine.', flush=True)
     args.workers = min(args.workers, 16)
     os.environ['DOT_WORKERS'] = str(args.workers)
 
