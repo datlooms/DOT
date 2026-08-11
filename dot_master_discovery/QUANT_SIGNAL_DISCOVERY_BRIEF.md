@@ -837,6 +837,121 @@ the evidence supports.
 
 ---
 
+# THE ARCHITECTURAL RULING THAT GOVERNS PHASES 5, 7 AND 8
+
+**F0 IS THE TRADE SIGNAL. EVERY OTHER FAMILY IS TERRAIN CONTEXT UNTIL PROVEN OTHERWISE.**
+
+This is the operator's ruling and it reverses how every prior pass approached the non-F0 families.
+They were evaluated as CANDIDATE ENTRY TRIGGERS — scored on their own trades, ranked on their own PF,
+and asked to earn a place in the book. On that basis F1 looks like 37,258 signals nobody can
+navigate, F3 looks like a family that fires on 92% of bars, and F9 looks like 127 rows too few to
+matter.
+
+**ON THE TERRAIN BASIS THEY ARE SOMETHING ELSE ENTIRELY: A DESCRIPTION OF WHERE PRICE IS AND WHAT IT
+HAS JUST DONE, INSIDE WHICH AN F0 TRIPLE EITHER FIRES OR DOES NOT.**
+
+## WHY THE RULING EXISTS — THREE MEASURED FACTS
+
+1. **The other families FAIL as entries and FAIL as gap fillers.** Non-F0 standalone reaches PF 4-7
+   against F0's 15.72. On flat bars F3 loses $38,753, F9 -$1,143, F11 -$674, F2 -$366. Both roles
+   are closed by measurement, not by opinion.
+2. **THE GATES CARRY MOST OF THE PERFORMANCE.** Applying Option B's gate spec to a 50-signal F0 book
+   multiplies PF by 2.77x; adding 70 more signals buys far less. Whatever improves the GATE LAYER is
+   worth more than whatever adds to the signal layer.
+3. **Every gate tested so far is A SINGLE VARIABLE AT A THRESHOLD** — Hurst > p90, FailedBreak < p10,
+   VPIN > p70, ATR >= 20. A family is a PATTERN: a sequence, a divergence, a session structure, a
+   state transition. **Nobody has ever gated an F0 triple on a pattern.**
+
+## THE WORKED EXAMPLE — F1 AS A TERRAIN LAYER, ALREADY MEASURED
+
+F1's grammar is `A ->k-> B`: condition A fires, condition B follows within k bars. Read as an entry
+that is a signal. **READ AS TERRAIN IT IS A WINDOW WITH A DIRECTION AND AN EXPIRY**, which is
+something no existing element of this system provides — D2D_Trend_Dir is a continuous state that
+says only "which way is the trail pointing right now" and never expires.
+
+**Coverage measured on the corrected frame, fold-persistent pairs only:**
+
+    4 pairs at WR>=98%      43.7% of bars
+    238 pairs at WR>=96%   100.0% of bars      <- SATURATES
+    400 pairs              100.0% of bars      <- SATURATES
+
+**A UNION OF PAIRS IS ON ALL THE TIME AND GATES NOTHING.** This is the same trap that killed F10's
+density family. **A terrain layer must be a HANDFUL of pairs, not a family.**
+
+**Single pairs are usable.** Across 300 fold-persistent pairs at WR>=93%: coverage p5 4.4%, p25
+10.5%, median 18.1%, and 21 pairs cover under 5% of bars. The tightest:
+
+    A ->k-> B                                            dir     WR     PF   k    cov
+    ST_Flip_Event:==-1  ->7->  Micro_AutoCorr:hi         SHORT  97.9  18.22   7   4.07%
+    Session_High_Dist_ATR:lo ->10-> Slope_EMA_ST:lo      SHORT  97.8  24.73  10   3.46%
+    Slope_EMA_LT:hi ->8-> OR_High_Side:==-1              SHORT  97.4   8.04   8   3.36%
+    Micro_BarOverlap:hi ->4-> D2D_ATR:hi                 LONG   97.6  13.09   4   6.94%
+    EMA_Oscillator:hi ->2-> Harmonic_D2D_Concordance:==0 LONG   97.4  17.94   2   5.32%
+
+**READ WHAT THOSE ARE.** `Session_High_Dist_ATR:lo -> Slope_EMA_ST:lo` is *price at the session high,
+then short-term slope turns down* — a rejection at an extreme, over ten bars, marking 3.46% of the
+frame. `ST_Flip_Event:==-1 -> Micro_AutoCorr:hi` is *a flip happened, then autocorrelation rose* —
+the flip established direction and the market TRENDED rather than chopped.
+
+**Neither is expressible in a single-variable threshold and neither is expressible by D2D.** And both
+match the leader-then-confirmer shape Phase 4 found independently: structural location or an event
+leads (mean_join_offset ~0.00-0.19), trend-strength and slope conditions confirm (offset 3-22).
+
+**CAVEAT THAT MUST TRAVEL:** those WR and PF figures are F1 used as an ENTRY with D2D already applied
+as the mandatory fourth term, so they are not independent of D2D. **The COVERAGE figures are a
+property of the window itself and are what decide whether it can gate at all.** Using a window as a
+gate on F0 triples is a different measurement and it has not been made.
+
+## WHAT THIS ASKS OF YOU, PER FAMILY
+
+For F1, F2, F3, F4, F9, F11 — and F5-F8 if their rows justify it — answer FOUR questions each,
+PER DIRECTION:
+
+  **1. WHAT DOES THIS FAMILY DESCRIBE?** In one sentence, in market terms, not grammar terms. F1 is a
+     sequence with an expiry. F3 is a conditional interaction. F4 is a divergence — a
+     NOT-CONFIRMED-BY. F9 is session-temporal structure. F2 is a state transition. Name what each
+     one KNOWS that a single variable does not.
+
+  **2. IS IT RARE ENOUGH TO GATE?** Report the share of bars the family's state is ACTIVE, per member
+     and for the union. **RUN THE SATURATION TEST FIRST AND STOP THERE IF IT FAILS** — a state that
+     is true on most bars cannot gate, however good its standalone numbers look. F3 fires on 92.1% of
+     bars and is dead on arrival as a union; F9 fires on 4.1% and is the strongest candidate.
+
+  **3. DOES IT SEPARATE F0's OUTCOMES?** The measurement that matters: take Option B's F0 trades, mark
+     which fired while the family's state was active, and compare. WR, PF, worst day, payoff ratio,
+     WITH LOSS COUNTS, per direction, per depth tier. **A terrain layer earns its place by separating
+     trades that already exist, not by adding new ones.**
+
+  **4. AND WHERE DOES IT SIT IN THE STACK?** The gate stack under test is:
+
+         solo convergence + ATR_1M>=20 + ADX + ticks + [FAMILY STATE] + D2D dir
+
+     State whether the family term is ADDITIVE to D2D (both required), ALTERNATIVE to it (either
+     satisfies), or a CONVICTION term (sizes rather than blocks). These are different propositions
+     with different failure modes and the record shows the same variable can succeed in one role and
+     fail in another — the exhaustion sequence cleared decisively as a NEGATIVE screen at the 1.4th
+     percentile and failed as a positive conditioner at the 71.8th.
+
+## FOUR RULES FOR THIS WORK
+
+- **A UNION OF MEMBERS SATURATES. A HANDFUL DOES NOT.** Choose members for RARITY, then check quality.
+  Never pool a family and call it a state.
+- **THE STANDALONE NUMBERS ARE NOT THE TERRAIN NUMBERS.** A family's catalogue WR is its performance
+  as an entry with D2D applied. Its value as terrain is a different measurement on F0's trades.
+- **CAUSALITY IS NOT OPTIONAL HERE.** A state derived from full-sample labels and used to gate an
+  entry is look-ahead. concurrence_entry_order.csv now carries a causal arm; terrain_episodes.csv is
+  FULL-SAMPLE and carries an eligibility_mask and population column — state which you used.
+- **REPORT WHAT IT DESCRIBES, NOT ONLY WHAT IT SCORES.** The operator's question is "why was this
+  trade opened?" Today the answer is "three conditions agreed and D2D pointed up." A terrain layer
+  should make it "three conditions agreed, D2D pointed up, AND we were inside a window where price
+  had just rejected the session high." **That sentence is the deliverable.**
+
+**AND THE DOOR STAYS OPEN BOTH WAYS.** If a family measures better as an entry than as terrain, say
+so — the ruling is a reframing to be tested, not a conclusion to be confirmed. F1 carried 83 of 100
+signals in the best non-F0 book, which is not the profile of a pure context layer.
+
+---
+
 # PHASE 5 — WHAT IS REACHABLE THAT HE DOES NOT HOLD?
 
 **Files:** `unclaimed_reachable.csv`, `terrain_hour_profile.csv`, `terrain_episodes.csv`,
