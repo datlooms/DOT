@@ -30,6 +30,9 @@ import pandas as pd
 import dots_thresholds as dt
 import portfolio_simulation_engine as engine
 import wf
+import catalogue as _cat
+
+_blank_pf = _cat.blank_sentinel_ratio
 import sequential_temporal as seq
 
 # ═══════════════════════════════════════════════════════════════

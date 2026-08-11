@@ -30,7 +30,7 @@ Total files: 102 — NEW 3, MODIFIED 6, UNCHANGED FROM MAIN 93 (of which 60 are 
 | `rebuild.py` | `609580a417fe` | UNCHANGED FROM MAIN | data-prep: raw EA export -> validated 171-col baseline -> data/ |
 | `reference/equiDOT_discovery_blueprint.md` | `423e6e60c38e` | UNCHANGED FROM MAIN | design reference doc |
 | `reference/equiDOT_discovery_pattern_map.md` | `1a7a9d423381` | UNCHANGED FROM MAIN | design reference doc |
-| `scanners/concurrence_profiler.py` | `ed3f4d524a1c` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
+| `scanners/concurrence_profiler.py` | `a120f75fe5d3` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
 | `scanners/conditional_interaction.py` | `7908ed0c5fbc` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
 | `scanners/cross_variable_structure.py` | `5594fa73a7d3` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
 | `scanners/divergence_nonconfirm.py` | `87dcf068036b` | UNCHANGED FROM MAIN | family scanner (F0-F13) |

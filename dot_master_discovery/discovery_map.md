@@ -173,7 +173,7 @@ Oracle / wf / core are byte-identical to the project copies (§7) and must stay 
 | `scanners/cross_variable_structure.py` (F8) | `5594fa73a7d3` | MATCH |
 | `scanners/session_temporal.py` (F9) | `2e5f1703aaa2` | MATCH |
 | `scanners/rolling_leadlag.py` (F11) | `08848774ca1c` | MATCH |
-| `scanners/concurrence_profiler.py` (F12) | `ed3f4d524a1c` | MATCH |
+| `scanners/concurrence_profiler.py` (F12) | `a120f75fe5d3` | MATCH |
 | `scanners/single_variable_extremes.py` (F13) | `37e3a9075aea` | MATCH |
 | `scanners/f0_to_schema.py` | `f878d3b46c8b` | MATCH |
 | `scanners/run_f0_full.py` | `8a8a276cfbef` | MATCH |

@@ -222,7 +222,7 @@ A token sweep was the first design and it failed twice on its own terms. It miss
       engine/dots_thresholds.py           518862bf19fb   (already sacred)
       engine/terrain.py                   dcaecaf7e8e1
       engine/cluster_profiler.py          60984ad7e6a1
-      scanners/concurrence_profiler.py    ed3f4d524a1c
+      scanners/concurrence_profiler.py    a120f75fe5d3
 
     THESE SHAS ARE CONSTANTS OF THIS DOCUMENT, recorded at HEAD e0eb79a. The
     Developer VERIFIES against them; he does not record his own baseline. A
