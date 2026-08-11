@@ -872,9 +872,25 @@ def _slice_axis(kw, axis, lo, hi):
     return out
 
 
-def _chunk_bounds(n_items, target=TARGET_CHUNKS_PER_FAMILY, unit_cap=None):
+def _chunk_target():
+    """READ AT CALL TIME, NOT AT IMPORT.
+
+    TARGET_CHUNKS_PER_FAMILY is evaluated when this module is imported, and
+    master.py imports the orchestrator at ITS module load - before main() parses
+    --smoke and exports DOT_SMOKE_CHUNK_TARGET. The env was therefore set AFTER
+    the value it was meant to change had already frozen at 64.
+    """
+    try:
+        return int(os.environ.get('DOT_SMOKE_CHUNK_TARGET', TARGET_CHUNKS_PER_FAMILY))
+    except (TypeError, ValueError):
+        return TARGET_CHUNKS_PER_FAMILY
+
+
+def _chunk_bounds(n_items, target=None, unit_cap=None):
     if n_items <= 0:
         return []
+    if target is None:
+        target = _chunk_target()
     size = 1 if n_items <= target else -(-n_items // target)
     if unit_cap is not None:
         size = min(size, unit_cap)
@@ -885,9 +901,10 @@ def _bounds_for(fam, kw):
     axis = CHUNK_AXIS[fam]
     n_units, sizes = _axis_units(kw, axis)
     if axis == '__combos__':
-        return _chunk_bounds(n_units, target=TARGET_CHUNKS_F0), n_units
+        return _chunk_bounds(n_units, target=min(TARGET_CHUNKS_F0, _chunk_target())), n_units
     if isinstance(axis, tuple):
-        return _chunk_bounds(n_units, target=n_units, unit_cap=sizes[1]), n_units
+        return _chunk_bounds(n_units, target=min(n_units, _chunk_target()),
+                             unit_cap=sizes[1]), n_units
     return _chunk_bounds(n_units), n_units
 
 
