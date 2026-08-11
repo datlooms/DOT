@@ -1,14 +1,51 @@
 # DOT — QUICK START
 
-Three steps. Nothing else is required.
+Four steps. **Step 2 is not optional.**
 
 1. Put the 10 data parts in `dot_master_discovery\data\`
-2. `python master.py --data data --workers 14 --out discovery\full`
-3. Upload everything in `discovery\full\data_for_analysis\`
+2. **`python master.py --data data --workers 14 --out discovery\smoke --smoke`**  <- ~2 min
+3. `python master.py --data data --workers 14 --out discovery\full`
+4. Upload everything in `discovery\full\data_for_analysis\`
 
 ---
 
-## What step 2 does
+## STEP 2 — THE SMOKE RUN. RUN IT EVERY TIME, BEFORE EVERY FULL RUN.
+
+**It executes EVERY stage S0 through S10 at reduced scale in about two minutes.** Same functions,
+same stage order, same pool spawn, same workers — only the WORK is reduced. Nothing is skipped,
+because a stage that does not execute is a stage that can still crash at hour nine.
+
+    python master.py --data data --workers 14 --out discovery\smoke --smoke
+
+**IF IT REACHES `MASTER COMPLETE` WITH EXIT 0, THE FULL RUN WILL COMPLETE. IF IT DOES NOT, YOU HAVE
+LOST TWO MINUTES INSTEAD OF ELEVEN HOURS.**
+
+Note the different `--out`. The smoke tree cannot contaminate the real one and needs no cleanup.
+
+### Why this exists
+
+Three full runs were lost to defects a two-minute smoke run would have caught in seconds:
+
+    a NameError inside a pool worker    raised at F12 stage 4, ~40 minutes in
+    a blank string hitting astype       raised at F12 stage 8's LAST line, after 8,800 configs completed
+    a stale sacred-registry sha         aborted at second zero, but only after a fresh clone
+
+**None was findable by importing, compiling, or testing one function.** A NameError inside a pool
+worker is invisible until that worker runs, and the aggregation crash was 780 lines away from the
+change that caused it. **The only thing that finds these is executing every stage.**
+
+### What to look for
+
+* **five OKs in the SACRED REGISTRY banner** — a DRIFT line means a lock was not updated, and it stops there
+* every stage banner S0 -> S10 appearing in order
+* `MASTER COMPLETE` and exit 0
+
+If a stage aborts, the message names the file and the missing column or symbol. Fix that, re-run the
+smoke, and only then start the full run.
+
+---
+
+## What step 3 does
 
 Runs every stage S0 -> S10. Stages that already completed for this dataset resume
 from their checkpoints, so a re-run after a crash costs only the work that was lost.
