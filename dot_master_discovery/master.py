@@ -3226,10 +3226,17 @@ def main():
         for _line in _fbx.install_smoke_caps():
             print(f'    smoke cap: {_line}', flush=True)
         globals()['SMOKE'] = True
-        print('  *** SMOKE RUN *** every stage S0-S10 EXECUTES - same functions, same order, '
-              'same pool spawn. Reduced: s3_limit=40/family, F12 k=1..2, n_perm=3, onset floor '
-              '[30], null K=40/family, density bands [1,2]. NO STAGE IS SKIPPED: a stage that '
-              'does not execute is a stage that can still crash at hour nine.', flush=True)
+        import wf_selection as _wfsb
+        print(f'  *** SMOKE RUN *** every stage S0-S10 EXECUTES - same functions, same order, '
+              f'same pool spawn. NO STAGE IS SKIPPED: a stage that does not execute is a stage '
+              f'that can still crash at hour nine.', flush=True)
+        print(f'    reductions, READ FROM THE ACTUAL VALUES so this line cannot go stale: '
+              f's3_limit={args.s3_limit}/family, F12 k={_cpx.K_MIN}..{_cpx.K_MAX}, '
+              f'n_perm={_cpx.N_PERM}, onset floors {_cpx.ONSET_FLOORS}, '
+              f'S5D pricing null K={sorted(set(_catx.NULL_K_BY_FAMILY.values()))}, '
+              f'S5C null-arm target={_wfsb.NULL_TARGET_QUALIFIERS} '
+              f'floor={_wfsb.NULL_FLOOR_QUALIFIERS}, density bands {_f0x.DENSITY_K_BANDS}',
+              flush=True)
     args.workers = min(args.workers, 16)
     os.environ['DOT_WORKERS'] = str(args.workers)
 

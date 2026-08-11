@@ -223,6 +223,44 @@ def install_smoke_caps():
         if isinstance(_v, list) and len(_v) > 2:
             setattr(_m2, _attr, _v[:2])
             done.append(f'{_mn}.{_attr} -> first 2')
+    # S5C's RANDOM-TRIPLE NULL ARM. --smoke never reached it: the banner's
+    # 'null K=40/family' is S5D's PRICING null, a different draw in a different
+    # module. This arm draws until NULL_TARGET_QUALIFIERS triples QUALIFY, so at a
+    # low pass rate it scores thousands - 2,424 of the 2,436 signals S5C scored on a
+    # pool of TWELVE, 553s and 26.7% of the smoke run. A target of ~8 with a floor of
+    # 4 proves the code path executes, which is the whole purpose of a smoke run.
+    try:
+        import wf_selection as _wfs
+        for _a, _v in (('NULL_TARGET_QUALIFIERS', 8), ('NULL_FLOOR_QUALIFIERS', 4),
+                       ('NULL_GEN_BATCH', 24), ('NULL_TRIPLES_CAP', 200)):
+            if hasattr(_wfs, _a) and getattr(_wfs, _a) != _v:
+                setattr(_wfs, _a, _v)
+                done.append(f'wf_selection.{_a} -> {_v}')
+    except Exception:
+        pass
+    # F12: THE CONDITION-POOL AXIS. Smoke already sets k=1..2 and n_perm=3, but F12
+    # multiplies over its DIRECTIONAL LABEL LISTS in stages 3, 5 and 5b - 249
+    # conditions - and nothing capped those. S3's stage time was 1253s against a
+    # 169s chunk phase, so ~18 min sat after the family chunks. THIRD INSTANCE of a
+    # cap reaching one axis of a multi-axis stage, after F1's B-labels and F9's
+    # session gates. align_pool is a module function returning (long, short).
+    try:
+        import concurrence_profiler as _cp2
+        if hasattr(_cp2, 'align_pool') and not getattr(_cp2, '_SMOKE_ALIGN', False):
+            _oa = _cp2.align_pool
+
+            def _capped_align(pool, _o=_oa, _k=k):
+                lo, sh = _o(pool)
+                return list(lo)[:_k], list(sh)[:_k]
+
+            _cp2.align_pool = _capped_align
+            _cp2._SMOKE_ALIGN = True
+            done.append(f'concurrence_profiler.align_pool -> first {k} labels per direction')
+        if hasattr(_cp2, 'MIN_STACK_BARS'):
+            _cp2.MIN_STACK_BARS = 1
+            done.append('concurrence_profiler.MIN_STACK_BARS -> 1')
+    except Exception:
+        pass
     try:
         import single_variable_extremes as _f13
         if hasattr(_f13, 'DIRECTIONS') and len(_f13.DIRECTIONS) > 1:
