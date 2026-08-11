@@ -204,6 +204,123 @@ still wins 81% of the time.** The regime dominates the signal.
 is to find signals that are PRESENT when a real bite is available.** A mediocre signal that reliably
 participates in depth is worth more than a brilliant one that fires alone on an empty plate.
 
+### 4.3 Depth is a SIZE measurement, not a confidence score
+
+**This was misread for the life of the project, including by the instances that measured it
+correctly.** Depth was treated as an agreement score — more signals concurring, more likely the trade
+is right. That reading is wrong and it matters, because it points the search in the wrong direction.
+
+**Six independent patterns firing on one bar is not six opinions about a coin flip. It is an event
+large enough to move six unrelated measurements at once.** A massive directional NY open registers as
+depth. A quiet drift does not. Depth measures the SIZE OF THE PRICE-ACTION EVENT, and everything the
+ladder shows follows from that.
+
+Measured on a 120-signal book, gated, ATR>=20, jar active, 1 lot:
+
+| depth | trades | WR | PF | net | avg trade | wins / losses |
+|---|---|---|---|---|---|---|
+| solo | 177 | 92.7% | 3.16 | $6,552 | $37.0 | 164 / 13 |
+| 2 | 412 | 96.1% | 8.54 | $14,216 | $34.5 | 396 / 16 |
+| 3 | 480 | 96.9% | 14.31 | $22,628 | $47.1 | 465 / 15 |
+| 4 | 324 | 100.0% | — | $18,458 | $57.0 | **324 / 0** |
+| 5 | 145 | 100.0% | — | $9,446 | $65.1 | **145 / 0** |
+| 6 | 270 | 100.0% | — | $26,109 | $96.7 | **270 / 0** |
+
+**All 44 losses sit at depth 1-3. Depth 4 and above is 739 trades with ZERO losses.** And the average
+trade climbs the whole way — $37 to $97. **A confidence score would raise the win rate and leave the
+trade size alone. A size measurement raises both, and that is what is observed.**
+
+**AND IT IS NOT CLUSTERING.** 50 random triples drawn from the same 243 firing conditions, three
+seeds, identical engine, no filtering: the depth ladder reads 1.07 / 0.95 / 0.92 — flat to declining —
+and random triples cannot reach depth at all (5, 0 and 5 trades at depth 5+ against the real book's
+387) despite producing 3-4x more total trades. The gradient is a property of what the signals are, not
+of how they happen to bunch.
+
+**THE CONSEQUENCE FOR SELECTION:** rule 4 below says depth is the unit of quality. Read it as
+*participation in large events*, not *agreement with other signals*. A signal earns its place by being
+present when something big happens — which is why a mediocre signal that shows up at depth outperforms
+a brilliant one that fires alone.
+
+---
+
+## 4B. THE QUESTION DETERMINES THE ANSWER — AND ONLY ONE QUESTION HAS EVER BEEN ASKED
+
+**STATUS: this section is DOCTRINE derived from one PROVEN precedent and one UNTESTED reframing. The
+precedent is measured and in production. The reframing is a hypothesis with a specified test, recorded
+here because the error it corrects is the same error section 3 documents.**
+
+Every family in this project has been evaluated against exactly one question: **"are you profitable as
+a trade trigger?"** Families that answered no were deleted. **That question has never been checked
+against the possibility that it is the wrong question.**
+
+### The precedent, and it is already running
+
+**D2D was built as a TRADE MECHANISM — a break-of-structure entry — and it fails as one.** Backtested
+on the corrected frame it is roughly 77% WR at PF ~1.7. Against the evidence bar this project applies,
+that is not a signal.
+
+**As a DESCRIPTOR it is the most load-bearing element in the system.** `D2D_Trend_Dir` is the mandatory
+fourth directional term on every entry in every family. It answers one question — *which trend
+direction is the market currently within* — and answers it well enough that nothing trades without it.
+
+**THE SAME OBJECT FAILED ONE TEST AND PASSED ANOTHER, AND THE DIFFERENCE WAS THE QUESTION ASKED.**
+
+### Six families were deleted for failing the test D2D fails
+
+S5's filter is `agg_pf >= 2.0`. It cut every row of six families:
+
+| family | what it scans | rows | med PF | med WR | med trades |
+|---|---|---|---|---|---|
+| F5 | persistence / autocorrelation | 16 | 1.08 | 78.0% | 494 |
+| F6 | threshold crossing | 10 | 1.11 | 79.3% | 283 |
+| F7 | mean reversion | 28 | 1.26 | 79.2% | 579 |
+| F8 | cross-variable structure | 10 | 1.08 | 78.1% | 810 |
+| F4 | divergence / NOT-CONFIRMED-BY | 66 | 1.21 | 79.2% | 166 |
+| F2 | state transition | 47 | 1.13 | 78.6% | 139 |
+
+**177 signals. Read what they DESCRIBE rather than what they SCORE:**
+
+    F5   Micro_AutoCorr:hi                                   -> trending, or chopping
+    F7   FADE VWAP_Z:hi                                      -> stretched from value
+    F8   Slope_EMA_ST > Slope_EMA_LT                         -> short-term outrunning long-term
+    F4   VWAP_Z:hi NOT-CONFIRMED-BY Micro_OrderFlowDelta:lo  -> PRICE EXTENDED, FLOW ABSENT
+
+**Read the last one aloud. "Price is stretched high and order flow is not confirming it" is BULLISH
+EXHAUSTION**, and it was deleted because its median profit factor is 1.21.
+
+**PF ~1.1 AT 78-79% WR ON 500-800 TRADES IS EXACTLY WHAT A NEUTRAL DESCRIPTOR LOOKS LIKE.** It fires
+often, it is directionally agnostic, and it survives folds. **Those are the properties you want in a
+state label and precisely the properties that fail an entry filter.** A structure descriptor is not
+supposed to predict direction — it is supposed to describe a state. Asking "is the market trending" to
+be profitable on its own is asking a thermometer to make money.
+
+### What this implies, and what it does not
+
+**F0 is the exception and stays the trigger, for the reason in 4.3:** it is not a better descriptor, it
+is a different kind of object. Concurrence depth measures the magnitude of an event. Everything else
+measures a condition.
+
+    STATE      every family except F0, composed into named market structures
+               "bullish exhaustion" = F4 divergence + F5 low autocorrelation + F8 slope rollover
+               nameable, checkable, and diagnosable when it stops working
+
+    EVENT      F0 concurrence depth, measuring how large the price-action event is
+
+    TRIGGER    an F0 cluster, admitted because the STATE says clusters of this shape are valid here
+
+**THE PAYOFF IS NOT PROFIT, IT IS DIAGNOSIS.** BOOK-50 went 6.40 -> 2.19 and nobody could say why.
+With named states the question becomes answerable independently of P&L: *is the market still producing
+exhaustion the way it did in January?* **A book that cannot be diagnosed cannot be held through a bad
+month, because there is no way to tell a bad month from a broken assumption.**
+
+**THIS IS NOT YET MEASURED AND MUST NOT BE CITED AS IF IT WERE.** The saturation trap applies with full
+force: a union of 238 fold-persistent F1 pairs at WR>=96% covers 100% of bars, and pooling anything in
+this system saturates. A descriptor layer must be a HANDFUL of members, chosen for rarity, and the
+saturation test is the first thing to run and the fastest way to kill it. The specification is in
+`QUANT_SIGNAL_DISCOVERY_BRIEF.md` Phases 5 and 8.
+
+---
+
 ---
 
 ## 5. WHY THE SHORT SIDE HAS BEEN EATING CRUMBS
@@ -266,6 +383,20 @@ The specific failure mode to guard against: **a single negative conclusion harde
 pre-interprets everything measured afterwards.** Concurrence was dismissed for months on exactly that
 basis and is now the most-corroborated finding in the project.
 
+**6. ASK EVERY FAMILY BOTH QUESTIONS.**
+"Are you profitable as a trigger?" and "do you describe a state?" are different questions with
+different pass marks, and only the first has ever been asked. **A descriptor with an edge would be a
+signal; a descriptor without one is doing its job** — so the second evaluation carries NO PF BAR.
+D2D fails the first and is load-bearing on the second, and it has been in production the whole time.
+Six families were deleted on the first question without the second ever being put to them.
+
+**WHOLE CAKE? IS THIS RULE.** It was never a question about volume. It is: *did you look at all of it,
+or only the parts that answered the question you happened to be asking?* Four families cut on a PF
+floor, F10 fused before it ran, F1 dismissed on a crude union test — every one the same error, and
+every one a case the mantra was written to catch.
+
+---
+
 ---
 
 ## 7. WHAT THIS DOCUMENT FORBIDS
@@ -278,6 +409,10 @@ basis and is now the most-corroborated finding in the project.
 - Treating an unexplained result as a failure rather than as an unmapped region of the cake.
 - Carrying a prior instance's pessimism forward as if it were a finding. A conclusion binds only if
   it is recorded in the non-negotiables or the progress doc AND backed by verified clean data.
+- **Discarding a family, variable or mechanism on a PROFIT test without first asking whether it is a
+  DESCRIPTOR.** D2D fails the profit test and gates every entry in the system.
+- **Reading depth as a confidence score.** It is a size measurement. A signal earns its place by being
+  PRESENT when something large happens, not by agreeing with other signals.
 
 ---
 
@@ -290,6 +425,10 @@ basis and is now the most-corroborated finding in the project.
 - Depth-participation scored as a first-class property of every candidate.
 - Directional composition, family composition and coverage reported as headline outputs of any run.
 - Where the data cannot answer a question: say so, and specify the measurement that would.
+- **Every family evaluated twice — as a trigger and as a descriptor — with the descriptor evaluation
+  carrying no profit-factor bar.**
+- **Any descriptor layer saturation-tested BEFORE it is scored.** A state true on most bars gates
+  nothing, however good its standalone numbers look.
 
 ---
 
