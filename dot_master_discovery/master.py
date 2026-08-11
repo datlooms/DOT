@@ -3214,13 +3214,20 @@ def main():
         _cpx.NULL_K = [1, 2]
         _cpx.NULL_DURATIONS = [1]
         _cpx.DURATIONS = [1, 2]
-        _cpx.ONSET_FLOORS = [30]
+        # THE FLOOR MUST SCALE WITH THE CAPPED DEPTH OR THE STAGE TESTS NOTHING.
+        # align_pool capped to 6 labels collapsed depth_long p50 from 27 to 1, so an
+        # onset floor of 30 could never trigger: stage 2 emitted 0 events, stage 3 and
+        # stage 5 followed with 0 rows. THREE STAGES RAN ON EMPTY DATA - and the
+        # astype('') crash at stage 8's aggregation needed NON-EMPTY data to fire, so
+        # a smoke run in that state would not have caught it. A stage that runs on
+        # nothing is barely better than a stage that is skipped.
+        _cpx.ONSET_FLOORS = [2]
         _cpx.CAT_DURATIONS = [1]
         _cpx.CAT_DOM_DURATIONS = [1]
         _catx.NULL_K_BY_FAMILY = {k: 40 for k in _catx.NULL_K_BY_FAMILY}
         _catx.NULL_K_DEFAULT = 40
         _f0x.DENSITY_K_BANDS = [1, 2]
-        os.environ['DOT_SMOKE_CAP'] = '6'
+        os.environ['DOT_SMOKE_CAP'] = '24'
         os.environ['DOT_SMOKE_CHUNK_TARGET'] = '1'
         import dot_frame_binding as _fbx
         _applied, _failed = _fbx.install_smoke_caps()
@@ -3387,6 +3394,41 @@ def main():
         with rl.Stage('S9', 'report'):
             with rl.Heartbeat('S9 report assembly'):
                 s9_report(out, attest, contenders, committed, sacred, args.market_label, input_sha, profile, evidence, selection_state)
+    if globals().get('SMOKE'):
+        _must_have_rows = [
+            ('concurrence_events.csv', 'F12 stage 2 - onset events'),
+            ('concurrence_entry_order.csv', 'F12 stage 3 - the leader/confirmer split'),
+            ('concurrence_depth_bars.csv', 'F12 stage 1 - per-bar depth'),
+        ]
+        _empty = []
+        for _nm, _why in _must_have_rows:
+            _p = None
+            for _c in (os.path.join(out, 'results', _nm), os.path.join(out, _nm)):
+                if os.path.exists(_c):
+                    _p = _c
+                    break
+            if _p is None:
+                _empty.append(f'{_nm} ABSENT ({_why})')
+                continue
+            try:
+                _n = max(0, sum(1 for _l in open(_p, encoding='utf-8', errors='replace')
+                                if not _l.startswith('#')) - 1)
+            except OSError:
+                _n = 0
+            if _n == 0:
+                _empty.append(f'{_nm} ZERO ROWS ({_why})')
+        if _empty:
+            print('', flush=True)
+            print('  *** SMOKE RUN FAILED: an artifact is empty, so the path it exercises was '
+                  'NOT TESTED ***', flush=True)
+            for _e in _empty:
+                print(f'      {_e}', flush=True)
+            raise SystemExit(
+                'ABORT [--smoke] UNDER --smoke, AN ARTIFACT WITH ZERO ROWS IS A FAILED SMOKE '
+                'RUN unless zero is the correct answer. A cap that reduces a population below a '
+                'downstream threshold silently turns a test into a no-op - that was invisible '
+                'for four runs. Raise DOT_SMOKE_CAP or lower ONSET_FLOORS until these populate.')
+        print('  smoke non-empty assertion: every load-bearing artifact has rows.', flush=True)
     if run_all or only == 'S10':
         print('\n[S10] COLLECT - every analysis artifact into one flat folder, split for upload')
         with rl.Stage('S10', 'collect & split for upload'):

@@ -196,7 +196,92 @@ def _cap_align_pool(k, applied, failed):
         failed.append(f'concurrence_profiler.align_pool: {type(exc).__name__}: {str(exc)[:70]}')
 
 
-EXPECTED_SMOKE_CAPS = 14
+SMOKE_NULL_ARM = {'target': 8, 'floor': 4, 'cap': 200, 'gen_batch': 24}
+
+
+def _all_module_objects(basename):
+    """EVERY module object this file is registered as. DUAL MODULE IDENTITY IS REAL.
+
+        import wf_selection        -> id 140449280990864
+        import engine.wf_selection -> id 140449281207536   *** DIFFERENT OBJECT ***
+
+    setattr on one succeeds and the pipeline runs from the other, so the cap
+    REPORTED SUCCESS WHILE DOING NOTHING - worse than failing loudly. Resolve
+    through sys.modules under every registered name and set on all of them.
+    """
+    import sys as _s
+    out = []
+    for nm, mod in list(_s.modules.items()):
+        if mod is None:
+            continue
+        if nm == basename or nm.endswith('.' + basename):
+            if mod not in out:
+                out.append(mod)
+    if not out:
+        try:
+            out.append(__import__(basename))
+        except Exception:
+            pass
+    return out
+
+
+def _cap_null_arm(applied, failed):
+    """Cap S5C's random-triple null arm. THE VALUES ARE DEFAULT ARGUMENTS.
+
+        def score_null_arm(..., target=NULL_TARGET_QUALIFIERS, floor=NULL_FLOOR_QUALIFIERS,
+                           cap=NULL_TRIPLES_CAP, gen_batch=NULL_GEN_BATCH, ...)
+
+    Defaults evaluate when the enclosing def EXECUTES - at import - so no later
+    setattr on the module can reach them. That is why the constants read as capped
+    and the run still scored 150-signal batches. The function is therefore WRAPPED
+    and the values injected at CALL time, which is the only thing that binds.
+
+    Set on every module object so both identities agree, then READ BACK from each.
+    """
+    mods = _all_module_objects('wf_selection')
+    if not mods:
+        failed.append('wf_selection: NOT RESOLVABLE under any name in sys.modules')
+        return
+    ok, names = [], []
+    for m in mods:
+        nm = getattr(m, '__name__', '?')
+        names.append(nm)
+        for a_, v_ in (('NULL_TARGET_QUALIFIERS', SMOKE_NULL_ARM['target']),
+                       ('NULL_FLOOR_QUALIFIERS', SMOKE_NULL_ARM['floor']),
+                       ('NULL_TRIPLES_CAP', SMOKE_NULL_ARM['cap']),
+                       ('NULL_GEN_BATCH', SMOKE_NULL_ARM['gen_batch'])):
+            if not hasattr(m, a_):
+                failed.append(f'{nm}.{a_}: ATTRIBUTE ABSENT')
+                continue
+            setattr(m, a_, v_)
+            if getattr(m, a_) != v_:
+                failed.append(f'{nm}.{a_}: READ-BACK MISMATCH, still {getattr(m, a_)}')
+        if not hasattr(m, 'score_null_arm'):
+            failed.append(f'{nm}.score_null_arm: ATTRIBUTE ABSENT')
+            continue
+        if getattr(m, '_SMOKE_null_arm', False):
+            ok.append(nm)
+            continue
+        orig = m.score_null_arm
+
+        def _wrapped(*a_, _o=orig, **kw_):
+            kw_.setdefault('target', SMOKE_NULL_ARM['target'])
+            kw_.setdefault('floor', SMOKE_NULL_ARM['floor'])
+            kw_.setdefault('cap', SMOKE_NULL_ARM['cap'])
+            kw_.setdefault('gen_batch', SMOKE_NULL_ARM['gen_batch'])
+            return _o(*a_, **kw_)
+
+        m.score_null_arm = _wrapped
+        m._SMOKE_null_arm = True
+        ok.append(nm)
+    if ok:
+        applied.append(f'wf_selection null arm -> target={SMOKE_NULL_ARM["target"]} '
+                       f'floor={SMOKE_NULL_ARM["floor"]} cap={SMOKE_NULL_ARM["cap"]} '
+                       f'gen_batch={SMOKE_NULL_ARM["gen_batch"]}, score_null_arm WRAPPED '
+                       f'(defaults captured at import) on {len(ok)} module identity/ies: {names}')
+
+
+EXPECTED_SMOKE_CAPS = 11
 
 
 def install_smoke_caps():
@@ -294,10 +379,7 @@ def install_smoke_caps():
     _wrap_list('rolling_leadlag', 'WINDOWS', 2)
     _wrap_list('rolling_leadlag', 'RELATIONS', 2)
     _wrap_list('divergence_nonconfirm', 'FLOW_FEATS', 2)
-    _set_const('wf_selection', 'NULL_TARGET_QUALIFIERS', 8)
-    _set_const('wf_selection', 'NULL_FLOOR_QUALIFIERS', 4)
-    _set_const('wf_selection', 'NULL_GEN_BATCH', 24)
-    _set_const('wf_selection', 'NULL_TRIPLES_CAP', 200)
+    _cap_null_arm(applied, failed)
     _cap_align_pool(k, applied, failed)
     _set_const('concurrence_profiler', 'MIN_STACK_BARS', 1)
     # F13's directions are a HARDCODED TUPLE inside a loop at
