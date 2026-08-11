@@ -1096,7 +1096,23 @@ def stage8_null_baseline(ctx, observed_rows, n_workers, interval, proof=False, w
                            'd2d_mode': m, 'n_perm': len(g), 'min_shift': MIN_SHIFT,
                            'method': 'circular_shift'}
                     for stat in ['agg_pf', 'WR', 'folds_plus', 'worst_day_usd']:
-                        v = g[stat].values.astype(float)
+                        # BLANKABLE COLUMN. _blank_pf returns '' for a zero-loss cell, so a
+                        # bare .astype(float) here raised ValueError after twenty minutes of
+                        # stage 8 had already completed. pf_aggregate is the canonical reader
+                        # and it REPORTS what it excluded: a null distribution computed on 180
+                        # of 200 permutations must say so rather than silently narrowing.
+                        _raw = list(g[stat].values)
+                        v = np.array([float(x) for x in _raw
+                                      if not _cat.pf_is_undefined(x)], dtype=float)
+                        _n_ex = len(_raw) - len(v)
+                        row[f'null_{stat}_undefined_excluded'] = int(_n_ex)
+                        row[f'null_{stat}_n_used'] = int(len(v))
+                        if len(v) == 0:
+                            for _sfx in ('mean', 'sd', 'p5', 'p50', 'p95', 'max'):
+                                row[f'null_{stat}_{_sfx}'] = ''
+                            row[f'observed_{stat}'] = o[stat]
+                            row[f'p_value_{stat}'] = ''
+                            continue
                         sv = np.sort(v)
                         row[f'null_{stat}_mean'] = round(float(v.mean()), 4)
                         row[f'null_{stat}_sd'] = round(float(v.std()), 4)
@@ -1105,7 +1121,8 @@ def stage8_null_baseline(ctx, observed_rows, n_workers, interval, proof=False, w
                         row[f'null_{stat}_p95'] = round(float(sv[min(int(0.95 * len(sv)), len(sv) - 1)]), 4)
                         row[f'null_{stat}_max'] = round(float(sv[-1]), 4)
                         row[f'observed_{stat}'] = o[stat]
-                        row[f'p_value_{stat}'] = round(float((v >= o[stat]).mean()), 4)
+                        row[f'p_value_{stat}'] = ('' if _cat.pf_is_undefined(o[stat])
+                                                  else round(float((v >= float(o[stat])).mean()), 4))
                     out.append(row)
     if write:
         p = os.path.join(RESULTS_DIR, 'concurrence_null_baseline.csv')
