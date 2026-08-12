@@ -516,6 +516,58 @@ def s2_pool(df, ad, st):
 
 
 # ── S3 DISCOVERY (long pole; delegates to the ratified orchestrator; per-family checkpoint) ──
+def _s3_moved_scanners(out):
+    """Does any family's PRODUCING SCANNER differ from the sha its marker recorded?
+
+    S3's gate counted result CSVs on disk and returned, so the sha-aware
+    family_is_complete built for exactly this purpose was never reached. EIGHTH
+    INSTANCE OF THE SAME CLASS, ONE LEVEL UP FROM WHERE IT WAS FIXED: a gate may
+    check that a marker exists, that a file exists, a file COUNT, an artifact's
+    SCHEMA, an artifact's own SHA, or the PRODUCING CODE's sha - AND ONLY THE LAST
+    IS SUFFICIENT.
+
+    This consults the orchestrator's own authority rather than adding a mechanism:
+    the same scanner_sha() the family markers use, against the same marker payloads.
+    ALL_FAMILIES is the single registry and it INCLUDES the diagnostics F12 and F13,
+    which is what matters here - F12's scanner is the one that moved.
+
+    _family_paths resolves against the orchestrator's module-global RESULTS_DIR, not
+    the out tree, so it is pointed at this run's results directory and restored in a
+    finally; otherwise the check reads a different (or absent) marker set and
+    silently reports that nothing moved.
+    """
+    try:
+        import discovery_orchestrator as _o
+    except Exception as exc:
+        print(f'  S3 scanner-sha check UNAVAILABLE: {type(exc).__name__}: {str(exc)[:70]} - the '
+              f'gate would fall back to the CSV count, which cannot see moved code.', flush=True)
+        return []
+    _entries = [(f[0], f[1]) for f in (getattr(_o, 'ALL_FAMILIES', []) or []) if f[1]]
+    if not _entries:
+        print('  S3 scanner-sha check found NO family registry on the orchestrator.', flush=True)
+        return []
+    _prev = getattr(_o, 'RESULTS_DIR', None)
+    _o.RESULTS_DIR = os.path.join(out, 'results')
+    moved = []
+    try:
+        for fam, script in _entries:
+            _csv, done = _o._family_paths(fam, script)
+            if not os.path.exists(done):
+                continue
+            try:
+                meta = json.load(open(done, encoding='utf-8'))
+            except Exception:
+                continue
+            want = _o.scanner_sha(script)
+            got = meta.get('scanner_sha')
+            if want is not None and got is not None and got != want:
+                moved.append((fam, script, got, want))
+    finally:
+        if _prev is not None:
+            _o.RESULTS_DIR = _prev
+    return moved
+
+
 def s3_discovery(out, workers, input_sha, scope, df=None, ad=None, st=None, w=None, limit=0):
     results = os.path.join(out, 'results')
     os.makedirs(results, exist_ok=True)
@@ -523,11 +575,23 @@ def s3_discovery(out, workers, input_sha, scope, df=None, ad=None, st=None, w=No
     _fam_csvs = sorted(glob.glob(os.path.join(_res, 'results_F*.csv'))) if os.path.isdir(_res) else []
     _fam_csvs = [f for f in _fam_csvs if '_part' not in os.path.basename(f) and '_c0' not in
                  os.path.basename(f)]
-    if is_done(out, 'S3', input_sha) and _fam_csvs:
+    _moved = _s3_moved_scanners(out)
+    if is_done(out, 'S3', input_sha) and _fam_csvs and not _moved:
         print(f'  S3 resumed from marker: {len(_fam_csvs)} per-family result CSVs present on disk '
+              f'AND every producing scanner still matches the sha recorded in its family marker '
               f'- skipping the scan.')
         emit_regime_labels(df, results, out, input_sha)
         return
+    if is_done(out, 'S3', input_sha) and _fam_csvs and _moved:
+        print(f'  S3 marker present and {len(_fam_csvs)} result CSVs on disk, but a PRODUCING '
+              f'SCANNER HAS MOVED - ENTERING ORCHESTRATOR.', flush=True)
+        for _fam, _sc, _was, _now in _moved:
+            print(f'      {_fam}: {_sc}.py {_was} -> {_now}', flush=True)
+        print(f'      A gate that counts artifacts cannot detect an artifact produced by moved '
+              f'code. That reasoning produced scanner_sha and it was applied at the FAMILY level '
+              f'and not at the STAGE level, so this gate returned before family_is_complete was '
+              f'ever consulted. The orchestrator now resumes every family whose scanner is '
+              f'current and re-scans only the {len(_moved)} that moved.', flush=True)
     if is_done(out, 'S3', input_sha) and not _fam_csvs:
         print('  S3 marker present but NO per-family result CSVs on disk - RE-RUNNING. A gate that '
               'trusts only its marker skips work a later stage depends on, and S4 would then unify '
