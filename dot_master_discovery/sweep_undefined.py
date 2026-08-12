@@ -189,6 +189,11 @@ def main():
     print(f'  COVERAGE: {len(examined)} of {len(mods)} modules EXAMINED, {len(skipped)} '
           f'UNEXAMINED' + (f' ({", ".join(skipped)})' if skipped else '')
           + ' | A DETECTOR THAT CANNOT SAY WHAT IT DID NOT EXAMINE IS NOT A DETECTOR.')
+    if skipped:
+        print(f'  *** {len(skipped)} MODULE(S) COULD NOT BE EXAMINED: {skipped}. AN UNEXAMINED '
+              f'MODULE IS NOT A PASSING MODULE - a detector that reports a gap and exits 0 is '
+              f'worse than one with no coverage check, because the gap now reads as audited. ***')
+        return 1
     if bad:
         print(f'  *** {bad} UNDEFINED SYMBOL(S) - a NameError waiting for the call site to run. '
               f'The never-called sweep and the symbol diff are both BLIND to this shape. ***')

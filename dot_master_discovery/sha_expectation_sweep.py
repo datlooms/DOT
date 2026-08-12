@@ -44,4 +44,15 @@ for _d in docs:
         _pairs += 1
 print(f"  COVERAGE: {_scanned} documents scanned, {_pairs} carry a sha/filename pair and were "
       f"EXAMINED, {_scanned - _pairs} carry none. An unexamined document is not a passing one.")
+_unread = []
+for _d in docs:
+    try:
+        open(_d, encoding='utf-8', errors='replace').read()
+    except OSError as _e:
+        _unread.append(f'{_d} ({type(_e).__name__})')
+if _unread:
+    print(f"  *** {len(_unread)} DOCUMENT(S) UNREADABLE: {_unread}. An unexamined document is "
+          f"not a passing one. ***")
 print(f"  TRUE DRIFTS: {len(drifts)}" + (f" | REWRITTEN: {fixed}" if APPLY else ""))
+import sys as _sys
+_sys.exit(1 if (drifts and not APPLY) or _unread else 0)

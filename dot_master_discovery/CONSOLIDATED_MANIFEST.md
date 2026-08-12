@@ -22,7 +22,7 @@ Total files: 102 — NEW 3, MODIFIED 6, UNCHANGED FROM MAIN 93 (of which 60 are 
 | `engine/selection.py` | `02cd79ad914b` | NEW | S5B selection layer (spec C, D.1-D.2, G, H) |
 | `engine/wf.py` | `4ac888f3af9d` | UNCHANGED FROM MAIN | SACRED walk-forward folds (month-literal; never imported by selection) |
 | `engine/wf_selection.py` | `e0a6d884e477` | NEW | S5C walk-forward on the selection process (spec I) |
-| `master.py` | `545f6304aecf` | MODIFIED | SINGLE ENTRY POINT — orchestrates S0-S9 incl. S3B/S5B/S5C/S8B |
+| `master.py` | `3416a3d71d12` | MODIFIED | SINGLE ENTRY POINT — orchestrates S0-S9 incl. S3B/S5B/S5C/S8B |
 | `master_guide.md` | `88a814f96554` | MODIFIED | full operator guide: every stage, every output |
 | `orchestrator/discovery_orchestrator.py` | `f181e72a6779` | UNCHANGED FROM MAIN | drives the family scanners (S3) |
 | `raw/.gitkeep` | `e3b0c44298fc` | UNCHANGED FROM MAIN | drop the raw EA export here |

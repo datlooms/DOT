@@ -585,7 +585,7 @@ def _s3_moved_scanners(out):
         print(f'      AN UNCHECKED FAMILY IS NOT A PASSING FAMILY. A DETECTOR THAT CANNOT SAY '
               f'WHAT IT DID NOT EXAMINE IS NOT A DETECTOR - this line exists because F12 was '
               f'skipped silently and the gate reported every scanner current.', flush=True)
-    return moved
+    return moved, unchecked
 
 
 def s3_discovery(out, workers, input_sha, scope, df=None, ad=None, st=None, w=None, limit=0):
@@ -595,18 +595,36 @@ def s3_discovery(out, workers, input_sha, scope, df=None, ad=None, st=None, w=No
     _fam_csvs = sorted(glob.glob(os.path.join(_res, 'results_F*.csv'))) if os.path.isdir(_res) else []
     _fam_csvs = [f for f in _fam_csvs if '_part' not in os.path.basename(f) and '_c0' not in
                  os.path.basename(f)]
-    _moved = _s3_moved_scanners(out)
-    if is_done(out, 'S3', input_sha) and _fam_csvs and not _moved:
+    _moved, _unchecked = _s3_moved_scanners(out)
+    # AN UNCHECKED FAMILY BLOCKS THE SKIP. `0 moved` is computed over the families the
+    # check could READ; F12 and F13 had no marker at all, so treating unchecked as
+    # passing is exactly what the coverage line says must never happen - the accounting
+    # was correct and the verdict ignored it.
+    # AND IT WAS CIRCULAR: verify_diagnostic_outputs writes the diagnostic markers, but
+    # it runs INSIDE the orchestrator, which this gate was skipping. THE MARKER NEEDED
+    # THE RUN AND THE RUN NEEDED THE MARKER, so no number of re-runs broke the loop.
+    # Entering the orchestrator resumes what is current, re-scans what is not, and
+    # writes the missing markers, so the next run reads full coverage. One pass, no
+    # manual step.
+    if is_done(out, 'S3', input_sha) and _fam_csvs and not _moved and not _unchecked:
         print(f'  S3 resumed from marker: {len(_fam_csvs)} per-family result CSVs present on disk '
               f'AND every producing scanner still matches the sha recorded in its family marker '
               f'- skipping the scan.')
         emit_regime_labels(df, results, out, input_sha)
         return
-    if is_done(out, 'S3', input_sha) and _fam_csvs and _moved:
-        print(f'  S3 marker present and {len(_fam_csvs)} result CSVs on disk, but a PRODUCING '
-              f'SCANNER HAS MOVED - ENTERING ORCHESTRATOR.', flush=True)
+    if is_done(out, 'S3', input_sha) and _fam_csvs and (_moved or _unchecked):
+        _why = []
+        if _moved:
+            _why.append('a PRODUCING SCANNER HAS MOVED')
+        if _unchecked:
+            _why.append(f'{len(_unchecked)} family/ies could NOT BE CHECKED')
+        print(f'  S3 marker present and {len(_fam_csvs)} result CSVs on disk, but '
+              f'{" and ".join(_why)} - ENTERING ORCHESTRATOR.', flush=True)
         for _fam, _sc, _was, _now in _moved:
-            print(f'      {_fam}: {_sc}.py {_was} -> {_now}', flush=True)
+            print(f'      MOVED     {_fam}: {_sc}.py {_was} -> {_now}', flush=True)
+        for _u in _unchecked:
+            print(f'      UNCHECKED {_u} - treated as NOT PASSING. The orchestrator will write '
+                  f'its marker on this pass so the next run has full coverage.', flush=True)
         print(f'      A gate that counts artifacts cannot detect an artifact produced by moved '
               f'code. That reasoning produced scanner_sha and it was applied at the FAMILY level '
               f'and not at the STAGE level, so this gate returned before family_is_complete was '

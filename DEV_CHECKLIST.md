@@ -242,7 +242,7 @@ These are the FOUR modules that may legitimately define episodes, clusters or st
 
 Item 5's in-run assertion that episode thresholds route through mechanism D is RETAINED and is complementary: the lock is pre-run, the assertion is in-run.
 
-**The table below is a CLASSIFICATION RECORD, not the enforcement mechanism.** It documents why each existing site is sanctioned so a future auditor re-applies the same reasoning. Verified by full sweep at `master.py 545f6304aecf`: 15 percentile/quantile sites and 19 sorted-index sites, independently reproduced site-for-site by the Auditor.
+**The table below is a CLASSIFICATION RECORD, not the enforcement mechanism.** It documents why each existing site is sanctioned so a future auditor re-applies the same reasoning. Verified by full sweep at `master.py 3416a3d71d12`: 15 percentile/quantile sites and 19 sorted-index sites, independently reproduced site-for-site by the Auditor.
 
 | site | role | status |
 |---|---|---|

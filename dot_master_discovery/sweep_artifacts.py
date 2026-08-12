@@ -321,7 +321,11 @@ def main():
             ignore_index=True)
         rep.to_csv(a.out, index=False, lineterminator='\n')
         print(f'  report -> {a.out}')
-    return 0 if ok else 1
+    _unread = rep[rep['finding'] == 'UNREADABLE']
+    if len(_unread):
+        print(f'  *** {len(_unread)} ARTIFACT(S) UNREADABLE - a file that could not be parsed '
+              f'was NOT audited and must not pass as clean. ***')
+    return 0 if (ok and not len(_unread)) else 1
 
 
 if __name__ == '__main__':

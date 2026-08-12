@@ -144,6 +144,12 @@ def main():
           f'unexamined file is not a passing file.')
     if len(examined) <= 3:
         print(f'      examined: {examined}')
+    _unreadable = [x for x in scoped_out if '(unreadable)' in x]
+    if _unreadable:
+        print(f'  *** {len(_unreadable)} MODULE(S) UNREADABLE: {_unreadable}. Deliberately '
+              f'scoped-out files are fine; a file that could not be OPENED is a coverage gap '
+              f'and must not pass. ***')
+        return 1
     if bad:
         print(f'  *** {bad} UNGUARDED NUMERIC READ(S) of a blankable column. A zero-loss cell '
               f'holds \'\' and these will raise at run time, possibly deep inside a stage. ***')
