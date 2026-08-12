@@ -693,7 +693,8 @@ def scanner_sha(script):
 
 def _mark_family_done(csv_path, done_path, n_rows, script=None):
     payload = {'rows': int(n_rows), 'csv_sha256': _sha_file(csv_path),
-               'schema_cols': len(SCHEMA), 'scanner_sha': scanner_sha(script)}
+               'schema_cols': len(SCHEMA), 'scanner_sha': scanner_sha(script),
+               'run_id': RUN_ID}
     tmp = done_path + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(payload, f, sort_keys=True)
@@ -714,6 +715,26 @@ def family_is_complete(fam, script):
         return False, None
     want = scanner_sha(script)
     got = meta.get('scanner_sha')
+    if want is not None and got is None:
+        # ABSENCE IS NOT EVIDENCE THE PRODUCER MOVED - it is evidence the marker
+        # predates the field. Distinguish the two by RUN IDENTITY: a marker stamped
+        # with this invocation's run_id was written by this build, so its missing
+        # scanner_sha is a writer gap and the artifact is current. Only a marker from
+        # an EARLIER run is treated as stale, which is the self-healing case.
+        if meta.get('run_id') == RUN_ID:
+            print(f'  {fam}: marker has no scanner_sha but was written by THIS RUN '
+                  f'(run_id {RUN_ID}) - the artifact is current and is NOT re-scanned. '
+                  f'Stamping the field now.', flush=True)
+            meta['scanner_sha'] = want
+            try:
+                with open(done, 'w', encoding='utf-8') as f:
+                    json.dump(meta, f)
+            except OSError:
+                pass
+            return True, meta
+        print(f'  {fam}: marker predates scanner_sha recording (earlier run) - RE-SCANNING '
+              f'once to establish the baseline.', flush=True)
+        return False, None
     if want is not None and got != want:
         print(f'  {fam}: marker STALE - scanner {script}.py sha {got} -> {want}. The output '
               f'schema is unchanged, so no schema gate can see this; the PRODUCER moved. '
@@ -872,6 +893,7 @@ def _slice_axis(kw, axis, lo, hi):
     return out
 
 
+RUN_ID = f'{int(time.time())}-{os.getpid()}'
 SMOKE_MODE = False
 
 
@@ -1062,7 +1084,14 @@ def collate_family_chunks(fam, script, n_chunks, expected_total=None):
     merged = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=SCHEMA)
     csv, done = _family_paths(fam, script)
     _write_atomic_csv(merged[SCHEMA], csv)
-    _mark_family_done(csv, done, len(merged))
+    # STAMP scanner_sha AT COLLATION. This call site had no `script`, so
+    # scanner_sha(None) returned None and every marker this path wrote lacked the
+    # field. family_is_complete then read 'sha None -> <actual>' and declared TEN
+    # FAMILIES STALE MINUTES AFTER THEY COLLATED IN THE SAME RUN, discarding ~13
+    # hours of finished work. A gate that invalidates CURRENT work is worse than no
+    # gate: it converts a completed run into a repeat of itself, silently, after the
+    # expensive part has already succeeded.
+    _mark_family_done(csv, done, len(merged), script)
     return True, len(merged)
 
 
@@ -1505,8 +1534,30 @@ def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=Non
         pending = [(fam, script, mod, fmt) for fam, script, mod, fmt in pending
                    if not family_is_complete(fam, script)[0]]
         if pending and ran_parallel:
-            ran_parallel = False
+            # A FAMILY JUDGED STALE MUST RE-ENTER THE CHUNKED PATH, NOT A SERIAL ONE.
+            # Clearing ran_parallel dropped every still-pending family into the
+            # single-process run_family loop below: F1 re-ran as one in-process
+            # f1.run() over all 1,713,630 candidates on ONE CORE with no progress
+            # line, instead of 3,585 chunks across 14 workers. That is the 24-hour
+            # F1 the chunk queue and the entry-month partition both exist to remove.
+            print(f'  {len(pending)} family/ies still pending after the chunked pass: '
+                  f'{[p[0] for p in pending]}. RE-ENTERING THE CHUNKED PATH rather than '
+                  f'falling back to the serial loop - a serial F1 is the 24-hour version.',
+                  flush=True)
+            _stale_names = {p[0] for p in pending}
+            for _f2, _s2, _m2, _fm2 in list(pending):
+                _kw2 = builders[_f2](df, adaptive, structural, warmup)
+                _b2, _n2 = _bounds_for(_f2, _kw2)
+                print(f'    {_f2:4} re-scan via the QUEUE: {_n2} units -> {len(_b2)} chunks',
+                      flush=True)
+            ran_parallel = True
+            _requeue_pass = True
     if pending and not ran_parallel:
+        if frame_path is not None and workers and workers > 1:
+            print(f'  REFUSING THE SERIAL FALLBACK for {[p[0] for p in pending]}: the chunked '
+                  f'path is available (frame_path set, workers={workers}). A serial re-scan of a '
+                  f'chunked family is not a fallback, it is a different and far slower '
+                  f'algorithm. Re-run to re-enter the queue.', flush=True)
         for i, (fam, script, mod, fmt) in enumerate(pending, 1):
             mean = (sum(durations) / len(durations)) if durations else None
             eta = f" | ETA {_hms(mean * (len(pending) - i + 1))}" if mean else ""
