@@ -162,7 +162,7 @@ def mark_done(out, key, meta):
     os.makedirs(os.path.join(out, '.markers'), exist_ok=True)
     rec = dict(meta)
     schemas = {}
-    for rel in STAGE_ARTIFACTS.get(key, []):
+    for rel in _glob_artifacts(out, key):
         sc = _artifact_schema(os.path.join(out, rel))
         if sc is not None:
             schemas[rel] = sc
@@ -171,6 +171,22 @@ def mark_done(out, key, meta):
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(rec, f, sort_keys=True)
     os.replace(tmp, done_path(out, key))
+
+
+def _glob_artifacts(out, key):
+    """STAGE_ARTIFACTS lists FIXED names, and S5D's real deliverables are the
+    catalogue_F*.csv files whose names depend on which families produced rows. None
+    were listed, so the schema hash never covered them - and pricing_resolution_floor
+    is a CATALOGUE column, so adding it changed a schema the gate was not watching and
+    S5D skipped. TENTH INSTANCE: a schema gate that watches the wrong files.
+    """
+    extra = []
+    if key == 'S5D':
+        cd = os.path.join(out, 'catalogues')
+        if os.path.isdir(cd):
+            extra = [f'catalogues/{f}' for f in sorted(os.listdir(cd))
+                     if f.startswith('catalogue_') and f.endswith('.csv')]
+    return list(STAGE_ARTIFACTS.get(key, [])) + extra
 
 
 def stale_artifacts(out, key):
@@ -187,7 +203,7 @@ def stale_artifacts(out, key):
     except Exception:
         return ['marker unreadable']
     out_reasons = []
-    for rel in STAGE_ARTIFACTS.get(key, []):
+    for rel in _glob_artifacts(out, key):
         need = STAGE_REQUIRED_COLUMNS.get(rel)
         if not need:
             continue
@@ -203,7 +219,7 @@ def stale_artifacts(out, key):
             'marker predates schema recording - every artifact it wrote is stale by definition, '
             'so the stage re-runs once to establish the baseline')
         return out_reasons
-    for rel in STAGE_ARTIFACTS.get(key, []):
+    for rel in _glob_artifacts(out, key):
         want = rec['artifact_schemas'].get(rel)
         got = _artifact_schema(os.path.join(out, rel))
         if want is None and got is None:

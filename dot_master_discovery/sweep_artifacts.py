@@ -328,10 +328,6 @@ def main():
     return 0 if (ok and not len(_unread)) else 1
 
 
-if __name__ == '__main__':
-    sys.exit(main() or 0)
-
-
 INDEX_HINT = ('peak_depth_k', 'duration_at_depth', 'direction', 'd2d_mode', 'regime',
               'cluster', 'tolerance_n', 'depth', 'split_index', 'fold', 'tier', 'family',
               'k_deep', 'onset_floor', 'purity', 'arm', 'basis', 'n_clusters')
@@ -388,3 +384,9 @@ def check_response_invariance(df):
                         'ratio': round(ratio, 3), 'worst': round(worst, 3),
                         'group': worst_grp, 'index': ','.join(idx[:4])})
     return out
+
+
+
+if __name__ == '__main__':
+    sys.exit(main() or 0)
+

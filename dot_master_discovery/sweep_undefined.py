@@ -161,6 +161,57 @@ def check_module(path):
     return findings
 
 
+
+def check_unreachable_defs(path):
+    """A def BELOW a top-level executing statement is UNREACHABLE AT CALL TIME.
+
+    THE PYTHON MODULE BODY IS POSITIONAL, exactly as the MQL4 preprocessor is - the
+    standing macro-ordering rule is this same defect in another language and this is
+    one check covering both.
+
+        def main(): ...                       L275
+        sys.exit(main() or 0)                 L332   <- the module EXITS here
+        def check_response_invariance(df):    L345   <- never defined at call time
+
+    sweep_artifacts crashed with NameError on its own new check because the function
+    was appended to the END of the file. THE EXISTENCE CHECK REPORTED CLEAN - the
+    symbol IS defined at module level - so this is the ninth instance of the class
+    and the first that the detector itself passed.
+    """
+    src = open(path, encoding='utf-8', errors='replace').read()
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return []
+    exiting = None
+    for n in tree.body:
+        if isinstance(n, ast.If):
+            test = ast.dump(n.test)
+            if '__main__' in test:
+                for sub in ast.walk(n):
+                    if isinstance(sub, ast.Call) and 'exit' in ast.dump(sub.func):
+                        exiting = n.lineno
+                        break
+        if exiting is not None:
+            break
+        if isinstance(n, ast.Expr) and isinstance(n.value, ast.Call):
+            if 'exit' in ast.dump(n.value.func):
+                exiting = n.lineno
+                break
+    if exiting is None:
+        return []
+    out = []
+    for n in tree.body:
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) \
+                and n.lineno > exiting:
+            out.append((n.name, n.lineno, exiting))
+        elif isinstance(n, ast.Assign) and n.lineno > exiting:
+            for t in n.targets:
+                if isinstance(t, ast.Name) and t.id.isupper():
+                    out.append((t.id, n.lineno, exiting))
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description='Undefined-symbol gate.')
     ap.add_argument('--dir', default=os.path.dirname(os.path.abspath(__file__)))
@@ -174,6 +225,7 @@ def main():
             if fn.endswith('.py'):
                 mods.append((fn if sub == '.' else f'{sub}/{fn}', os.path.join(d, fn)))
     bad = 0
+    unreachable = 0
     examined, skipped = [], []
     for rel, path in mods:
         fs = check_module(path)
@@ -182,6 +234,12 @@ def main():
         else:
             examined.append(rel)
         real = [f for f in fs if not any(f[2].startswith(w) for w in WORKER_GLOBALS)]
+        for nm, ln, ex in check_unreachable_defs(path):
+            unreachable += 1
+            print(f'  UNREACHABLE  {rel}:{ln}  {nm} is defined BELOW a top-level exit at '
+                  f'line {ex} - the module exits before this definition executes, so a caller '
+                  f'gets NameError. The Python module body is positional, like the MQL4 '
+                  f'preprocessor.')
         if real:
             bad += len(real)
             for fnname, ln, nm in real:
@@ -193,6 +251,10 @@ def main():
         print(f'  *** {len(skipped)} MODULE(S) COULD NOT BE EXAMINED: {skipped}. AN UNEXAMINED '
               f'MODULE IS NOT A PASSING MODULE - a detector that reports a gap and exits 0 is '
               f'worse than one with no coverage check, because the gap now reads as audited. ***')
+        return 1
+    if unreachable:
+        print(f'  *** {unreachable} UNREACHABLE DEFINITION(S) - defined at module level but '
+              f'BELOW the line that exits, so the existence check passes and the call fails. ***')
         return 1
     if bad:
         print(f'  *** {bad} UNDEFINED SYMBOL(S) - a NameError waiting for the call site to run. '
