@@ -1,4 +1,4 @@
-# QUANT — SIX-PHASE ANALYSIS OF THE COMPLETED RUN
+# QUANT — EIGHT-PHASE ANALYSIS OF THE COMPLETED RUN
 
 This produces the evidence the operator composes the final engine from. It is the last
 analytical work before a live system, and it is the reason the last three weeks happened.
@@ -1123,6 +1123,153 @@ solos/duals, FailedBreak on short triples.
 
 **OUTPUT:** the achievable coverage per (direction × structure × session × regime) cell, the
 measured cost of balance against concentration, and the specification for a priced gate test.
+
+---
+
+# PHASE 7 — THE GATE PALETTE, AND THE INHERITED CONSTANTS NOBODY HAS RE-DERIVED
+
+**THE GATES CARRY MOST OF THE PERFORMANCE. Applying Option B's spec to a 50-signal F0 book multiplies
+PF by 2.77x; adding 70 more signals buys far less. This phase is therefore worth more than any
+signal-selection work in the brief.**
+
+## 7.0 — EVERY ENTRY CONSTANT IN THE SYSTEM IS INHERITED, NOT DERIVED
+
+This is the operator's own ruling and it reframes the phase:
+
+    ticks >= 300 on solos     fitted to a 26-RULE catalogue on PRE-CLEAN data, years ago
+    ADX >= 15 & Vol > 50      engine-intrinsic eligibility, static, never re-derived
+    Vol >= 300 solo           static
+    the 6-lot jar             NOT RECORDED — no derivation exists anywhere in the record
+    the 30-trade floor        chosen, not derived. No derivation recorded.
+
+**NONE OF THESE HAS BEEN RE-DERIVED SINCE. Not through the clock fix, not through the
+reconstruction, not against the 39,308-row catalogue.** They are constants from a system that no
+longer exists, carried forward because nothing broke.
+
+**AND ONE OF THEM IS ALREADY SUSPECT ON MEASURED EVIDENCE.** `ATR_1M >= 20` was derived this month
+and does the job a tick floor was meant to do — it cut 35% of Option B's losses for 2.7% of the net,
+and the mechanism is understood: at low ATR the 3.0 spread eats 24% of the break-even trigger, so a
+BE exit banks $10.92 against $34.11. **A TICK COUNT IS A PROXY FOR ACTIVITY. ATR MEASURES ACTIVITY
+DIRECTLY.**
+
+**THE FIRST MEASUREMENT OF THIS PHASE, AND IT IS CHEAP: does `ticks >= 300` remove anything on solos
+that `ATR_1M >= 20` does not already remove?** Report the four-way split — kept by both, kept by ATR
+only, kept by ticks only, kept by neither — with trades, WR, PF and worst day in each cell. **IF THE
+TICK-ONLY CELL IS EMPTY OR WORTHLESS, THE TICK GATE IS PURE COVERAGE LOSS AND SHOULD GO.**
+
+**AND IT IS COSTING SOMETHING SPECIFIC.** `ticks >= 300` is effectively NY-session-only, while 76% of
+the priced orderable F0 shortlist is OVERNIGHT (19 of 25, against 4 morning and 2 preclose). **The
+chance-adjusted pricing points AWAY from the session the tick gate points AT.** Those two selections
+work against each other and the overlap has never been measured. Measure it.
+
+Then do the same for the others: `ADX >= 15 & Vol > 50` — what does it remove that survives everything
+else? The 6-lot jar — uncapped, Option B takes 2,237 trades for $125,261 at PF 17.51 against 1,808 for
+$97,410, so the cap turns away 429 trades worth $27,851 AND THEY ARE BETTER THAN AVERAGE (depth 8
+averages $274 a trade, depth 15 $374). **Whether six is the right number is a survival question,
+answered on the tail and not on the net.**
+
+## 7.1 — THREE ROLES, AND THEY MUST BE MEASURED SEPARATELY
+
+    ADMISSION   blocks the trade entirely        NEW. Nothing in the record does this until Option B.
+    CONVICTION  scales the lot, never blocks     EXISTS: Hurst p90 longs 2x, recentFB 1.25x,
+                                                 D2D-agree 2x both directions
+    NEGATIVE    excludes rather than includes    EXISTS ONCE: the exhaustion sequence failed as a
+                                                 POSITIVE conditioner (71.8th random-subset pct,
+                                                 "brutally fragile: 2 losses drop it to the pool
+                                                 average") and cleared decisively as a NEGATIVE
+                                                 screen at the 1.4th pct with OOS -$38.3.
+                                                 SAME VARIABLE. USELESS ONE WAY, STRONG THE OTHER.
+
+**TEST EVERY CANDIDATE IN ALL THREE ROLES.** The record contains a worked inversion, so this is not
+hypothetical.
+
+**Specific hypothesis worth testing first:** `AT_Slope_ST` disagreeing with `D2D_Trend_Dir` marks 84%
+of deep long entries — the pullback. As an ADMISSION gate requiring agreement it is destructive (keeps
+16% of deep longs, PF 13.97 -> 6.14). **As a CONVICTION variable — size up when AT is bearish on a
+long — it is untested and structurally coherent.**
+
+## 7.2 — WHERE THE WORK ACTUALLY IS: A GATE CAN ONLY REMOVE LOSSES
+
+Cell power measured on a 100-signal book. **Half the cells have almost no losses to remove.**
+
+    dir     tier   trades  losses      PF
+    LONG    solo      782      74     3.59    gate has work
+    LONG    dual     1130     148     2.43    gate has work
+    LONG    3         519      33     8.88
+    LONG    4         244      16     8.08    thin
+    LONG    5         195      10    12.55    thin
+    LONG    6+        192       0   999.00    NOTHING TO GATE
+    SHORT   solo      922      86     3.52    gate has work
+    SHORT   dual     1148     170     2.49    gate has work
+    SHORT   3         549      54     3.11
+    SHORT   4         428      40     5.38
+    SHORT   5         280      60     1.77    WEAKEST DEEP CELL - most to fix
+    SHORT   6+        228      18     5.97    thin
+
+**Four cells hold 478 of the 729 losses.** `LONG 6+` is UNGATEABLE BY DEFINITION — zero losses, so a
+gate there can only remove winners. **REPORT CELL POWER BEFORE FITTING ANYTHING.** A threshold fitted
+to a cell with ten losses is the 126-false-stars failure with a different label.
+
+And Option B's own per-tier loss table confirms where the tail lives: 69% of its losses sit in the two
+LONG shallow cells THAT ARE ALREADY GATED (LONG solo avg loss -$220.27, 40% of all loss; LONG dual
+-$100.90, 29%), while the FREE short deep tiers carry 17% at a BELOW-average loss size.
+
+## 7.3 — THE MULTIPLE-TESTING PROBLEM, WHICH IS SEVERE
+
+A gate whose threshold is chosen because that is where the yield clears **IS a search over thresholds,
+and every threshold tested is a trial.**
+
+    12 cells x 249 conditions x 8 thresholds  =  23,904 gate-trials
+      expected chance survivors at p97.5      =  598
+      at p99                                  =  239
+      at p99.9                                =   24
+      Bonferroni FWER 5%                      =  the 99.9998th percentile
+
+**598 APPARENT DISCOVERIES FROM NOISE ALONE AT p97.5.** Restricting to the five cells with losses
+worth removing roughly halves the search, which is a real reduction and not a solution.
+
+**NOTHING IN THIS PROJECT HAS EVER PRICED A GATE FOR MULTIPLE TESTING.** The random-subset percentile
+is the closest and recorded its own limit honestly: *"Bonferroni for FWER 5% over 360 tests = 99.986th
+pct; max candidate reached 99.9th -> NONE clear strict Bonferroni."*
+
+**AND IT HAS ALREADY BITTEN IN PRACTICE.** A Supervisor sweep ranked on win/loss ratio and returned
+`PF 999 / w/l inf` in six of eight cells — zero-loss subsets from ~1,280 trials. A loss floor and a
+net-retention floor were required before the output meant anything. **Option B's ten gates came from
+coordinate descent over ~150 options across ten cells — thousands of evaluations, and they are
+UNPRICED.**
+
+`EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF` prices SIGNALS. **There is no equivalent for GATES. Specifying it
+is part of this phase.** The 302-pool random-subset method is recovered in full in
+`cake_dictionary.md` 4D and has never been applied to a gate.
+
+## 7.4 — THE CANDIDATES ALREADY ON THE TABLE
+
+    Micro_Rejection lo     PRICED at the 98.6th random-subset pct, and REPRODUCED on a different
+                           pool, pipeline and population. Strongest standing of any gate.
+    Micro_FailedBreak hi   long 3+ 13.97 -> 34.26 at p70; short 3+ 3.60 -> 7.61 at p50.
+                           STRONGER ON LONGS. 66 tests, one frame, UNPRICED.
+    Lower_Wick hi          long 3+ -> 25.50 at p70
+    Upper_Wick hi          short 3+ -> 5.77 at p70, keeps 79% of net
+    Micro_Hurst            the incumbent sizer. LONGS ONLY — OOS PF 2.22 short vs 4.99 long
+    AT_Slope_ST            destructive as admission; UNTESTED as conviction
+    ATR_1M >= 20           DERIVED, adopted, and the only gate in the system that is not inherited
+
+**The wick family is directionally MIRRORED and mechanically coherent:** longs want a buying wick
+defending the low, shorts want a selling wick rejecting the high. Same mechanism, opposite member.
+
+## 7.5 — WHAT TO DELIVER
+
+Not a chosen gate set. **A PRICED PALETTE:**
+
+  - for each candidate x role x direction x tier: the lift, the RETENTION, the cell power, the price
+  - a stated null for gate search, and the method for computing it
+  - which cells should be left UNGATED and why
+  - which candidates survive their own price, and which are noise from 24,000 trials
+  - **and a verdict on each INHERITED constant: keep, re-derive, or drop, with the measurement**
+
+**RETENTION MATTERS AS MUCH AS LIFT.** `Upper_Wick hi p70` keeps 79% of short net at 1.6x PF;
+`Micro_FailedBreak hi p50` keeps 42% at 2.1x. Under survival-first those are different propositions and
+the operator chooses between them — you measure both.
 
 ---
 
