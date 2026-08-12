@@ -67,8 +67,38 @@ def main():
     ap = argparse.ArgumentParser(description='Stamp scanner_sha into complete family markers.')
     ap.add_argument('--out', required=True, help='the run tree, e.g. discovery\\full')
     ap.add_argument('--apply', action='store_true')
+    ap.add_argument('--invalidate', default='', metavar='F12[,F13]',
+                    help='INVALIDATE the named families\' markers so they re-scan. Use this when '
+                         'a marker RECORDS A SHA THAT DID NOT PRODUCE ITS OUTPUT - that claim '
+                         'cannot be checked from evidence, because every instrument trusts the '
+                         'marker, so it must be invalidated by command.')
     a = ap.parse_args()
     here = os.path.dirname(os.path.abspath(__file__))
+    if a.invalidate:
+        # A FALSE PROVENANCE RECORD IS NOT DETECTABLE FROM THE TREE. csv_sha256 proves the
+        # marker matches its artifact; NOTHING proves the recorded scanner_sha is the one
+        # that produced it. So there is no check to add here - the only safe action is to
+        # invalidate the claim and let the producing stage re-establish it. Removing the
+        # marker makes the family UNCHECKED, which by the standing rule blocks the skip.
+        want = {x.strip().upper() for x in a.invalidate.split(',') if x.strip()}
+        hit = 0
+        for done in sorted(glob.glob(os.path.join(a.out, '**', '*.done'), recursive=True)):
+            base = os.path.basename(done)
+            for fam in want:
+                if f'_{fam}_' in base or base.startswith(f'{fam}_') or f'{fam}_' in base:
+                    if a.apply:
+                        os.remove(done)
+                    print(f'  {"REMOVED" if a.apply else "WOULD REMOVE"} {done}')
+                    print(f'      {fam} becomes UNCHECKED, which blocks the S3 skip, so the '
+                          f'orchestrator re-runs it and writes a marker from the EXECUTION '
+                          f'path against output it actually produced.')
+                    hit += 1
+                    break
+        if not hit:
+            print(f'  no markers matched {sorted(want)} under {a.out}')
+        if not a.apply:
+            print('  re-run with --apply to remove. Nothing has been modified.')
+        return 0
     markers = sorted(glob.glob(os.path.join(a.out, '**', '*.done'), recursive=True))
     if not markers:
         print(f'  no .done markers found under {a.out}')

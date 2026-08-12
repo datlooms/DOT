@@ -311,32 +311,13 @@ def verify_diagnostic_outputs(results_dir, input_sha, families=('F12', 'F13')):
         rows.append((fam, name, 'OK' if ok else 'MISSING', why))
         if not ok:
             gaps.append(f'{fam} ({name}: {why})')
-    # ONE MARKER CONVENTION, ONE AUTHORITY. The diagnostics did not go through
-    # _mark_family_done at all - verify_diagnostic_outputs only checked that the OUTPUT
-    # FILE existed - so F12 and F13 had no marker, no recorded scanner_sha, and every
-    # sha-aware gate above them silently skipped them: a missing marker and a matching
-    # marker are indistinguishable at a `continue`. Writing a real marker here stops the
-    # diagnostics being a special case that every future gate has to remember.
-    for fam in families:
-        name = DIAGNOSTIC_OUTPUTS.get(fam)
-        if not name:
-            continue
-        csv = os.path.join(results_dir, name)
-        if not os.path.exists(csv):
-            continue
-        _script = dict((f[0], f[1]) for f in ALL_FAMILIES).get(fam)
-        if not _script:
-            continue
-        _done = _family_paths(fam, _script)[1]
-        try:
-            _rows = max(0, sum(1 for _l in open(csv, encoding='utf-8', errors='replace')
-                               if not _l.startswith('#')) - 1)
-        except OSError:
-            _rows = 0
-        _mark_family_done(csv, _done, _rows, _script)
-        print(f"    {fam:4} MARKER   {os.path.basename(_done)} — scanner_sha "
-              f"{scanner_sha(_script)}, so a scanner edit invalidates its own output",
-              flush=True)
+    # THE MARKER WRITE THAT WAS HERE IS REMOVED. verify_diagnostic_outputs runs whether
+    # the diagnostic RAN or SKIPPED, so stamping here recorded the CURRENT scanner sha
+    # against output produced by the PREVIOUS one - a FALSE PROVENANCE RECORD, and every
+    # instrument in the tree trusts the marker, so nothing could detect it. A MARKER MUST
+    # ONLY BE WRITTEN BY THE CODE THAT PRODUCED THE OUTPUT: master's _write_diag_marker
+    # is now called from the execution path alone. If a diagnostic skips, its existing
+    # marker stands unchanged; if it has none, it is UNCHECKED and must not pass.
     print(f"  DIAGNOSTIC OUTPUT VERIFICATION — after the stage ran, not before:", flush=True)
     for fam, name, state, why in rows:
         print(f"    {fam:4} {state:8} {name} — {why}", flush=True)

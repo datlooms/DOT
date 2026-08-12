@@ -516,6 +516,77 @@ def s2_pool(df, ad, st):
 
 
 # ── S3 DISCOVERY (long pole; delegates to the ratified orchestrator; per-family checkpoint) ──
+def _diag_scanner_current(results_dir, fam, script):
+    """Does the diagnostic's marker record the sha of the scanner NOW ON DISK?
+
+    `already current for this input_sha` consults the FRAME sha only. The frame had
+    not changed, so F12 skipped even though concurrence_profiler.py had moved
+    3e099e89b563 -> 4d782df381e0. THE ONE AUTHORITY THAT WAS MEANT TO BECOME
+    UNIVERSAL WAS NOT CONSULTED WHERE THE DECISION IS MADE.
+
+    Returns (current, why). A marker that is ABSENT is NOT current: by the standing
+    rule an unchecked family is not a passing family.
+    """
+    try:
+        import discovery_orchestrator as _o
+    except Exception as exc:
+        return False, f'orchestrator unavailable ({type(exc).__name__})'
+    _prev = getattr(_o, 'RESULTS_DIR', None)
+    _o.RESULTS_DIR = results_dir
+    try:
+        done = _o._family_paths(fam, script)[1]
+        want = _o.scanner_sha(script)
+        if want is None:
+            return False, f'{script}.py not found on disk'
+        if not os.path.exists(done):
+            return False, f'no marker at {os.path.basename(done)} - UNCHECKED, not passing'
+        try:
+            meta = json.load(open(done, encoding='utf-8'))
+        except Exception as exc:
+            return False, f'marker unreadable ({type(exc).__name__})'
+        got = meta.get('scanner_sha')
+        if got is None:
+            return False, 'marker carries no scanner_sha'
+        if got != want:
+            return False, f'scanner {script}.py moved {got} -> {want}'
+        return True, f'scanner_sha {got} matches'
+    finally:
+        if _prev is not None:
+            _o.RESULTS_DIR = _prev
+
+
+def _write_diag_marker(results_dir, fam, script, csv):
+    """A MARKER MUST ONLY BE WRITTEN BY THE CODE THAT PRODUCED THE OUTPUT.
+
+    This was called from verify_diagnostic_outputs, which runs whether the stage ran
+    or skipped - so a SKIPPED F12 had its marker stamped with the CURRENT scanner sha
+    against output produced by the PREVIOUS one. That is worse than skipping current
+    work: it writes a FALSE PROVENANCE RECORD, and every instrument in the tree trusts
+    the marker, so nothing could detect it. Called only from the execution path now.
+    """
+    try:
+        import discovery_orchestrator as _o
+    except Exception:
+        return
+    _prev = getattr(_o, 'RESULTS_DIR', None)
+    _o.RESULTS_DIR = results_dir
+    try:
+        if not os.path.exists(csv):
+            return
+        done = _o._family_paths(fam, script)[1]
+        try:
+            rows = max(0, sum(1 for _l in open(csv, encoding='utf-8', errors='replace')
+                              if not _l.startswith('#')) - 1)
+        except OSError:
+            rows = 0
+        _o._mark_family_done(csv, done, rows, script)
+        print(f'    {fam} MARKER written BY THE EXECUTION PATH: scanner_sha '
+              f'{_o.scanner_sha(script)} against output this run produced.', flush=True)
+    finally:
+        if _prev is not None:
+            _o.RESULTS_DIR = _prev
+
+
 def _s3_moved_scanners(out):
     """Does any family's PRODUCING SCANNER differ from the sha its marker recorded?
 
@@ -1066,6 +1137,13 @@ def run_diagnostic_families(results_dir, workers, input_sha, df=None):
     print('  same single command with the operator --workers value and their own internal parallelism.')
     f13_csv = os.path.join(results_dir, 'results_F13_single_variable_extremes.csv')
     ok13, why13 = orch.provenance_is_current(f13_csv, input_sha)
+    _sc13, _scwhy13 = _diag_scanner_current(results_dir, 'F13', 'single_variable_extremes')
+    if ok13 and not _sc13:
+        print(f'  [F13] frame provenance is current BUT {_scwhy13} - RE-RUNNING. input_sha is '
+              f'the FRAME authority; the scanner sha is the PRODUCER authority and it governs '
+              f'here.', flush=True)
+        ok13 = False
+        why13 = _scwhy13
     if ok13:
         print('  [F13] already current for this input_sha — skipping')
     else:
@@ -1097,9 +1175,17 @@ def run_diagnostic_families(results_dir, workers, input_sha, df=None):
                              'not coverage; the run stops rather than report 14-family coverage with '
                              'one family empty.')
         orch.stamp_provenance(f13_csv, input_sha)
+        _write_diag_marker(results_dir, 'F13', 'single_variable_extremes', f13_csv)
 
     f12_csv = os.path.join(results_dir, orch.DIAGNOSTIC_OUTPUTS['F12'])
     ok12, why12 = orch.provenance_is_current(f12_csv, input_sha)
+    _sc12, _scwhy12 = _diag_scanner_current(results_dir, 'F12', 'concurrence_profiler')
+    if ok12 and not _sc12:
+        print(f'  [F12] frame provenance is current BUT {_scwhy12} - RE-RUNNING. input_sha is '
+              f'the FRAME authority; the scanner sha is the PRODUCER authority and it governs '
+              f'here.', flush=True)
+        ok12 = False
+        why12 = _scwhy12
     if ok12:
         print('  [F12] already current for this input_sha — skipping')
     else:
@@ -1121,6 +1207,7 @@ def run_diagnostic_families(results_dir, workers, input_sha, df=None):
                 produced.append(nm)
         for nm in produced:
             orch.stamp_provenance(os.path.join(results_dir, nm), input_sha)
+        _write_diag_marker(results_dir, 'F12', 'concurrence_profiler', f12_csv)
         print(f'  [F12] produced {len(produced)} concurrence CSVs this run: '
               f'{", ".join(produced) if produced else "NONE"}')
         print('  [F12] provenance stamped on THOSE FILES ONLY — never by pattern match on whatever '
