@@ -122,11 +122,28 @@ def main():
             if fn.endswith('.py'):
                 mods.append((fn if sub == '.' else f'{sub}/{fn}', os.path.join(d, fn)))
     bad = 0
+    examined, scoped_out = [], []
     for rel, path in mods:
+        try:
+            _src = open(path, encoding='utf-8', errors='replace').read()
+        except OSError:
+            scoped_out.append(f'{rel} (unreadable)')
+            continue
+        if os.path.basename(path) == 'sweep_contract.py':
+            scoped_out.append(f'{rel} (this tool)')
+        elif not any(g in _src for g in ('_blank_pf', 'blank_sentinel_ratio')):
+            scoped_out.append(rel)
+        else:
+            examined.append(rel)
         for ln, col, txt in check(path):
             bad += 1
             print(f'  UNGUARDED  {rel}:{ln}  reads {col} numerically  -> {txt}')
-    print(f'  COVERAGE: {len(mods)} of {len(mods)} python modules enumerated under . / engine / scanners / orchestrator (100%)')
+    print(f'  COVERAGE: {len(examined)} of {len(mods)} modules EXAMINED; '
+          f'{len(scoped_out)} SCOPED OUT because they never call a blanking helper, so they '
+          f'cannot emit \'\'. That skip is deliberate - and it is NAMED, because an '
+          f'unexamined file is not a passing file.')
+    if len(examined) <= 3:
+        print(f'      examined: {examined}')
     if bad:
         print(f'  *** {bad} UNGUARDED NUMERIC READ(S) of a blankable column. A zero-loss cell '
               f'holds \'\' and these will raise at run time, possibly deep inside a stage. ***')

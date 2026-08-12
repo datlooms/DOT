@@ -548,11 +548,16 @@ def _s3_moved_scanners(out):
         return []
     _prev = getattr(_o, 'RESULTS_DIR', None)
     _o.RESULTS_DIR = os.path.join(out, 'results')
-    moved = []
+    moved, checked, unchecked = [], [], []
     try:
         for fam, script in _entries:
             _csv, done = _o._family_paths(fam, script)
             if not os.path.exists(done):
+                # A MISSING MARKER MUST NEVER BE INDISTINGUISHABLE FROM A MATCHING ONE.
+                # `continue` on a missing .done is the silent negative that hid F12: the
+                # diagnostics never went through _mark_family_done, so the loop skipped
+                # them and the gate reported every scanner current. Name them instead.
+                unchecked.append(f'{fam} (no marker at {os.path.basename(done)})')
                 continue
             try:
                 meta = json.load(open(done, encoding='utf-8'))
@@ -560,11 +565,26 @@ def _s3_moved_scanners(out):
                 continue
             want = _o.scanner_sha(script)
             got = meta.get('scanner_sha')
-            if want is not None and got is not None and got != want:
+            if want is None:
+                unchecked.append(f'{fam} ({script}.py not found on disk)')
+                continue
+            if got is None:
+                unchecked.append(f'{fam} (marker carries no scanner_sha)')
+                continue
+            checked.append(fam)
+            if got != want:
                 moved.append((fam, script, got, want))
     finally:
         if _prev is not None:
             _o.RESULTS_DIR = _prev
+    print(f'  S3 scanner-sha coverage: {len(_entries)} families in registry, '
+          f'{len(checked)} checked, {len(unchecked)} UNCHECKED'
+          + (f' ({", ".join(unchecked)})' if unchecked else '')
+          + f' | {len(moved)} moved', flush=True)
+    if unchecked:
+        print(f'      AN UNCHECKED FAMILY IS NOT A PASSING FAMILY. A DETECTOR THAT CANNOT SAY '
+              f'WHAT IT DID NOT EXAMINE IS NOT A DETECTOR - this line exists because F12 was '
+              f'skipped silently and the gate reported every scanner current.', flush=True)
     return moved
 
 

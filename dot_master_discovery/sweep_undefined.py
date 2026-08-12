@@ -174,14 +174,21 @@ def main():
             if fn.endswith('.py'):
                 mods.append((fn if sub == '.' else f'{sub}/{fn}', os.path.join(d, fn)))
     bad = 0
+    examined, skipped = [], []
     for rel, path in mods:
         fs = check_module(path)
+        if any(f[0] == '<SYNTAX>' for f in fs):
+            skipped.append(f'{rel} (unparseable)')
+        else:
+            examined.append(rel)
         real = [f for f in fs if not any(f[2].startswith(w) for w in WORKER_GLOBALS)]
         if real:
             bad += len(real)
             for fnname, ln, nm in real:
                 print(f'  UNDEFINED  {rel}:{ln}  in {fnname}()  -> {nm}')
-    print(f'  COVERAGE: {len(mods)} of {len(mods)} python modules enumerated under . / engine / scanners / orchestrator (100%)')
+    print(f'  COVERAGE: {len(examined)} of {len(mods)} modules EXAMINED, {len(skipped)} '
+          f'UNEXAMINED' + (f' ({", ".join(skipped)})' if skipped else '')
+          + ' | A DETECTOR THAT CANNOT SAY WHAT IT DID NOT EXAMINE IS NOT A DETECTOR.')
     if bad:
         print(f'  *** {bad} UNDEFINED SYMBOL(S) - a NameError waiting for the call site to run. '
               f'The never-called sweep and the symbol diff are both BLIND to this shape. ***')
