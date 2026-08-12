@@ -22,15 +22,15 @@ Total files: 102 — NEW 3, MODIFIED 6, UNCHANGED FROM MAIN 93 (of which 60 are 
 | `engine/selection.py` | `02cd79ad914b` | NEW | S5B selection layer (spec C, D.1-D.2, G, H) |
 | `engine/wf.py` | `4ac888f3af9d` | UNCHANGED FROM MAIN | SACRED walk-forward folds (month-literal; never imported by selection) |
 | `engine/wf_selection.py` | `e0a6d884e477` | NEW | S5C walk-forward on the selection process (spec I) |
-| `master.py` | `93f1bdcdb0db` | MODIFIED | SINGLE ENTRY POINT — orchestrates S0-S9 incl. S3B/S5B/S5C/S8B |
+| `master.py` | `a1366ac45130` | MODIFIED | SINGLE ENTRY POINT — orchestrates S0-S9 incl. S3B/S5B/S5C/S8B |
 | `master_guide.md` | `88a814f96554` | MODIFIED | full operator guide: every stage, every output |
-| `orchestrator/discovery_orchestrator.py` | `0a0c75f4f3ae` | UNCHANGED FROM MAIN | drives the family scanners (S3) |
+| `orchestrator/discovery_orchestrator.py` | `04f97d2f1e06` | UNCHANGED FROM MAIN | drives the family scanners (S3) |
 | `raw/.gitkeep` | `e3b0c44298fc` | UNCHANGED FROM MAIN | drop the raw EA export here |
 | `raw/readme.txt` | `bbde30c0aa32` | UNCHANGED FROM MAIN | drop the raw EA export here |
 | `rebuild.py` | `609580a417fe` | UNCHANGED FROM MAIN | data-prep: raw EA export -> validated 171-col baseline -> data/ |
 | `reference/equiDOT_discovery_blueprint.md` | `423e6e60c38e` | UNCHANGED FROM MAIN | design reference doc |
 | `reference/equiDOT_discovery_pattern_map.md` | `1a7a9d423381` | UNCHANGED FROM MAIN | design reference doc |
-| `scanners/concurrence_profiler.py` | `3e099e89b563` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
+| `scanners/concurrence_profiler.py` | `4d782df381e0` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
 | `scanners/conditional_interaction.py` | `7908ed0c5fbc` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
 | `scanners/cross_variable_structure.py` | `5594fa73a7d3` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
 | `scanners/divergence_nonconfirm.py` | `87dcf068036b` | UNCHANGED FROM MAIN | family scanner (F0-F13) |

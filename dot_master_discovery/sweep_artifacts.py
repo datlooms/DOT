@@ -75,6 +75,10 @@ KNOWN_GOOD_INVARIANT = {
     'causal': 'only stage3_entry_order carries a causal arm by ruling; the other stages '
               'are full-sample and say so in their headers',
     'population': 'genuinely constant - the file has one population',
+    'null_agg_pf_undefined_excluded': 'a count of exclusions, not a measurement of the grid',
+    'null_WR_undefined_excluded': 'a count of exclusions',
+    'null_folds_plus_undefined_excluded': 'a count of exclusions',
+    'null_worst_day_usd_undefined_excluded': 'a count of exclusions',
     'cluster_basis': 'genuinely constant - the run executed on one basis',
 }
 
@@ -249,6 +253,13 @@ def sweep(directory):
         for h in check_scale(df, header):
             found = True
             rows.append({'file': name, 'finding': 'SCALE', 'detail': h['note']})
+        for h in check_response_invariance(df):
+            found = True
+            rows.append({'file': name, 'finding': 'RESPONSE-INVARIANT',
+                         'detail': f"{h['column']}: {h['distinct']} distinct value(s) across "
+                                   f"{h['cells']} index cells (ratio {h['ratio']}); worst "
+                                   f"{h['worst']} in group '{h['group']}' — indexed by "
+                                   f"{h['index']}"})
         for h in check_missing_basis(df, header):
             found = True
             rows.append({'file': name, 'finding': 'NO-BASIS', 'detail': h['note']})
@@ -284,7 +295,7 @@ def main():
             return 2
     rep = sweep(a.dir)
     esc = rep[rep['finding'].isin(('CONSTANT-ESCALATED', 'SENTINEL', 'SCALE', 'NO-BASIS',
-                                   'MISSING-REQUIRED', 'UNREADABLE'))]
+                                   'MISSING-REQUIRED', 'UNREADABLE', 'RESPONSE-INVARIANT'))]
     n_exist, n_audited, ok = coverage(a.dir, rep['file'].nunique())
     print(f'  COVERAGE: audited {n_audited} of {n_exist} artifacts present under {a.dir}')
     if not ok:
@@ -315,3 +326,61 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main() or 0)
+
+
+INDEX_HINT = ('peak_depth_k', 'duration_at_depth', 'direction', 'd2d_mode', 'regime',
+              'cluster', 'tolerance_n', 'depth', 'split_index', 'fold', 'tier', 'family',
+              'k_deep', 'onset_floor', 'purity', 'arm', 'basis', 'n_clusters')
+MEASURED_HINT = ('pf', 'wr', 'net', 'trades', 'worst_day', 'ratio', 'margin', 'breakeven',
+                 'rate', 'share', 'p_value', 'exceedance', 'silhouette', 'bic', 'rss',
+                 'persistence', 'avg_')
+INVARIANCE_ESCALATE_BELOW = 0.30
+INVARIANCE_MIN_INDEX_CELLS = 6
+
+
+def check_response_invariance(df):
+    """A MEASURED column that does not vary with the GRID IT IS INDEXED BY.
+
+    This is RESPONSE-INVARIANCE, not constancy, and the constancy test is blind to
+    it: concurrence_null_baseline's observed_agg_pf holds several distinct values
+    overall - so `constant` never fires - while LONG alone holds ONE value across
+    SIXTEEN index combinations, a ratio of 0.06. The null arm's p_value declined
+    smoothly across the same index while the observed value did not move at all.
+
+    THE SWEEP TESTED COLUMNS IN ISOLATION RATHER THAN AGAINST WHAT INDEXES THEM.
+    That is the seventh distinct defect class this project has found in its own
+    artifacts and the first the sweep itself could not see.
+
+    Reports distinct measured values against distinct index combinations, both
+    overall and WITHIN each direction, because a per-direction collapse is exactly
+    what hid here.
+    """
+    idx = [c for c in df.columns
+           if str(c).lower() in INDEX_HINT and 1 < df[c].nunique(dropna=False) <= 64]
+    if not idx:
+        return []
+    cells = int(df[idx].drop_duplicates().shape[0])
+    if cells < INVARIANCE_MIN_INDEX_CELLS:
+        return []
+    meas = [c for c in df.columns
+            if c not in idx and any(h in str(c).lower() for h in MEASURED_HINT)]
+    out = []
+    for c in meas:
+        if str(c) in KNOWN_GOOD_INVARIANT:
+            continue
+        n = int(df[c].nunique(dropna=False))
+        ratio = n / cells if cells else 1.0
+        worst, worst_grp = ratio, 'all'
+        if 'direction' in df.columns and df['direction'].nunique() > 1:
+            for dv, sub in df.groupby('direction'):
+                sc = int(sub[idx].drop_duplicates().shape[0])
+                if sc < 2:
+                    continue
+                r2 = int(sub[c].nunique(dropna=False)) / sc
+                if r2 < worst:
+                    worst, worst_grp = r2, str(dv)
+        if worst < INVARIANCE_ESCALATE_BELOW:
+            out.append({'column': c, 'distinct': n, 'cells': cells,
+                        'ratio': round(ratio, 3), 'worst': round(worst, 3),
+                        'group': worst_grp, 'index': ','.join(idx[:4])})
+    return out

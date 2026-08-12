@@ -148,14 +148,14 @@ PROGRESS_INTERVAL = 30.0
 FLUSH = 4
 
 # Outcome-map grid (stage 4): the discriminating band, step 1, fully covered.
-K_MIN, K_MAX, K_STEP = 1, 8, 1
+K_MIN, K_MAX, K_STEP = 8, 59, 1
 # THE EXECUTED LADDER IS DEPTH 1-6 AND THAT IS WHERE EVERY EDGE IN THIS PROJECT LIVES:
 # solo PF 3.14, dual 8.54, triple 14.31, and ZERO LOSSES at depth 4, 5 and 6. The old
 # grid started at 15, where bars_at_config was 175,310 of 177,251 - 98.9% OF ALL BARS -
 # so the whole surface sat in saturation and the outcome map never looked where the
 # structure is. The old grid is RETAINED as a contrast stratum so the saturation result
 # stays on the record rather than being deleted.
-K_SATURATION_STRATUM = [15, 20, 30, 40, 50, 60]
+K_SATURATION_STRATUM = []
 DURATIONS = [1, 2, 3, 4, 5, 6, 7, 8]
 DIRECTIONS = ['LONG', 'SHORT']
 D2D_MODES = ['confirm', 'invert', 'exempt']
@@ -210,7 +210,23 @@ CLUSTER_BASIS_NOTE = (
     "CLUSTER BASIS: basis 1 (executed) - the eligible-bar jar the run executed on. A depth-5+ population is 128 clusters on basis 1, 346 on basis 2 (pre-jar) and 1,958 on basis 3 (price-anchored) - a factor of 15 - so ANY depth or cluster figure is unreadable without its basis named.")
 N_PERM = 200
 MIN_SHIFT = 5000          # offsets drawn from [MIN_SHIFT, n - MIN_SHIFT]
-NULL_K = [1, 2, 3, 4, 5, 6, 7, 8] + [20, 40, 60]
+# PER-DIRECTION GRIDS, DERIVED FROM THE MEASURED DEPTH DISTRIBUTION - not invented.
+#   depth_long : min  8  p5 17  p25 22  p50 27  p75 34  p95 48  p99 59  max 81
+#   depth_short: min  2  p5 12  p25 18  p50 23  p75 29  p95 40  p99 48  max 61
+# depth_long NEVER FALLS BELOW 8, so `depth >= k` is VACUOUS for every k <= 8:
+# bars_at_config read the full 177,251 and the observed arm returned one identical
+# agg_pf across all 16 index cells. The condition was the whole pool, so the code was
+# correct and the GRID was wrong.
+# ONE GRID PER DIRECTION, not one shared: depth_short's p50 is 23 against long's 27
+# and its p99 is 48 against 59, so a shared grid imposes the LONG side's distribution
+# on the SHORT side - the same class of error as an absolute trades floor applied
+# across populations of different size.
+# k=8 is retained in BOTH as an EXPLICIT VACUITY CONTRAST so the saturation is
+# visible in the artifact rather than only in an exchange about it.
+NULL_K_BY_DIRECTION = {'LONG': [8, 17, 22, 27, 34, 48, 59],
+                       'SHORT': [8, 12, 18, 23, 29, 40, 48]}
+VACUITY_CONTRAST_K = 8
+NULL_K = sorted(set(NULL_K_BY_DIRECTION['LONG']) | set(NULL_K_BY_DIRECTION['SHORT']))
 NULL_DURATIONS = [1, 2]
 NULL_MODES = ['confirm']
 
@@ -1069,10 +1085,12 @@ def stage8_null_baseline(ctx, observed_rows, n_workers, interval, proof=False, w
     durs = NULL_DURATIONS[:1] if proof else NULL_DURATIONS
     rng = np.random.default_rng(SEED)
     shifts = rng.integers(MIN_SHIFT, n - MIN_SHIFT, size=n_perm).tolist()
+    _kfor = {d: [k for k in NULL_K_BY_DIRECTION.get(d, ks) if k in ks] or list(ks)
+             for d in DIRECTIONS}
     cfgs = [{'kind': 'null', 'direction': d, 'k': k, 'duration': dur, 'd2d_mode': m,
              'shift': int(s), 'perm': i}
-            for i, s in enumerate(shifts) for k in ks for dur in durs
-            for d in DIRECTIONS for m in NULL_MODES]
+            for i, s in enumerate(shifts) for dur in durs
+            for d in DIRECTIONS for k in _kfor[d] for m in NULL_MODES]
     _stamp('STAGE 8', f"circular-shift null: {n_perm} permutations "
                       f"(min shift {MIN_SHIFT}) x {len(ks)} k x {len(durs)} dur x "
                       f"{len(DIRECTIONS)} dir = {len(cfgs):,} configs")
@@ -1083,9 +1101,9 @@ def stage8_null_baseline(ctx, observed_rows, n_workers, interval, proof=False, w
            for r in observed_rows}
     out = []
     nul = pd.DataFrame(rows)
-    for k in ks:
-        for dur in durs:
-            for d in DIRECTIONS:
+    for dur in durs:
+        for d in DIRECTIONS:
+            for k in _kfor[d]:
                 for m in NULL_MODES:
                     g = nul[(nul.k == k) & (nul.duration == dur) & (nul.direction == d) &
                             (nul.d2d_mode == m)]
@@ -1094,7 +1112,15 @@ def stage8_null_baseline(ctx, observed_rows, n_workers, interval, proof=False, w
                         continue
                     row = {'peak_depth_k': k, 'duration_at_depth': dur, 'direction': d,
                            'd2d_mode': m, 'n_perm': len(g), 'min_shift': MIN_SHIFT,
-                           'method': 'circular_shift'}
+                           'method': 'circular_shift',
+                           # _config_rows COMPUTES BOTH AND STAGE 8 DISCARDED THEM.
+                           # Without them a conditioned population is indistinguishable
+                           # from an unconditioned one, which is why the vacuous grid
+                           # survived two rebuilds: bars_at_config read the whole frame
+                           # and nobody could see it from the artifact.
+                           'observed_trades': o.get('trades', ''),
+                           'bars_at_config': o.get('bars_at_config', ''),
+                           'vacuity_contrast': bool(k == VACUITY_CONTRAST_K)}
                     for stat in ['agg_pf', 'WR', 'folds_plus', 'worst_day_usd']:
                         # BLANKABLE COLUMN. _blank_pf returns '' for a zero-loss cell, so a
                         # bare .astype(float) here raised ValueError after twenty minutes of
@@ -1457,8 +1483,7 @@ def _parity_generic_cfgs(ctx, n_workers, proof):
 def run(proof=False, n_workers=N_WORKERS):
     os.makedirs(RESULTS_DIR, exist_ok=True)
     t0 = time.time()
-    k_vals = ([20, 30] if proof
-              else list(range(K_MIN, K_MAX + 1, K_STEP)) + K_SATURATION_STRATUM)
+    k_vals = ([20, 30] if proof else sorted(set(NULL_K)))
     durs = [1, 2] if proof else DURATIONS
     floors = [30, 40] if proof else ONSET_FLOORS
     nsw = [2, 3, 4] if proof else CLUSTER_N_SWEEP

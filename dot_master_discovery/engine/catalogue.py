@@ -214,6 +214,16 @@ def pricing_columns(pf_value, n_trials, null_rate, null_pfs):
         'pf_null_p99_family': _pf_pct(arr, 99),
         'pf_null_exceedance_pct': round(exceed, 6) if exceed == exceed else '',
         'pf_null_undefined_excluded': int(n_excluded),
+        # THE PRICING'S RESOLUTION LIMIT, MADE SELF-EVIDENT.
+        # EXPECTED_ROWS is n_trials x exceedance, and exceedance cannot be finer than
+        # 1/n_null. So the smallest non-zero value the column can express is
+        # n_trials / n_null - F1's is 37,276/4,634 = 8.044, which means its pricing
+        # CANNOT express anything between 0 and 8.04 and all 42 of its sub-1 rows sit
+        # at exactly zero. The catalogue read pricing_unavailable_reason == nan on all
+        # 37,276 rows while the arithmetic said the pricing could not resolve.
+        'pricing_resolution_floor': (round(float(n_trials) / len(arr), 4) if len(arr) else ''),
+        'pricing_resolves_below_1': (bool(float(n_trials) / len(arr) < 1.0) if len(arr)
+                                     else ''),
         'EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF': (round(n_trials * exceed, 3)
                                               if exceed == exceed else ''),
     }
@@ -489,7 +499,7 @@ MECHANISM_D_LOCKS = {
     'engine/dots_thresholds.py': '518862bf19fb',
     'engine/terrain.py': 'dcaecaf7e8e1',
     'engine/cluster_profiler.py': '60984ad7e6a1',
-    'scanners/concurrence_profiler.py': '3e099e89b563',
+    'scanners/concurrence_profiler.py': '4d782df381e0',
 }
 
 
