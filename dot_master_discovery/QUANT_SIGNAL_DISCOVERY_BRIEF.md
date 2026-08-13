@@ -1279,6 +1279,164 @@ the operator chooses between them — you measure both.
 may replace the frozen-triple architecture entirely. Treat it as the most consequential open
 question in the project.**
 
+## 8.-2 — THE DESIGN SPEC. THE OPERATOR'S, AND IT IS MORE SPECIFIC THAN EITHER FORMULATION BELOW.
+
+**THIS IS THE TARGET ARCHITECTURE. Read 8.-1 for why it is worth building and 8.0 onward for the two
+licensing levels it subsumes.**
+
+    LAYER 1   FAMILY DESCRIPTORS      this bar is in a PERMITTED STATE
+                                      composed from the non-F0 families
+                                      "bullish exhaustion", "trend continuation", "stretched from value"
+
+    LAYER 2   THE CONDITIONAL LICENCE  GIVEN THAT STATE, these variables may participate
+                                      NOT a fixed list - a list that DEPENDS on layer 1
+
+    LAYER 3   DEPTH >= 3 REQUIRED     from the licensed set only. TRIPLE-TRIPLE IS THE THROTTLE.
+
+    TRIGGER   ANY triple that forms   no frozen combination, no signal_def, no selection step
+
+## THE CRITICAL MOVE IS THAT THE LICENCE IS CONDITIONAL, NOT FIXED
+
+Every prior formulation licensed the vocabulary GLOBALLY — "these 40 conditions are permitted in this
+direction." **THE OPERATOR'S VERSION LICENSES PER STATE:** in bullish exhaustion these variables may
+speak; in trend continuation, those. **THAT IS WHY THE FAMILY DESCRIPTORS ARE LOAD-BEARING AND NOT
+DECORATION — THEY SELECT WHICH VOCABULARY APPLIES.**
+
+And it dissolves the objection that clustering across 117 or 171 variables is too complex to search. **IT
+IS TOO COMPLEX GLOBALLY. IT IS NOT COMPLEX WITHIN A STATE**, because the state has already pruned the
+vocabulary before any combination is considered. The search is per-state and small, not global and
+astronomical.
+
+## AND THE THROTTLE SOLVES THE SATURATION PROBLEM FROM THE OTHER END
+
+Raw condition depth >= 3 is VACUOUS — `depth_long` has median 27 and NEVER GOES BELOW 8, so the condition
+is true on every bar. That killed the naive density family and it is why F10 was fused before it ran.
+
+**BUT DEPTH >= 3 WITHIN A SMALL STATE-CONDITIONED LICENSED SET IS GENUINELY RARE, BECAUSE THE SET IS SMALL
+BY CONSTRUCTION.** The scarcity comes from the licence, not from the depth threshold. Triple-triple then
+throttles what remains — and it is the same requirement Option B's deep tiers already satisfy, where all
+44 losses sit at depth 1-3 and depth 4+ is 739 trades with zero losses.
+
+## PHASE 4 ALREADY GAVE YOU THE LICENCE STRUCTURE, AND IT IS A SHAPE RATHER THAN A LIST
+
+The causal entry-order result, verified and unchanged from the full-sample arm:
+
+    LEADERS - structural location, mean_join_offset ~0.00-0.17, early_joiner_frac 0.96-1.00
+      LONG   Session_Low_Side:==1 0.000 | VAL_Side:==1 0.010 | PoC_Side:==1 0.083
+             VAH_Side:==1 0.127 | PrevDay_Low_Side:==1 0.135
+      SHORT  Session_High_Side:==-1 0.000 | PrevDay_High_Side:==-1 0.035
+             D2D_DirStep:==-1 0.108 | VWAP_Sigma:lo 0.165 | PrevDay_Close_Side:==-1 0.167
+
+    CONFIRMERS - trend strength and adaptive slope, offset 3-22
+      LONG   D2D_Dn_Count:hi 22.13 (early frac only 0.359) | AT_Score_LT:hi 9.26
+             OR_High_Side:==1 9.07 | Slope_Accel_LT:hi 7.65
+      SHORT  VAL_Side:==-1 8.11 | VWAP_Z:lo 5.79 | AT_Score_LT:lo 3.28 | Slope_Accel_LT:lo 3.21
+
+**LEADERS AND CONFIRMERS ARE DIFFERENT ROLES AND MUST NOT BE LICENSED ON THE SAME CRITERION.** A leader's
+value is TIMING — it marks where price is. A confirmer's value is CORROBORATION — it marks that the move
+worked. Licensing both on "does it fire in UP terrain" treats them identically and they are not.
+
+**AND THE OFFSETS GIVE k DIRECTLY: LONG 7-22 BARS, SHORT 3-8.** So a licensed triple is not three
+conditions on one bar in the abstract — it is a leader, then confirmers within a measured window, which is
+exactly F1's `A ->k-> B` grammar generalised to three terms.
+
+## THE ONE NUMBER THAT DECIDES WHETHER THIS WORKS
+
+**HOW MANY VARIABLES SURVIVE LICENSING IN A GIVEN STATE?**
+
+    ~40 licensed   ->  depth >= 3 is still common. The throttle does nothing.
+    ~12 licensed   ->  depth >= 3 is rare. C(12,3) = 220 combinations.
+     ~6 licensed   ->  C(6,3) = 20 combinations. Severe throttle, possibly too severe.
+
+**THAT IS PHASE 5's INTERSECTION CURVE AND NOBODY HAS THE NUMBER.** It is the first thing to measure and it
+decides the architecture: report, per direction and per state, how many conditions survive licensing and
+what share of bars reach depth 3 within that set. **IF THE LICENSED SET IS LARGE, THE THROTTLE FAILS AND
+THE SATURATION PROBLEM RETURNS AT A NEW LEVEL. IF IT IS TIGHT, THE ARCHITECTURE IS LIVE.**
+
+## WHAT MUST BE TRUE FOR THIS TO BE BUILDABLE, AND ALL OF IT IS TESTABLE NOW
+
+  1. **STATES MUST BE NAMEABLE AND RARE.** Composed from a handful of family members chosen for rarity,
+     never a family union — a union of 238 fold-persistent F1 pairs covers 100% of bars.
+  2. **STATES MUST BE CAUSAL.** `terrain_episodes.csv` is FULL-SAMPLE. A state derived from full-sample
+     labels and used to admit an entry is look-ahead and the result is worthless however good it looks.
+  3. **THE LICENCE MUST BE PRICED.** Moving the evidential burden from the combination to the licence is
+     the whole argument for this architecture — so the licence carries the burden and must clear it. The
+     302-pool random-subset method is recovered in full in `cake_dictionary.md` 4D and has never been
+     applied to a licence.
+  4. **AND THE DEPTH LADDER MUST SURVIVE.** Score it against Option B's like for like — same frame, same
+     engine, same conviction, same jar, 1 lot. Option B: all 44 losses at depth 1-3, 739 trades at depth
+     4+ with ZERO losses, average trade climbing $37 -> $97. **IF LICENSED-CLUSTER DEPTH REPRODUCES THAT
+     SHAPE, THE GRADIENT IS A PROPERTY OF AGREEMENT ON GOOD TERRAIN RATHER THAN OF FROZEN SELECTION** —
+     and that is a finding well beyond this project.
+
+---
+
+## 8.-1 — THE ARGUMENT FOR THIS ARCHITECTURE IS NOW MEASURED, NOT PROPOSED
+
+**THE 30-TRADE FLOOR EXISTS ONLY BECAUSE THE ARCHITECTURE FREEZES COMBINATIONS. AN ADAPTIVE ENGINE DOES
+NOT NEED IT, AND THE MEASUREMENT SAYS IT COSTS 4,659 SIGNALS.**
+
+Decomposed on the full F0 scan (19,754 rows), asking which SINGLE criterion was the only one a rejected
+row failed:
+
+    sole cause of rejection      LONG    SHORT     total
+    trades >= 30 only           3,229   1,430     4,659
+    agg_pf >= 2.0 only            331     108       439
+    folds_plus >= 4 only           61      53       114
+
+**THE TRADE FLOOR CUTS TEN TIMES WHAT THE PROFIT-FACTOR FILTER CUTS.** And what it cuts is BETTER than
+what it keeps, on both directions:
+
+    LONG   near-miss  PF 4.10  WR 90.9%   |   SURVIVORS  PF 3.15  WR 88.6%
+    SHORT  near-miss  PF 3.67  WR 90.9%   |   SURVIVORS  PF 2.95  WR 89.4%
+
+**AND MEDIAN PF RISES AS THE FLOOR FALLS** — 3.67 at >=25, 3.83 at >=20, 4.03 at >=15, 4.10 at >=10.
+**THE RAREST SIGNALS ARE THE BEST ONES AND THE FLOOR IS SORTED AGAINST THEM.** It also narrows the
+directional imbalance as a side effect, because the short side is disproportionately rare: L:S goes
+3.89 -> 3.47 -> 3.17 -> 2.98 -> 2.66 as the floor drops from 30 to 10.
+
+## WHY THIS IS AN ARGUMENT ABOUT ARCHITECTURE AND NOT ABOUT A PARAMETER
+
+**A 30-TRADE FLOOR IS THE ONLY DEFENSIBLE RULE IF THE UNIT OF DISCOVERY IS A FROZEN COMBINATION.** Under
+that architecture the question is "does THIS TRIPLE have enough history to be trusted?" — and a rare
+triple never will, however good it is. The evidential burden sits on the combination's own trade count,
+which for a genuinely rare pattern is nine trades, or three, or one. So the floor is not a mistake within
+the frozen architecture. **IT IS A NECESSARY CONSEQUENCE OF IT.**
+
+**THE ADAPTIVE ENGINE ASKS A DIFFERENT QUESTION AND THEREFORE DOES NOT NEED THE FLOOR.** If any cluster of
+LICENSED conditions on LICENSED terrain constitutes a valid entry, then a combination that fires three
+times in six months is not a signal with insufficient evidence — **IT IS THREE VALID TRADES.** The
+evidence lives in the LICENCE, which is measured over hundreds or thousands of bars, not in the
+combination, which by construction has almost none.
+
+**SO THE EVIDENTIAL BURDEN MOVES TO WHERE THERE IS ACTUALLY EVIDENCE.** That is the case for this
+architecture, and it is the strongest one available: not that clusters are cleverer than triples, but that
+**a frozen-combination architecture is STRUCTURALLY FORCED to discard its own best material, and an
+adaptive one is not.**
+
+**AND IT COMPOUNDS WITH A FINDING ALREADY ON RECORD.** The quiet-period tell, measured independently:
+best-priced signals fire LESS — median 38 trades at E<1, 43 at E 1-100, 45 at E>=100, monotone and clean.
+*"A real signal waits for its condition."* **THE 30-TRADE FLOOR IS A DIRECT FILTER AGAINST THAT PROPERTY**,
+and it has been on the inherited-constants list as "chosen, not derived" for the life of the project.
+
+## WHAT THIS DOES NOT LICENSE
+
+**THE LICENCE STILL HAS TO BE PRICED AND IT STILL HAS TO BE CAUSAL.** Moving the burden is not removing
+it. A licence derived from full-sample terrain labels and used to admit an entry is look-ahead, and it is
+the most likely way this architecture produces a spectacular and worthless result. **THE SATURATION TEST
+IS STILL THE FIRST THING TO RUN** — if licensed conditions are not scarce, "any cluster is valid" admits
+everything and the floor was doing real work by accident.
+
+**AND ONE MEASUREMENT WOULD MAKE THIS DECISIVE RATHER THAN STRONG.** The decomposition above is on the
+WHOLE F0 scan, not on the subset touching the 2,092 unclaimed reachable episodes, because
+`unclaimed_reachable.csv` carries per-episode candidate COUNTS and not IDENTITIES. Every unclaimed episode
+is touched by a median of ~1,800 pre-filter candidates with ZERO episodes untouched, so the profile is
+expected to be similar — **BUT THAT IS AN EXPECTATION AND NOT A MEASUREMENT.** The artifact that closes it
+is an episode_id x signal_id incidence list for pre-filter rows. It is a build item and it is not emitted
+today.
+
+---
+
 ## 8.0 — TWO LEVELS OF LICENSING, AND THE SECOND IS THE OPERATOR'S
 
 **PHASE 8 AS ORIGINALLY WRITTEN LICENSES THE CONDITION. THE OPERATOR'S FORMULATION LICENSES THE BAR.**
