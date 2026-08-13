@@ -81,6 +81,13 @@ conviction stack and the 6-lot jar active.
   cell           gate                                                        effect
   ---------------------------------------------------------------------------------
   LONG  solo     Micro_Hurst        > p90                                    keeps 12%
+                 ** ADOPTED = p90. THE HEADLINE FIGURES IN SECTION 1 ARE p90. **
+                 A Quant reproduction isolated the threshold and confirmed it: the 120-signal book
+                 at p90 gives 1,785 tr / WR 97.65 / PF 16.66 / 42 losses / $96,876 / wd -$278.4,
+                 every figure within 1.3% of section 1. At p95 the SAME book gives PF 23.02 and 35
+                 losses, which matches nothing printed. THE BRIEF PREVIOUSLY STATED p95 AND WAS
+                 WRONG; that statement has been corrected. See section 5F for the p90-vs-p95
+                 decision, which is real and unpriced.
   LONG  dual     AT_Slope_ST        > p90                                    keeps 18%
   LONG  triple   Bar_Range          > p95
   LONG  quad     Micro_FailedBreak  > p20                                    keeps 72%
@@ -403,6 +410,46 @@ conviction stack and the 6-lot jar active.
   AND THE OTHER FAMILIES DO NOT WORK AS GAP FILLERS — see section 8.2. On flat bars F3
   loses $38,753, F9 -$1,143, F11 -$674, F2 -$366. The role is a SECOND BOOK ALONGSIDE F0,
   not a filler inside it.
+
+================================================================================
+ 5F. p90 VERSUS p95 ON THE LONG SOLO GATE — A REAL, UNPRICED DECISION
+================================================================================
+
+  Isolated by a Quant reproduction on the 120-signal book, everything else identical:
+
+                       trades      WR      PF   losses      net   worst day
+    p90 (ADOPTED)       1,785   97.65   16.66       42   $96,876    -$278.4
+    p95                 1,749   98.00   23.02       35   $95,986    -$203.1
+    delta                 -36  +0.35pp    +38%       -7     -$890   27% BETTER
+
+  **p95 DOMINATES p90 ON EVERY AXIS EXCEPT NET, AND IT COSTS 0.9% OF NET.** A 27% better worst day
+  and seven fewer losses for $890. On a survival-first mandate that is a favourable trade, and it
+  requires no new gate, no new variable and no signal change — it is one constant already in the
+  stack.
+
+  **AND IT IS NOT FREE, FOR ONE REASON THAT MUST TRAVEL WITH IT.** Choosing p95 because it measured
+  better here is a search over two settings. Two trials is a trivial multiple-testing burden but it
+  is not zero, and SEVEN LOSSES IS A THIN MARGIN TO REST A CONSTANT ON. The honest form: p95
+  dominates p90 on this sample and NEITHER HAS BEEN PRICED. The section-4D random-subset method
+  would settle whether a 27% worst-day improvement across 42 -> 35 losses is distinguishable from
+  noise.
+
+  RULING: the spec REMAINS at p90 so that every figure in section 1 reproduces. p95 is recorded here
+  as a priced-decision candidate, not adopted. Do not quote p95 figures as Option B's.
+
+  ALSO ISOLATED, AND IT SETTLES A QUESTION THAT WAS OPEN: the 120th signal — the single F1
+  sequential `Sqz_Val:hi ->13-> Micro_OrderFlowDelta:lo LONG`, inherited from BOOK-50's
+  structure-fill — is worth +10 trades, +$707 net, +1 loss and -0.16 PF at p90. **IT BELONGS,
+  MARGINALLY.** It is not costing ten losses and it is not the improvement anyone hoped for.
+  build_book accepts it without modification.
+
+  AND ONE DEFECT IN THIS DOCUMENT, FOUND BY TRYING TO REBUILD FROM IT: section 10's listing prints
+  its signal_def field at a 70-character column, and ONE ROW OF 123 IS TRUNCATED —
+  `PrevDay_High_Dist_ATR:lo + PrevDay_Close_Side:==-1 + WeeklyOpen_Side:=` with the value cut.
+  Recovered unambiguously from catalogue_F0.csv (one match, `WeeklyOpen_Side:==-1`, PF 2.5056 /
+  folds 5 / LONG against the printed 2.51 / 5 / MOMENTUM_IGNITION). **THE SPEC MUST BE REBUILDABLE
+  FROM ITS OWN LISTING AND CURRENTLY IS NOT.** Regenerating section 10 without the column limit is
+  a Developer item.
 
 ================================================================================
  6. WALK-FORWARD — GATES FITTED ON JAN-MAY, APPLIED UNCHANGED TO JUN-JUL
