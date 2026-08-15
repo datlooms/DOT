@@ -1,0 +1,1220 @@
+THE WHOLE DOT — RULE MASTER SPECIFICATION v2
+foundational_documents/The_Whole_DOT_rule_master_spec_2.txt
+
+STATUS: CANDIDATE. Not committed. This document SUPERSEDES
+The_Whole_DOT_rule_master_spec.txt (sha256 5fffe5644aa9) in full. v1 is not
+amended and must not be built from. Every defect the audit found in v1 is
+listed in section 0.2 with the correction.
+
+CONFIGURATION UNDER SPECIFICATION
+  299 signals — union of BOOK-50, 60-priced, OPTION-B, S0-120
+  LONG depth >= 3, SHORT depth >= 3
+  FLOORED admission
+  Micro_Hurst > p90 at LONG d3 AND SHORT d3
+  Micro_FailedBreak > p20 at LONG d4 (with AT_Slope_ST > p90) AND at LONG d5+
+  ATR_1M >= 20 global
+  MAX_POSITIONS 16, at-risk only
+  0.30 lot base, conviction stack as adopted
+
+MEASUREMENT BASE FOR EVERY FIGURE IN THIS DOCUMENT
+  frame      DOT_jan19_jul21 parts 1-10, 177,251 rows x 172 cols
+             2026.01.19 15:49 -> 2026.07.21 17:09, strictly increasing,
+             0 duplicate rows, 0 NaN cells
+  warmup     bar 6900 (Dots_InitBars). First scannable 2026.01.26 20:54
+  engine     portfolio_simulation_engine.py at HEAD 8f41ca7, with the FLOORED
+             admission block. Reproduces the ratified engine byte-identically
+             under ADMISSION_RULE='CURRENT': artifact sha256 43cee88f6664ca1c
+             both sides, 18,415 rows at cap 16
+  lot base   0.30 unless a figure is explicitly marked @1.0
+  book       gap fillers (GAP_HURST, GAP_FB, GAP_D2D) EXCLUDED from every
+             figure below. See 0.2 defect 6
+
+================================================================================
+0. WHAT WOULD MAKE THIS SPECIFICATION WRONG
+================================================================================
+
+Two systems in two days have had a structural defect found by the next reader.
+Not a rounding error — a defect that changed what the system was. Expect a
+third. This section exists to help you find it faster than the last two were
+found.
+
+--------------------------------------------------------------------------------
+0.1  THE TWO DEFECTS ALREADY FOUND, AND WHAT THEY LOOKED LIKE
+--------------------------------------------------------------------------------
+
+DEFECT 1 — THE JAR WAS SILENTLY ACTING AS A GATE.
+  Executed depth is capped by free jar slots, so a 9-signal event squeezed into
+  4 slots was recorded as depth 4 and received the d4 gate instead of the d5+
+  gate. Every re-tiering is DOWNWARD, so the gate applied was always STRICTER
+  than the market state warranted. Measured: 446 of 2,019 admitted bars
+  re-tiered, and they carried a 1.66% loss rate against 3.95% for correctly
+  tiered bars. The book looked 35 loss events safer than it was.
+  IT LOOKED LIKE: a number that was better than its own mechanism could explain.
+
+DEFECT 2 — THE DEPTH FLOOR WAS A POST-HOC FILTER, NOT AN ADMISSION RULE.
+  The engine admitted signals one at a time until the jar was full, then a
+  filter deleted every trade whose bar-depth was below 3. In a simulator those
+  trades vanish. In a live engine they are simply open. 9,356 trades were
+  deleted this way, of which 2,068 belonged to events that were valid in market
+  terms (qualification depth >= 3) and were chopped only by where the cap
+  happened to land. A live EA built to v1 would have run a book nobody scored.
+  IT LOOKED LIKE: a rule stated in the spec that no engine could execute at
+  decision time.
+
+BOTH SHARE A SHAPE: the specification described a quantity the engine computed
+differently. That is the shape to hunt for.
+
+--------------------------------------------------------------------------------
+0.2  EVERY DEFECT FOUND IN v1, WITH THE CORRECTION IN THIS DOCUMENT
+--------------------------------------------------------------------------------
+
+ 1. DEPTH DEFINITION. v1 section 2 STEP 3: "the count of DISTINCT BOOK SIGNALS
+    qualifying on that bar" and "Signal-count depth is what every rule below
+    refers to". That is qualification depth. v1's own figures reproduce only
+    under EXECUTED depth. The two are different systems: qualification depth
+    gives 6,226 trades / 322 losses / 118 events / PF 8.63 against v1's printed
+    5,107 / 201 / 47 / 13.02.
+    CORRECTED: section 2 STEP 3 below defines depth as the count ADMITTED in
+    the FLOORED batch, which is knowable at decision time and is what runs.
+
+ 2. MAX_RISK UNITS. v1 section 3: "Caps the stop in dollars." It is 150 POINTS
+    (engine L283 min(atrs[bar]*mult, MAX_RISK) against an ATR in points;
+    L130/L132 make it a price distance). The two coincide only at 1.0 lot.
+    This is the line that would mislead anyone sizing a demo.
+    CORRECTED: section 8, with the cap-binding share measured on THIS book.
+
+ 3. THE SOLO TICK GATE. v1: "NOT USED. Unreachable under the depth floors."
+    Under CURRENT admission that was wrong — it was live through jar occupancy
+    and worth $1,063. Under FLOORED it is genuinely inert.
+    CORRECTED AND MEASURED: section 5.4. ON and OFF both give 5,541 trades and
+    $84,032.22 — byte-identical. It is dead here, for a stated reason.
+
+ 4. F1 SEQUENTIAL COUNT. v1: "One of the 299 is an F1 sequential pair." There
+    are TWO. A build reading v1 literally drops or mis-parses one of them, and
+    F1 needs the ST_Flip anchor that the F0 path does not supply.
+    CORRECTED: section 2 STEP 2 and the listing in section 4.
+
+ 5. PROVENANCE ARITHMETIC. v1: "386 memberships collapse to 299." It is 350
+    (50 + 60 + 120 + 120). The four source counts and all four unique counts
+    in v1 are correct; only the total is wrong.
+    CORRECTED: section 4 header.
+
+ 6. GAP FILLERS DO NOT SCALE WITH THE BASE LOT. portfolio_simulation_engine.py
+    L302 hardcodes glots = 1.0 and L306 reads the module constant
+    D2D_GAP_LOTS = 2.0. Neither reads long_mult/short_mult, so gap fillers
+    ignore the base lot entirely. At a 0.30 base they run at 3.33x intended
+    size. They are EXCLUDED from every figure in this document, so nothing here
+    is affected — but a live deployment at 0.30 would carry them at full size.
+    RECORDED AS BUILD ITEM B1, section 11.
+
+ 7. MIXED DAY-KEY CONVENTION. v1's headline relocation claim compared a worst
+    day of -$876.6 (entry-date key) against -$303.0 (exit-date key). On a
+    single convention the pre-relocation figure is -$821.4.
+    CORRECTED: every day-keyed figure in this document uses the EXIT date, and
+    section 6 says so.
+
+ 8. OOS QUOTED IN THE FORBIDDEN UNIT. v1 section 7 forbids trade-level loss
+    rates ("a Wilson interval on 201/5,107 is wrong by construction") and then
+    quotes its three out-of-sample windows as trade-level loss rates.
+    CORRECTED: section 9 quotes losing-BAR rates. Trade rates are not used.
+
+ 9. FIELD ELIGIBILITY MISREAD. v1 section 10.3 reports 42%/78%/86% of signals
+    in-field at splits 0/1/2 and reads the gradient as evidence of durability.
+    Recomputed: 37%/71%/94%, and the figure is dominated by an arithmetic
+    artefact — 145 of 299 signals have fewer than 4 monthly buckets inside the
+    split-0 training window, so folds_plus >= 4 is unsatisfiable for them
+    regardless of quality. Normalised to the same proportion the full sample
+    demands (4 of 6), it is 92%/95%/97%.
+    CORRECTED: section 10.3.
+
+10. "EVERY SIGNAL CLEARED agg_pf >= 2.0 AND folds_plus >= 4." Fourteen of the
+    299 appear in NO mounted artifact — no agg_pf, no folds_plus, no trade
+    count. All fourteen carry BOOK-50 in their source and were never emitted by
+    the F0 scanner (MIN_TRADES = 10).
+    CORRECTED: named in full in section 10.4.
+
+11. CAP-8 WARNING. v1 section 10.8: "CAP 8 IS THE WORST SETTING IN EVERY
+    CONFIGURATION TESTED and the reason is unknown." Not true on this frame:
+    net is strictly monotone in the cap from 6 to 24 and cap 6 is the worst.
+    CORRECTED: section 8.2.
+
+12. GATE-STRENGTH MECHANISM. v1 section 5 attributes the LONG d4 improvement to
+    gate rarity. Falsified: results do not order by rarity, and the adopted gate
+    sat at p ~ 0.19 against 121 rarity-matched alternatives.
+    CORRECTED: section 5 states mechanism claims only where a null supports
+    them, and states the null beside every gate.
+
+--------------------------------------------------------------------------------
+0.3  WHERE TO LOOK FOR DEFECT THREE — RANKED, WITH THE CHECK THAT FALSIFIES EACH
+--------------------------------------------------------------------------------
+
+R1. ANY QUANTITY THIS SPEC DESCRIBES THAT THE ENGINE COMPUTES DIFFERENTLY.
+    This is the shape of both previous defects.
+    CHECK: for each of depth, tier, at-risk count and stop distance, read the
+    engine line that computes it and compare to the section here. Named lines:
+    depth -> the FLOORED admission block; tier -> _adm_pass, min(depth,5);
+    at-risk -> live_lots = sum(1 for t in active_trades if not t.be_nudged);
+    stop -> L283 initial_risk = min(atrs[bar]*mult, MAX_RISK).
+
+R2. THE ADMISSION ORDER IS LONG-BEFORE-SHORT AND NOBODY CHOSE IT.
+    ADM_ORDER = (1, -1). When free slots are scarce, LONG gets first refusal on
+    every bar. This is arbitrary and it is a live parameter.
+    CHECK: re-run with ADM_ORDER = (-1, 1) and diff trades, loss events and net.
+    NOT RUN. If the diff is material, the order is a constant that needs a
+    derivation and does not have one.
+
+R3. Micro_FailedBreak > p20 AT LONG d5+ HAS NO NULL.
+    It is the gate carrying the largest single tier in the book and it was
+    adopted from a 12-way sweep without a rarity-matched null. The gate it
+    replaced (Micro_VolOfVol > p20) sat at p = 0.690 with four dominating
+    alternatives, and the alternative at the same cell that WAS nulled
+    (Bar_Range > p95) came back p = 0.133.
+    CHECK: nulld5.py, replace-not-stack, all rarity-matched pool conditions at
+    the LONG d5+ entry bars, columns ev / pf / net / wb. If it lands above
+    p ~ 0.15 it is in the same class as the constant it replaced.
+
+R4. THE COMPOSITION LAYER WAS CHOSEN ON THE FULL FRAME.
+    Floors, gates and cap were selected with all seven months visible. The
+    walk-forward in section 9.3 tests the SELECTION PROCEDURE, not this exact
+    configuration.
+    CHECK: wfgrid.py / wfscore.py. The train-pick beat the test median in only
+    2 of 3 folds and ranked 36 / 22 / 6 of 60. Any claim that this composition
+    is optimal out-of-sample is unsupported by that result.
+
+R5. EVERY FIGURE BELOW RESTING ON FEWER THAN 20 EVENTS.
+    Listed exhaustively in section 10.6. In particular: the July holdout rests
+    on 3 loss events, SHORT total on 8, LONG d3 on 4, SHORT d3 on 2, SHORT d5
+    on 1, SHORT d7 on 1. None of these can carry a confidence interval and none
+    should be quoted as a rate.
+    CHECK: any cell in section 7 whose event count is below 20 — report the
+    count, decline the rate.
+
+R6. NO SECOND IMPLEMENTATION HAS EVER REPRODUCED THESE NUMBERS.
+    Every figure here comes from one engine, one frame, one analyst. The v1
+    figures were reproduced independently and to the dollar — and were still
+    describing the wrong system, so reproduction is necessary and not
+    sufficient.
+    CHECK: rebuild the 299 masks from section 4, run the section 2 rule, and
+    compare trades / loss events / net. Any disagreement is a finding.
+
+R7. THE INTRADAY TABLE IS A RECONSTRUCTION, NOT AN ENGINE OUTPUT.
+    The engine holds no equity or floating-P&L state. Section 6.4 comes from
+    dot_master_discovery/intraday_reconstruction.py, whose convention is stated
+    in its own header and is arguable.
+    CHECK: the WORST_MOMENT column in the same output is the looser bound and
+    runs roughly 3x deeper. The truth lies between them and tick data would be
+    needed to close it.
+
+R8. THE SPIKE CONSTANTS. RISK_MULT 2.0, MAX_RISK 150 and STEP_PCT 0.30 each sit
+    on a point where both neighbours are far worse, and they interact as one
+    surface (step_size = STEP_PCT * ATR * RISK_MULT). "Swept both ways, all
+    alternatives worse" reads as validation and is the opposite.
+    CHECK: section 8.3. If live behaviour degrades without an obvious cause,
+    this surface is the first place noise would have been absorbed.
+
+--------------------------------------------------------------------------------
+0.4  WHAT IS TESTED AND WHAT IS NOT — PLAINLY
+--------------------------------------------------------------------------------
+
+TESTED
+  Signal selection required 4-of-6-month consistency. Every one of the 299 had
+  to clear agg_pf >= 2.0 AND folds_plus >= 4 over six separate monthly folds.
+  A signal that worked in one month only fails that. This is a STABILITY test,
+  not a holdout — all six folds sit inside the same six months.
+
+  July is a genuine holdout for the signal layer. The folds cover 2026.01 to
+  2026.06; 19,842 bars of July were in no fold and played no part in selecting
+  any signal. July is the strongest month in the book: 419 trades, WR 97.14%,
+  PF 41.35, worst day -$16.8. BASE: 13 days and 3 LOSS EVENTS. Three events
+  cannot carry an interval and this must not be quoted as proof.
+
+  Seven of seven months positive. Twenty-six of twenty-six weeks positive.
+
+  All 60 compositions in the walk-forward universe are profitable in every
+  test window. Worst configuration, weakest window: $8,102.
+
+NOT TESTED
+  The composition layer — floors, tier gates, cap, admission rule — was chosen
+  with the whole frame visible. It has no holdout.
+
+  This exact configuration has never been run forward on unseen data.
+
+  The gate at LONG d5+ has no null (R3).
+
+  The admission order has never been varied (R2).
+
+THE FINDING THAT MATTERS MOST
+  Across 60 complete compositions and three walk-forward windows, the spread
+  between the best and worst composition is roughly 25-30% of net, and every
+  one of them is profitable in every window. The composition choice moves you
+  around inside a band. It does not decide whether the system works.
+  THE SIGNALS CARRY IT. THE COMPOSITION IS A PREFERENCE.
+
+================================================================================
+1. HEADLINE
+================================================================================
+
+  5,541 trades | 5,317 winners | 224 losers | WR 95.96% | PF 13.09
+  gross profit $90,982.68 | gross loss $6,950.46 | NET $84,032.22
+  $/trade $15.166 | 119 of 132 days traded (90.2%)
+
+  224 losing trades = 43 DISTINCT BAR-EVENTS on 36 DISTINCT DAYS
+  7 losing days of 119 | 0 losing weeks of 26 | 0 losing months of 7
+  worst bar-event -$458.88 | worst day -$107.46 | worst week +$24.84
+  worst intraday -$845.91 (reconstruction, section 6.4)
+
+  break-even WR 64.45% against 95.96% actual — a 31.50-point margin
+  ceiling $1,440 = 28.8% of the $5,000 FTMO daily, 14.4% of the $10,000 total
+
+THE RISK UNIT IS THE BAR, NOT THE TRADE. 224 losses are 43 independent
+observations. Every day-keyed figure rests on 36. Where a cell below carries
+fewer than 20 events the count is given and the rate is declined.
+
+================================================================================
+2. THE RULE, IN EXECUTION ORDER
+================================================================================
+
+STEP 1 — BAR ELIGIBILITY
+  bar >= 6900                    Dots_InitBars warmup floor. Ring saturation is
+                                 bar 5,204, so the floor binds. First scannable
+                                 bar 2026.01.26 20:54.
+  ADX_Value >= 15
+  Volume > 50
+  Volume != 0
+  NOT (EST_DayOfWeek == 5 AND (EST_Hour > 16 OR (EST_Hour == 16 AND
+       EST_Minute >= 45)))       Friday cutoff.
+
+STEP 2 — SIGNAL QUALIFICATION
+  299 signals, listed in full in section 4.
+
+  297 are F0 triple-convergence: three conditions ANDed, each of the form
+  VARIABLE:hi, VARIABLE:lo or VARIABLE:==N. hi/lo are mechanism-D adaptive
+  percentiles from dots_thresholds.py (rolling 2,500 eligible bars,
+  day-refreshed, floor-index), hi = p80 and lo = p20, or the two structural
+  constants (VWAP_Z +/-2; OR_Position 0.80/0.20, gated on a valid OR set).
+
+  TWO — NOT ONE — ARE F1 SEQUENTIAL PAIRS of the form A ->k-> B, evaluated by
+  sequential_temporal.pair_mask with the ST_Flip anchor (ST_Flip_Event != 0):
+      LONG   1   ADX_Rising:==0 ->8-> D2D_DirStep:==-1
+      LONG 182   Sqz_Val:hi ->13-> Micro_OrderFlowDelta:lo
+  v1 said one. A build that reads v1 literally drops or mis-parses the other,
+  and the F1 path needs an anchor the F0 path does not supply.
+
+  MANDATORY FOURTH TERM ON EVERY SIGNAL, BOTH FAMILIES:
+      D2D_Trend_Dir == trade direction
+
+STEP 3 — DEPTH.  READ THIS DEFINITION CAREFULLY. IT IS NOT v1's.
+
+  DEPTH IS THE NUMBER OF SIGNALS ADMITTED IN THE BATCH AT THAT BAR IN THAT
+  DIRECTION. It is decided by STEP 4 below, before any position is opened, and
+  it is knowable at bar close.
+
+  It is NOT the count of signals that qualify. Qualification depth ignores the
+  jar and ignores signals already holding a position; it is a different, worse
+  system (6,226 trades / 118 loss events / PF 8.63 under v1's other settings).
+
+  It is also NOT v1's executed depth, which was only knowable AFTER a bar's
+  admissions finished and therefore could not be evaluated at decision time.
+
+STEP 4 — ADMISSION (FLOORED).  THE WHOLE BAR IS DECIDED AS ONE BATCH.
+
+  At bar close, compute once:
+      live   = number of active trades that are NOT be_nudged
+      free   = MAX_POSITIONS - live                                  (16 - live)
+
+  Then, for each direction d in (LONG, SHORT) in that order:
+      A = signals of direction d that qualify at this bar AND are not already
+          holding a position
+      if len(A) == 0                       -> nothing for this direction
+      if free < 3                          -> admit nothing, this direction
+      n = min(len(A), free)
+      if n < 3                             -> admit nothing, this direction
+      evaluate STEP 5 and STEP 6 at depth n
+      if they pass                         -> ADMIT ALL n, set free = free - n
+      else                                 -> admit nothing, this direction
+
+  NO POSITION IS EVER OPENED AND THEN REMOVED. There is no post-hoc filter.
+  Backtest equals live, exactly.
+
+  ADMISSION ORDER IS LONG THEN SHORT. This is a live parameter, it was
+  inherited, and it has never been varied. See section 0.3 R2.
+
+STEP 5 — GLOBAL GATE
+  ATR_1M >= 20 at the entry bar. Raw ATR, not a percentile.
+
+STEP 6 — PER-TIER GATE STACK.  tier = min(depth, 5).
+
+  tier   LONG                                              SHORT
+  ----   ----------------------------------------------    -------------------
+  1      unreachable (floor is 3)                          unreachable
+  2      unreachable (floor is 3)                          unreachable
+  3      Micro_Hurst > p90                                 Micro_Hurst > p90
+  4      Micro_FailedBreak > p20 AND AT_Slope_ST > p90     free
+  5+     Micro_FailedBreak > p20                           free
+
+  All four thresholds are mechanism-D adaptive percentiles at the entry bar.
+  A build MUST NOT carry the tier-1 and tier-2 cells: they are unreachable
+  under a floor of 3 and are not part of this system.
+
+STEP 7 — THE JAR
+  live_lots = count of active trades that are NOT be_nudged. Cap 16.
+  THE JAR COUNTS AT-RISK POSITIONS, NOT LOTS AND NOT OPEN POSITIONS. A trade
+  past its break-even nudge cannot lose and frees its slot. This is why peak
+  OPEN reaches 43 while peak AT-RISK is exactly 16.
+
+STEP 8 — CONVICTION SIZING
+  Multiplies lots. Never blocks an entry. These are ASSIGNMENTS, not products,
+  so the maximum multiplier is 2.0:
+      Micro_Hurst > p90 on longs                          x2.0
+      Micro_FailedBreak > p90 within the last 5 bars      x1.25
+      D2D agreement (D2D_Signal == dir AND ADX >= 30
+         AND Micro_Hurst >= p30), both directions         x2.0
+
+STEP 9 — TRADE MANAGEMENT
+  momentum = Micro_LogReturn * direction >= 0.00012
+  raw_risk = ATR_1M * (4.0 if momentum else 2.0)
+  initial_risk = min(raw_risk, 150.0)          <- 150 POINTS. NOT DOLLARS.
+  stop = entry -/+ initial_risk
+  base_risk = min(ATR_1M * 2.0, 150.0)
+  step_size = 0.30 * base_risk
+  be_trigger = 1.00 * step_size
+  be_lock_dist = 1.00 * be_trigger
+  lag = 3 if momentum else 2
+  SPREAD = 3.0 points, charged on every trade
+  Entry price is the bar CLOSE. Every trade opened on the same bar in the same
+  direction therefore has an IDENTICAL entry, stop, lag and conviction
+  multiplier, and differs only in which signal opened it.
+
+================================================================================
+3. THE CONSTANT REGISTRY
+================================================================================
+
+Every constant, once, with its derivation and one of four labels.
+
+  DERIVED    a named measurement produced this value
+  SWEPT      neighbours tested, curve reported, adopted value defended
+  INHERITED  carried from an earlier build, survives on that basis
+  ARBITRARY  no mechanism, no sweep, no derivation — and it is said
+
+Where a constant is a GATE, its rarity-matched null is stated. The null is
+replace-not-stack: the candidate replaces the adopted gate at that cell, the
+rest of the stack is held, and the comparison is loss EVENTS.
+
+--------------------------------------------------------------------------------
+constant                     value      label       basis
+--------------------------------------------------------------------------------
+depth floor LONG / SHORT     3 / 3      DERIVED     The d2->d3 cliff, measured
+  per direction independently on the ungated field (ATR >= 20, no tier gates,
+  no floor) and re-confirmed under FLOORED admission:
+      depth   LONG trades  LONG loss%   SHORT trades  SHORT loss%
+      d2         1,994       16.55%        1,802        12.54%
+      d3         1,269        8.75%          945         5.40%
+      d4         1,032       10.85%          504         0.79%
+  Both directions break at 3, measured separately. The value is the same in
+  both directions because two independent measurements agree, NOT because an
+  absolute threshold was imposed. A floor of 2 in either direction gives 165 to
+  336 loss events against 43. Above 3 the surface is a plateau that costs net.
+  NOTE: LONG d3 -> d4 gets WORSE (8.75% -> 10.85%). That inversion is the
+  reason a LONG d4 gate exists at all.
+
+Micro_Hurst > p90            p90        DERIVED     THE ONLY CONDITION IN THIS
+  at LONG d3                             + NULLED   PROJECT THAT HAS EVER
+  at SHORT d3                                       CLEARED A NULL, AND IT HAS
+                                                    CLEARED TWO.
+  SHORT d3: 383 entry bars, pass rate 14.9%. Null n=30 of 66 rarity-matched
+    pool conditions, full engine runs. Adopted 15 events; null min 15, p10 16,
+    median 17, max 21. STRICTLY BETTER: 0 of 30.  p = 0.000.  Dominating: 1.
+  LONG d3: 553 entry bars, pass rate 11.8%. Null n=45 of 45 — the COMPLETE
+    rarity-matched set, not a subsample. Adopted 48 events; null min 47,
+    p10 50, median 53, max 66. STRICTLY BETTER: 1 of 45.  p = 0.022.
+    Dominating: 1 (Session_High_Dist_ATR:hi — 47 events, PF 14.38, $88,325).
+  THAT DOMINATING CONDITION WAS DECLINED. It is a pool condition at p80, not an
+  Option B library gate, so adopting it is a NEW THRESHOLD and costs trials.
+  Relocation is free; fitting is not. Declined for one loss event.
+  It also survives selection on training data ending 2026.04.22 — see 9.3.
+
+AT_Slope_ST > p90            p90        SWEPT       Relocated to LONG d4 from
+  at LONG d4                             + NULLED   its dead Option B cell at
+                                                    LONG dual.
+  Null at LONG d4 (under the prior stack): 7 of 126 rarity-matched strictly
+  better, p = 0.056, 0 dominating. Not significant at Bonferroni against 8
+  free relocations, but the best-supported gate other than Micro_Hurst.
+
+Micro_FailedBreak > p20      p20        SWEPT       Adopted at LONG d4 and
+  at LONG d4 (with AT_Slope)             NO NULL     LONG d5+ from a 12-way
+  at LONG d5+                                        library sweep.
+  At LONG d4 it removes 2 loss events for $469 (43 events with, 45 without).
+  Under the previous admission rule it removed ZERO and was named "not a gate";
+  it earns its place only under FLOORED. Re-measured, not inherited.
+  At LONG d5+ it gives 43 events / PF 13.09 / $84,032 / 0 losing weeks against
+  the incumbent Micro_VolOfVol > p20 at 48 / 13.18 / $87,636 / 1 losing week.
+  THIS GATE HAS NO NULL. It is the largest tier in the book and the softest
+  constant in the document. See 0.3 R3.
+
+ATR_1M >= 20                 20         SWEPT       No optimum exists — the
+  global                                            curve is monotone, events
+  and net fall together from ATR 0 to 40. It is a risk dial, not an optimum.
+  What defends 20 is the knee: 15->20 buys 13 loss events for $1,355 (9.6 per
+  $1,000); 20->25 buys 12 for $4,467 (2.7 per $1,000). The price of an event
+  jumps 3.5x immediately above 20.
+
+ADX_Value >= 15              15         DERIVED     STRUCTURAL, AND THE REASON
+                                        (retro)     BELONGS IN WRITING:
+  dots_thresholds.compute_adaptive_thresholds admits a bar to the rolling
+  2,500-bar percentile ring only if ADX_Value >= 15 AND Volume > 50. Every hi
+  and lo threshold in all 299 signals is therefore CALIBRATED ON THE ADX >= 15
+  POPULATION. Entering outside that population fires thresholds against a
+  distribution they were never computed from. ADX >= 15 is the self-consistency
+  point between the oracle and the entry gate — the same number twice.
+  Measured: it removes 17 loss events for +$102 and is NOT redundant against
+  ATR >= 20 (dropping it with ATR >= 20 still applied takes 47 events to 64).
+  It sits on a cliff, not a plateau, and the mechanism above predicts the cliff
+  is exactly there. It was inherited, never fitted to this book.
+
+Volume > 50                  50         ARBITRARY   IT DOES NOTHING.
+  Swept 0 / 10 / 25 / 50 / 100: 47 loss events and PF ~16.2 at every value;
+  removing it entirely is +$36 and changes nothing else. Its stated mechanism
+  (removing dead tape) is entirely subsumed by ATR_1M >= 20. It only bites at
+  200+, where it costs money.
+  IT IS RETAINED ONLY BECAUSE IT ALSO DEFINES THE ORACLE RING, and changing it
+  there re-derives all 299 signals for +$36. That is a reason to leave it
+  alone. It is not a justification.
+
+Friday cutoff 16:45 EST                 INHERITED   $28 and 5 trades in this
+  sample. Defended by mechanism only: it exists to avoid holding into a weekend
+  gap, and a six-month frame containing no weekend shock cannot price that.
+  The tail it protects against did not occur. Do not remove it for $28.
+
+solo tick gate >= 300 ticks             INHERITED   INERT UNDER FLOORED, AND
+                                                    MEASURED, NOT ASSUMED.
+  ON: 5,541 trades, $84,032.22. OFF: 5,541 trades, $84,032.22. Identical.
+  Under the previous admission rule it was live through jar occupancy and worth
+  $1,063; the floor is now enforced at admission so solos never open and the
+  mechanism that made it live is gone. v1 called it unreachable for the wrong
+  reason and was right by accident.
+
+Dots_InitBars                6900       INHERITED   Ring saturates at bar
+  5,204; 6,900 is a further 1,696-bar margin and it binds. Mechanism sound.
+  NOT SWEPT this session — loosening it requires recomputing the oracle. What
+  it costs is bounded by the trades foregone in bars 5,204-6,900, which is late
+  January, the smallest month in the book.
+
+MAX_POSITIONS                16         SWEPT       A PURE EXPOSURE DIAL. Under
+  FLOORED with the d3 cells gated, loss events are FLAT at 43 from cap 14 to
+  24 and days traded flat at 119. Net rises monotonically the whole way.
+      cap   events  days      PF        net   worst day @1.0   ceiling  % daily
+       12       43   119   11.85    $75,430        -$608.6      $1,080    21.6%
+       14       44   119   12.46    $80,825        -$407.6      $1,260    25.2%
+       16       43   119   13.09    $84,032        -$358.2      $1,440    28.8%
+       18       43   119   13.40    $86,694        -$339.4      $1,620    32.4%
+       20       43   119   13.60    $88,341        -$346.6      $1,800    36.0%
+       24       43   119   13.97    $91,838        -$925.0      $2,160    43.2%
+  Cap 12 and cap 24 each carry one losing week; 14 through 20 carry none.
+  16 is chosen for the ceiling (28.8% of daily), not for performance.
+  THE CAP DOES NOT NEED TO BE A MULTIPLE OF THE FLOOR. Tested across three
+  admission rules and caps 3 to 24: net is monotone with no step at multiples
+  of three, because events range 2 to 47 and cannot tile a fixed container.
+
+hi / lo percentiles          p80 / p20  INHERITED   Never tested. Changing it
+  re-derives all 299 signals.
+
+RISK_MULT                    2.0        SWEPT       *** SPIKE — SEE BELOW ***
+MAX_RISK                     150 POINTS SWEPT       *** SPIKE — SEE BELOW ***
+STEP_PCT                     0.30       SWEPT       *** SPIKE — SEE BELOW ***
+
+  THESE THREE SIT ON KNIFE EDGES, NOT PLATEAUS, AND THEY INTERACT AS ONE
+  SURFACE (step_size = STEP_PCT * ATR * RISK_MULT). Both neighbours of each are
+  dramatically worse:
+      RISK_MULT  1.0: 116 ev  1.5: 70 ev  [2.0: 47 ev]  2.5: 75 ev  3.0: 81 ev
+      MAX_RISK    75: 128 ev  100: 82 ev  [150: 47 ev]  200: 50 ev  300: 52 ev
+      STEP_PCT  0.15:  38 ev 0.20: 39 ev  [0.30: 47 ev] 0.45: 124 ev 0.60: 163
+  (event counts from the sweep base; the shape is the finding, not the level.)
+  "SWEPT BOTH WAYS, ALL ALTERNATIVES WORSE" READS AS VALIDATION AND MEANS THE
+  OPPOSITE. Spike geometry is where noise is absorbed. These are the constants
+  most likely to have fitted this frame, and they are in the sacred layer.
+
+MOMENTUM_SL_MULT             4.0        SWEPT       Knee into a plateau:
+  2.0 and 3.0 are worse; 4.0, 5.0 and 6.0 all give the same event count and
+  4.0 the best net. Adopted value is at the knee. This one is a plateau.
+
+MOMENTUM_THRESHOLD           0.00012    ARBITRARY   Never derived — but swept
+                                        (SWEPT)     and it sits mid-plateau.
+  0.00000 through 0.00024 all give 43-49 events and $95.4k-$96.0k on the sweep
+  base; it degrades past 0.00048. The adopted value has the best worst-bar of
+  the plateau. It could not have been fitted, because the surface is flat.
+  The path-split gap is NOT purely a stop-width artefact: where MAX_RISK binds
+  on both paths (ATR >= 75, stops equalised at 150 points) a 3.29x loss-rate
+  gap survives on 901 trades. The condition carries real information.
+
+LOCK_FRAC                    1.0        SWEPT       Monotone increasing to the
+  boundary (0.5 $77,343 -> 1.0 $95,970 on the sweep base). Never tested above
+  1.0 — the sweep stopped where the parameter's conventional range stopped,
+  not where the surface turned.
+
+BE_TRIG_FRAC                 1.0        INHERITED
+LAG_BASE / LAG_MOMENTUM      2 / 3      INHERITED
+conviction 2.0 / 1.25 / 2.0             INHERITED   Worth +$23,288 at zero
+  loss-event cost on the sweep base — it changes size, never which trades
+  happen. Never swept at other multipliers. It is also the entire reason the
+  ceiling is $1,440 rather than $720.
+
+SPREAD                       3.0        DELIBERATE  Live measures 2.0. The
+  conservatism costs $2,195 at 0.33 lot on the sweep base. Money left on the
+  table on purpose.
+
+ADM_ORDER                    LONG,SHORT ARBITRARY   Never varied. See 0.3 R2.
+
+================================================================================
+4. THE FULL SIGNAL LISTING
+================================================================================
+
+299 signals. 193 LONG, 106 SHORT — a 1.82:1 scan ratio, REPORTED AND NEVER
+TARGETED. All 299 (direction, signal_def) pairs are distinct.
+
+PROVENANCE. 350 memberships collapse to 299 distinct signals. (v1 said 386;
+that total is wrong. The four source counts and all four unique counts below
+are v1's and they are correct.)
+
+  source        members   unique
+  BOOK-50            50       20
+  60-priced          60       43
+  OPTION-B          120       80
+  S0-120            120      111
+  TOTAL             350      254 unique-to-one-source
+
+LISTING WIDTH VERIFIED. Longest signal_def is 74 characters; longest source tag
+is 26. The listing below is emitted at 108 characters and NOTHING IS TRUNCATED.
+Any copy of this section that wraps or elides is corrupt and must not be built
+from. Two entries contain the '->' sequential form; both are LONG (1 and 182).
+
+--- LONG (193 signals) ----------------------------------------
+   1  ADX_Rising:==0 ->8-> D2D_DirStep:==-1                                       BOOK-50
+   2  AT_Lookback_LT:hi + Micro_MomoTransfer:lo + Micro_RangeVelocity:lo          S0-120
+   3  AT_Lookback_LT:hi + VAH_Dist_ATR:hi + WeeklyOpen_Dist_ATR:lo                S0-120
+   4  AT_Lookback_ST:hi + AT_Slope_ST:lo + Micro_RollProxy:hi                     BOOK-50+OPTION-B
+   5  AT_Lookback_ST:hi + Slope_EMA_ST:hi + ADX_Value:lo                          OPTION-B
+   6  AT_Lookback_ST:hi + Slope_EMA_ST:lo + Sqz_State:==1                         S0-120
+   7  AT_Score_LT:hi + Micro_GarmanKlass:hi + Micro_Rejection:hi                  OPTION-B
+   8  AT_Score_LT:hi + PrevDay_High_Dist_ATR:lo + MultiDay_Slope:lo               S0-120
+   9  AT_Score_LT:hi + Volume_Avg_10:hi + Micro_CSSpread:hi                       S0-120
+  10  AT_Score_LT:lo + Micro_MicroGap:lo + OR_High_Side:==-1                      OPTION-B
+  11  AT_Score_LT:lo + Micro_VolOfVol:lo + Round_500_Dist_ATR:lo                  S0-120
+  12  AT_Score_LT:lo + Slope_Accel_LT:hi + Body_Size:hi                           60-priced
+  13  AT_Score_LT:lo + Slope_Accel_LT:hi + Micro_RangeAccel:hi                    60-priced
+  14  AT_Score_LT:lo + Slope_Accel_LT:hi + VWAP_Sigma:hi                          60-priced+OPTION-B
+  15  AT_Slope_LT:lo + AT_Slope_ST:lo + Micro_Hurst:hi                            S0-120
+  16  AT_Slope_LT:lo + AT_Slope_ST:lo + Micro_RollProxy:hi                        60-priced
+  17  AT_Slope_LT:lo + Micro_FailedBreak:hi + Micro_RangeAccel:lo                 60-priced
+  18  AT_Slope_LT:lo + Slope_EMA_ST:lo + Micro_FailedBreak:hi                     OPTION-B
+  19  AT_Slope_LT:lo + Slope_EMA_ST:lo + Micro_Hurst:hi                           S0-120
+  20  AT_Slope_ST:lo + Bars_Since_Flip:hi + Lower_Wick:hi                         S0-120
+  21  AT_Slope_ST:lo + Bars_Since_Flip:hi + Upper_Wick:hi                         S0-120
+  22  AT_Slope_ST:lo + Micro_Amihud:hi + Lower_Wick:hi                            S0-120
+  23  AT_Slope_ST:lo + Micro_AutoCorr:hi + D2D_DirStep:==1                        BOOK-50
+  24  AT_Slope_ST:lo + Micro_AutoCorr:hi + Micro_LogReturn:hi                     OPTION-B
+  25  AT_Slope_ST:lo + Micro_AutoCorr:hi + Micro_RangeVelocity:hi                 S0-120
+  26  AT_Slope_ST:lo + Micro_AutoCorr:hi + Micro_WickImbalance:lo                 S0-120
+  27  AT_Slope_ST:lo + Micro_BarOverlap:lo + VWAP_Sigma:hi                        60-priced+OPTION-B
+  28  AT_Slope_ST:lo + Micro_FailedBreak:hi + VWAP_Side:==-1                      OPTION-B
+  29  AT_Slope_ST:lo + Micro_FractalDim:lo + Micro_Hurst:hi                       S0-120
+  30  AT_Slope_ST:lo + Micro_HLAsymmetry:hi + Micro_Hurst:hi                      OPTION-B
+  31  AT_Slope_ST:lo + Micro_Hurst:hi + Round_1000_Dist_ATR:lo                    60-priced+OPTION-B
+  32  AT_Slope_ST:lo + Micro_OrderFlowDelta:hi + Micro_WickImbalance:lo           60-priced
+  33  AT_Slope_ST:lo + Micro_RangeAccel:hi + RangeOsc_State:==2                   60-priced
+  34  AT_Slope_ST:lo + Micro_RangeAccel:lo + AT_Regime_LT:==1                     OPTION-B
+  35  AT_Slope_ST:lo + Micro_RollProxy:hi + RangeOsc_State:==-1                   BOOK-50+OPTION-B
+  36  AT_Slope_ST:lo + Micro_VPIN:lo + OBVf_Signal:==1                            60-priced
+  37  AT_Slope_ST:lo + Micro_VolOfVol:hi + OBVf_Signal:==1                        60-priced
+  38  AT_Slope_ST:lo + Micro_VolOfVol:hi + OR_Position:lo                         S0-120
+  39  AT_Slope_ST:lo + Micro_VolOfVol:hi + Volume:hi                              BOOK-50
+  40  AT_Slope_ST:lo + Momentum_Value:hi + AT_Regime_ST:==1                       BOOK-50
+  41  AT_Slope_ST:lo + Momentum_Value:hi + Body_Size:hi                           60-priced
+  42  AT_Slope_ST:lo + Momentum_Value:hi + D2D_Signal:==0                         60-priced
+  43  AT_Slope_ST:lo + Momentum_Value:hi + Micro_RollProxy:hi                     60-priced+OPTION-B
+  44  AT_Slope_ST:lo + RangeOsc_Val:lo + Micro_HLAsymmetry:hi                     S0-120
+  45  AT_Slope_ST:lo + RangeOsc_Val:lo + Micro_RollProxy:hi                       S0-120
+  46  AT_Slope_ST:lo + Session_Low_Dist_ATR:lo + Volume:hi                        OPTION-B
+  47  Bar_Range:hi + Micro_Lambda:lo + PrevDay_High_Dist_ATR:hi                   S0-120
+  48  Bar_Range:hi + Micro_Lambda:lo + RangeOsc_State:==2                         BOOK-50
+  49  Bar_Range:hi + Micro_MomoTransfer:hi + Micro_TickIntensity:hi               BOOK-50+OPTION-B
+  50  Bar_Range:hi + OBV_Macd:lo + Micro_TickIntensity:hi                         BOOK-50+OPTION-B
+  51  Bar_Range:hi + Slope_EMA_ST:lo + Micro_AutoCorr:hi                          OPTION-B
+  52  Bars_Since_Flip:hi + Micro_CSSpread:hi + Upper_Wick:hi                      60-priced
+  53  Bars_Since_Flip:hi + Micro_PriceAccel:lo + OR_Low_Side:==-1                 OPTION-B
+  54  Bars_Since_Flip:hi + MultiDay_Position:lo + VWAP_Sigma_ATR:lo               S0-120
+  55  Bars_Since_Flip:hi + PrevDay_Low_Dist_ATR:lo + OR_Low_Side:==-1             BOOK-50+60-priced
+  56  Bars_Since_Flip:hi + Round_500_Dist_ATR:lo + VA_Position:hi                 OPTION-B
+  57  Bars_Since_Flip:hi + Slope_Accel_LT:hi + Micro_VPIN:lo                      BOOK-50+OPTION-B
+  58  Bars_Since_Flip:hi + Volume_Avg_10:hi + MultiDay_Position:lo                60-priced
+  59  Bars_Since_Flip:hi + Volume_Avg_10:hi + Session_Low_Dist_ATR:lo             BOOK-50+60-priced+OPTION-B
+  60  D2D_ATR:hi + AT_Slope_ST:lo + Bars_Since_Flip:hi                            BOOK-50+OPTION-B
+  61  D2D_ATR:hi + Micro_Rejection:lo + PrevDay_High_Dist_ATR:hi                  OPTION-B
+  62  D2D_ATR_MA:hi + AT_Slope_ST:lo + Micro_VolOfVol:hi                          BOOK-50+OPTION-B
+  63  D2D_ATR_MA:hi + Micro_VPIN:lo + ST_Flip_Event:==-1                          60-priced
+  64  D2D_ATR_MA:hi + OR_Position:lo + PrevDay_High_Side:==1                      S0-120
+  65  D2D_Dynamic_Sensitivity:lo + OBV_Macd:lo + Micro_MicroGap:lo                S0-120
+  66  D2D_Persist:hi + PrevDay_Low_Side:==-1 + OR_Low_Side:==1                    S0-120
+  67  DailyOpen_Dist_ATR:lo + VWAP_Side:==1 + OR_Low_Side:==-1                    S0-120
+  68  Dist_To_PoC_ATR:lo + Micro_VolOfVol:lo + Round_1000_Dist_ATR:lo             S0-120
+  69  EMA_Oscillator:hi + AT_Regime_ST:==1 + PrevDay_Low_Side:==-1                S0-120
+  70  EMA_Oscillator:lo + Micro_HLAsymmetry:lo + AT_Regime_ST:==1                 OPTION-B
+  71  Efficiency_Ratio:hi + Micro_RangeVelocity:lo + RangeOsc_State:==2           60-priced
+  72  KAMA_Dist:hi + AT_Regime_ST:==1 + PrevDay_Low_Side:==-1                     OPTION-B
+  73  KAMA_Dist:lo + Micro_WickImbalance:hi + ADX_Rising:==0                      60-priced+OPTION-B+S0-120
+  74  KAMA_Dist:lo + Micro_WickImbalance:hi + Harmonic_OBVf_Concordance:==0       60-priced
+  75  KAMA_Dist:lo + Micro_WickImbalance:hi + Lower_Wick:hi                       60-priced
+  76  KAMA_Dist:lo + Micro_WickImbalance:hi + OR_High_Side:==-1                   BOOK-50+OPTION-B
+  77  KAMA_Dist:lo + Micro_WickImbalance:hi + PrevDay_High_Side:==-1              BOOK-50
+  78  KAMA_Dist:lo + Micro_WickImbalance:hi + Volume:hi                           60-priced
+  79  KAMA_Dist:lo + Upper_Wick:hi + RangeOsc_State:==-1                          OPTION-B
+  80  KAMA_Dist:lo + VWAP_Dist_ATR:lo + DailyOpen_Dist_ATR:lo                     60-priced
+  81  KAMA_Dist:lo + VWAP_Dist_ATR:lo + OR_High_Side:==-1                         OPTION-B
+  82  Micro_Amihud:hi + AT_Regime_ST:==1 + OR_Low_Side:==-1                       60-priced
+  83  Micro_Amihud:lo + Micro_RangeAccel:lo + Micro_VPIN:hi                       60-priced
+  84  Micro_AutoCorr:hi + Session_Low_Dist_ATR:lo + TChan_A15:hi                  60-priced
+  85  Micro_Entropy:lo + DailyOpen_Side:==-1 + OR_High_Side:==1                   OPTION-B
+  86  Micro_Entropy:lo + Micro_HLAsymmetry:lo + OR_Low_Side:==-1                  BOOK-50
+  87  Micro_Entropy:lo + Micro_MomoTransfer:hi + Micro_RangeAccel:lo              OPTION-B
+  88  Micro_Entropy:lo + Micro_MomoTransfer:hi + Micro_RangeVelocity:lo           S0-120
+  89  Micro_GarmanKlass:hi + Micro_VolOfVol:hi + PrevDay_Close_Dist_ATR:hi        60-priced+OPTION-B+S0-120
+  90  Micro_HLAsymmetry:lo + Micro_LogReturn:hi + Micro_MicroGap:hi               OPTION-B
+  91  Micro_HLAsymmetry:lo + VWAP_Sigma:lo + OR_Position:hi                       S0-120
+  92  Micro_IBSP:hi + DailyOpen_Side:==1 + OR_Low_Side:==-1                       OPTION-B
+  93  Micro_IBSP:lo + VWAP_Sigma:lo + Volume:hi                                   BOOK-50+OPTION-B
+  94  Micro_Lambda:lo + Micro_RollProxy:hi + RangeOsc_State:==2                   S0-120
+  95  Micro_Lambda:lo + OR_Position:hi + PrevDay_Low_Side:==-1                    S0-120
+  96  Micro_LogReturn:hi + Micro_TickIntensity:hi + Micro_VPIN:lo                 OPTION-B
+  97  Micro_LogReturn:hi + Micro_TickIntensity:hi + Micro_VolOfVol:hi             60-priced
+  98  Micro_LogReturn:lo + Micro_PriceAccel:hi + ADX_Value:lo                     S0-120
+  99  Micro_LogReturn:lo + Upper_Wick:hi + OR_High_Side:==0                       S0-120
+ 100  Micro_MicroGap:hi + Micro_ThrustEff:lo + OBVf_Signal:==-1                   S0-120
+ 101  Micro_MicroGap:lo + AT_Regime_ST:==1 + OR_Low_Side:==-1                     BOOK-50+60-priced+OPTION-B
+ 102  Micro_MomoTransfer:hi + Micro_RangeAccel:lo + AT_Regime_LT:==1              BOOK-50
+ 103  Micro_MomoTransfer:hi + Micro_RangeVelocity:lo + AT_Regime_LT:==1           60-priced
+ 104  Micro_MomoTransfer:lo + VWAP_Sigma:lo + Volume:hi                           OPTION-B
+ 105  Micro_OrderFlowDelta:hi + Micro_Rejection:lo + DailyOpen_Side:==-1          S0-120
+ 106  Micro_OrderFlowDelta:hi + Micro_Rejection:lo + Lower_Wick:lo                OPTION-B+S0-120
+ 107  Micro_OrderFlowDelta:hi + Session_High_Dist_ATR:lo + PrevDay_Low_Side:==-1  S0-120
+ 108  Micro_OrderFlowDelta:lo + PrevDay_High_Side:==1 + OR_Low_Side:==-1          S0-120
+ 109  Micro_OrderFlowDelta:lo + Session_Low_Dist_ATR:lo + ADX_Value:hi            BOOK-50
+ 110  Micro_PriceAccel:hi + VWAP_Sigma:hi + D2D_Signal:==1                        60-priced
+ 111  Micro_RangeVelocity:hi + Micro_TickIntensity:hi + Lower_Wick:hi             S0-120
+ 112  Micro_RangeVelocity:lo + Sqz_State:==-1 + ST_Flip_Event:==-1                S0-120
+ 113  Micro_Rejection:lo + AT_Regime_ST:==1 + PrevDay_Low_Side:==-1               BOOK-50+60-priced
+ 114  Micro_Rejection:lo + Session_Low_Dist_ATR:lo + OR_Low_Side:==1              OPTION-B+S0-120
+ 115  Micro_Rejection:lo + VWAP_Sigma:lo + Volume:hi                              OPTION-B+S0-120
+ 116  Micro_VPIN:lo + Volume:hi + ST_Flip_Event:==-1                              BOOK-50+60-priced+OPTION-B
+ 117  Micro_VolOfVol:hi + AT_Regime_ST:==1 + OR_Low_Side:==-1                     BOOK-50
+ 118  Micro_WickImbalance:hi + Lower_Wick:lo + AT_Regime_LT:==1                   60-priced
+ 119  Momentum_Value:hi + Micro_CSSpread:lo + ST_Flip_Event:==1                   S0-120
+ 120  Momentum_Value:hi + Micro_Hurst:hi + AT_Regime_ST:==1                       60-priced
+ 121  Momentum_Value:hi + Micro_Hurst:hi + ST_Flip_Event:==1                      S0-120
+ 122  Momentum_Value:lo + Micro_FailedBreak:hi + Round_500_Dist_ATR:lo            S0-120
+ 123  Momentum_Value:lo + Micro_VolOfVol:hi + Volume:hi                           OPTION-B
+ 124  OBV_Macd:lo + Efficiency_Ratio:hi + Micro_VPIN:lo                           S0-120
+ 125  OBV_Macd:lo + Harmonic_LLEMA:hi + Micro_Rejection:lo                        60-priced
+ 126  OBV_Macd:lo + Micro_Lambda:lo + Micro_RollProxy:hi                          BOOK-50
+ 127  OBV_Macd:lo + Micro_LogReturn:lo + Micro_Rejection:lo                       BOOK-50
+ 128  OBV_Macd:lo + Micro_MicroGap:hi + Micro_RollProxy:hi                        BOOK-50
+ 129  OBV_Macd:lo + Micro_OrderFlowDelta:lo + Micro_WickImbalance:hi              60-priced
+ 130  OBV_Macd:lo + Micro_WickImbalance:lo + ADX_Value:hi                         60-priced
+ 131  OBV_Macd:lo + MultiDay_Slope:lo + Lower_Wick:hi                             OPTION-B
+ 132  OBV_Macd:lo + Sqz_State:==1 + RangeOsc_State:==-2                           BOOK-50+60-priced
+ 133  OBV_Macd:lo + VA_Position:hi + AT_Regime_ST:==1                             S0-120
+ 134  OBV_Macd:lo + Volume_Ratio_10:hi + AT_Regime_ST:==1                         60-priced
+ 135  OBV_Velocity:hi + DailyOpen_Dist_ATR:lo + D2D_Signal:==1                    S0-120
+ 136  OBV_Velocity:hi + Micro_FractalDim:hi + OR_Low_Side:==-1                    60-priced
+ 137  PrevDay_High_Dist_ATR:lo + ADX_Rising:==1 + PrevDay_Low_Side:==-1           OPTION-B
+ 138  PrevDay_High_Dist_ATR:lo + PrevDay_Close_Side:==-1 + WeeklyOpen_Side:==-1   OPTION-B
+ 139  PrevDay_High_Dist_ATR:lo + PrevDay_Low_Side:==-1 + OR_Low_Side:==1          OPTION-B
+ 140  PrevDay_High_Dist_ATR:lo + Sqz_State:==1 + PrevDay_Low_Side:==-1            OPTION-B
+ 141  PrevDay_High_Dist_ATR:lo + VWAP_Side:==-1 + WeeklyOpen_Side:==-1            OPTION-B
+ 142  RangeOsc_State:==-2 + OR_Low_Side:==-1 + WeeklyOpen_Side:==-1               S0-120
+ 143  RangeOsc_Val:hi + OR_Position:lo + PrevDay_Low_Side:==1                     OPTION-B
+ 144  RangeOsc_Val:hi + Session_Low_Dist_ATR:lo + PrevDay_Close_Side:==-1         60-priced
+ 145  Round_1000_Dist_ATR:lo + MultiDay_Position:hi + AT_Regime_LT:==1            OPTION-B
+ 146  Round_500_Dist_ATR:lo + DailyOpen_Side:==1 + OR_Low_Side:==-1               BOOK-50+OPTION-B
+ 147  Session_High_Dist_ATR:lo + Volume:hi + D2D_Signal:==1                       OPTION-B
+ 148  Session_Low_Dist_ATR:lo + OR_Position:hi + DailyOpen_Side:==-1              OPTION-B
+ 149  Session_Low_Dist_ATR:lo + OR_Position:hi + OR_High_Side:==-1                S0-120
+ 150  Slope_Accel_LT:hi + AT_Regime_ST:==1 + OR_Low_Side:==-1                     60-priced
+ 151  Slope_Accel_LT:hi + Micro_TickIntensity:hi + PrevDay_Low_Side:==-1          BOOK-50+OPTION-B
+ 152  Slope_Accel_LT:hi + OBV_Macd:lo + Micro_TickIntensity:hi                    60-priced
+ 153  Slope_Accel_LT:hi + ST_Flip_Event:==-1 + OR_High_Side:==-1                  S0-120
+ 154  Slope_Accel_LT:hi + Sqz_State:==1 + RangeOsc_State:==-2                     BOOK-50+60-priced
+ 155  Slope_Accel_LT:lo + Micro_HLAsymmetry:hi + Volume:hi                        OPTION-B
+ 156  Slope_Accel_LT:lo + Micro_Hurst:hi + Upper_Wick:hi                          S0-120
+ 157  Slope_Accel_LT:lo + Micro_LogReturn:hi + Micro_RangeVelocity:lo             S0-120
+ 158  Slope_Accel_LT:lo + Micro_LogReturn:hi + OR_High_Side:==-1                  S0-120
+ 159  Slope_Accel_LT:lo + Micro_RollProxy:hi + PrevDay_High_Side:==1              S0-120
+ 160  Slope_Accel_LT:lo + Micro_TickIntensity:lo + OR_High_Side:==-1              S0-120
+ 161  Slope_Accel_LT:lo + Micro_VolOfVol:hi + Micro_WickImbalance:lo              S0-120
+ 162  Slope_Accel_LT:lo + Round_100_Dist_ATR:lo + PrevDay_High_Side:==1           S0-120
+ 163  Slope_Accel_LT:lo + Session_High_Dist_ATR:lo + OBVf_Signal:==-1             S0-120
+ 164  Slope_Accel_ST:lo + Micro_VPIN:lo + ST_Flip_Event:==-1                      60-priced
+ 165  Slope_EMA_ST:hi + Micro_Rejection:lo + Session_Low_Dist_ATR:lo              BOOK-50+60-priced
+ 166  Slope_EMA_ST:lo + Lower_Wick:hi + RangeOsc_State:==-1                       OPTION-B
+ 167  Slope_EMA_ST:lo + Micro_FailedBreak:hi + Micro_WickImbalance:lo             OPTION-B
+ 168  Slope_EMA_ST:lo + Micro_HLAsymmetry:hi + Micro_OrderFlowDelta:lo            BOOK-50+OPTION-B
+ 169  Slope_EMA_ST:lo + Micro_HLAsymmetry:hi + Micro_Rejection:lo                 BOOK-50+OPTION-B
+ 170  Slope_EMA_ST:lo + Micro_Hurst:hi + PrevDay_High_Side:==-1                   60-priced+OPTION-B
+ 171  Slope_EMA_ST:lo + Micro_Hurst:hi + VWAP_Side:==-1                           S0-120
+ 172  Slope_EMA_ST:lo + Micro_RangeAccel:hi + Micro_Rejection:lo                  60-priced+OPTION-B
+ 173  Slope_EMA_ST:lo + Micro_RangeVelocity:hi + D2D_DirStep:==-1                 BOOK-50
+ 174  Slope_EMA_ST:lo + Micro_RangeVelocity:hi + OR_Low_Side:==-1                 S0-120
+ 175  Slope_EMA_ST:lo + Micro_RangeVelocity:lo + OR_Position:lo                   OPTION-B
+ 176  Slope_EMA_ST:lo + Micro_Rejection:lo + Micro_RollProxy:lo                   S0-120
+ 177  Slope_EMA_ST:lo + Micro_Rejection:lo + Round_100_Dist_ATR:lo                OPTION-B
+ 178  Slope_EMA_ST:lo + Micro_VolOfVol:hi + AT_Regime_ST:==1                      60-priced
+ 179  Slope_EMA_ST:lo + Momentum_Value:hi + Micro_RangeVelocity:hi                OPTION-B
+ 180  Slope_EMA_ST:lo + Session_High_Dist_ATR:lo + ADX_Rising:==0                 S0-120
+ 181  Sqz_Val:hi + Sqz_State:==1 + RangeOsc_State:==-2                            60-priced
+ 182  Sqz_Val:hi ->13-> Micro_OrderFlowDelta:lo                                   BOOK-50+OPTION-B
+ 183  Upper_Wick:hi + D2D_Signal:==1 + PoC_Side:==1                               S0-120
+ 184  VWAP_Dist_ATR:lo + D2D_Signal:==1 + VWAP_Side:==1                           BOOK-50
+ 185  Volume_Avg_10:hi + Micro_FailedBreak:hi + Micro_Rejection:lo                60-priced
+ 186  Volume_Avg_10:hi + Micro_HLAsymmetry:lo + VWAP_Sigma:lo                     S0-120
+ 187  Volume_Avg_10:hi + Micro_OrderFlowDelta:lo + VWAP_Sigma:lo                  S0-120
+ 188  Volume_Avg_10:hi + Micro_Rejection:lo + PrevDay_High_Dist_ATR:hi            OPTION-B
+ 189  Volume_Avg_10:hi + Micro_Rejection:lo + VWAP_Sigma:lo                       S0-120
+ 190  Volume_Avg_10:hi + Micro_WickImbalance:lo + VWAP_Sigma:lo                   S0-120
+ 191  Volume_Ratio_10:hi + Micro_AutoCorr:hi + TChan_A15:hi                       S0-120
+ 192  Volume_Ratio_10:hi + Micro_FractalDim:lo + TChan_A15:hi                     OPTION-B
+ 193  Volume_Ratio_10:hi + Micro_LogReturn:hi + Micro_TickIntensity:hi            S0-120
+
+--- SHORT (106 signals) ----------------------------------------
+   1  ATR_1M:hi + Micro_CSSpread:hi + RangeOsc_State:==2                          S0-120
+   2  ATR_1M:hi + MultiDay_Slope:hi + RangeOsc_State:==2                          OPTION-B
+   3  AT_Lookback_LT:hi + Micro_Amihud:lo + Body_Size:hi                          OPTION-B
+   4  AT_Lookback_ST:hi + Sqz_Val:hi + Micro_TickIntensity:hi                     BOOK-50
+   5  AT_Score_LT:hi + Micro_Rejection:hi + RangeOsc_State:==-1                   S0-120
+   6  AT_Score_LT:hi + Volume_Avg_10:hi + OR_High_Side:==-1                       S0-120
+   7  AT_Score_LT:hi + Volume_Avg_10:hi + RangeOsc_State:==-1                     OPTION-B
+   8  AT_Score_LT:hi + Volume_Ratio_10:hi + Volume:hi                             OPTION-B
+   9  AT_Score_LT:lo + Micro_Lambda:hi + TChan_A15:hi                             S0-120
+  10  AT_Score_LT:lo + Micro_LogReturn:hi + Micro_PriceAccel:lo                   S0-120
+  11  AT_Score_LT:lo + Volume_Avg_10:hi + Micro_CSSpread:hi                       S0-120
+  12  AT_Slope_LT:hi + Micro_BarOverlap:hi + OBVf_Signal:==1                      OPTION-B
+  13  AT_Slope_LT:hi + Micro_MicroGap:hi + PrevDay_Low_Side:==-1                  S0-120
+  14  AT_Slope_ST:hi + Micro_BarEntropy:lo + DailyOpen_Side:==-1                  S0-120
+  15  AT_Slope_ST:hi + Micro_MicroGap:lo + Upper_Wick:hi                          BOOK-50+OPTION-B
+  16  AT_Slope_ST:hi + OR_High_Dist_ATR:hi + Sqz_State:==-1                       S0-120
+  17  AT_Slope_ST:lo + OBV_Velocity:hi + Micro_BarOverlap:lo                      S0-120
+  18  AT_Slope_ST:lo + Sqz_Val:hi + Micro_CSSpread:lo                             BOOK-50
+  19  Bar_Range:hi + AT_Score_LT:hi + AT_Slope_ST:lo                              S0-120
+  20  Bar_Range:hi + Micro_Hurst:hi + PrevDay_Low_Dist_ATR:hi                     S0-120
+  21  Bar_Range:hi + Micro_RangeVelocity:lo + Lower_Wick:lo                       OPTION-B+S0-120
+  22  Bar_Range:hi + PrevDay_Low_Dist_ATR:hi + PrevDay_High_Side:==1              OPTION-B+S0-120
+  23  Bars_Since_Flip:hi + Sqz_Val:hi + PrevDay_Close_Dist_ATR:hi                 S0-120
+  24  D2D_ATR:hi + AT_Score_LT:hi + RangeOsc_State:==-1                           OPTION-B
+  25  D2D_ATR:hi + WeeklyOpen_Dist_ATR:hi + PrevDay_High_Side:==1                 S0-120
+  26  D2D_ATR_MA:hi + Micro_MicroGap:lo + VWAP_Sigma:lo                           S0-120
+  27  D2D_ATR_MA:hi + Sqz_Val:hi + Session_High_Dist_ATR:hi                       OPTION-B
+  28  D2D_Dn_Count:hi + Micro_IBSP:lo + Micro_VolOfVol:lo                         S0-120
+  29  D2D_Dn_Count:hi + Slope_Accel_ST:lo + Micro_VolAccel:lo                     S0-120
+  30  D2D_Dynamic_Sensitivity:lo + EMA_Oscillator:lo + Lower_Wick:lo              S0-120
+  31  D2D_Dynamic_Sensitivity:lo + Lower_Wick:lo + Volume:hi                      OPTION-B
+  32  D2D_Dynamic_Sensitivity:lo + Micro_IBSP:lo + Micro_WickImbalance:hi         OPTION-B
+  33  D2D_Dynamic_Sensitivity:lo + OBV_Macd:lo + MultiDay_Slope:lo                S0-120
+  34  D2D_Dynamic_Sensitivity:lo + RangeOsc_Val:lo + Volume_Avg_10:hi             OPTION-B
+  35  D2D_Dynamic_Sensitivity:lo + Slope_Accel_LT:lo + MultiDay_Position:hi       S0-120
+  36  D2D_Dynamic_Sensitivity:lo + Upper_Wick:hi + VAH_Side:==-1                  BOOK-50+OPTION-B
+  37  D2D_Dynamic_Sensitivity:lo + Volume_Avg_10:hi + Efficiency_Ratio:hi         OPTION-B
+  38  DailyOpen_Dist_ATR:lo + TChan_A15:hi + VAH_Side:==-1                        OPTION-B
+  39  DailyOpen_Dist_ATR:lo + VAH_Side:==0 + PrevDay_Low_Side:==1                 OPTION-B
+  40  EMA_Oscillator:lo + Micro_Hurst:hi + ADX_Value:lo                           BOOK-50
+  41  Efficiency_Ratio:hi + Micro_BarEntropy:hi + Body_Size:hi                    BOOK-50+OPTION-B
+  42  Efficiency_Ratio:lo + DailyOpen_Side:==-1 + OR_High_Side:==1                S0-120
+  43  Efficiency_Ratio:lo + PrevDay_Close_Side:==-1 + OR_High_Side:==1            OPTION-B
+  44  KAMA_Dist:hi + Micro_IBSP:hi + OBVf_Signal:==1                              OPTION-B
+  45  Micro_AutoCorr:hi + VA_Position:hi + VWAP_Side:==-1                         S0-120
+  46  Micro_AutoCorr:lo + Micro_MicroGap:hi + Micro_MomoTransfer:hi               S0-120
+  47  Micro_AutoCorr:lo + VAL_Side:==0 + WeeklyOpen_Side:==-1                     S0-120
+  48  Micro_BarEntropy:hi + Round_100_Dist_ATR:lo + PoC_Side:==0                  OPTION-B
+  49  Micro_BarEntropy:hi + WeeklyOpen_Dist_ATR:lo + VAH_Side:==0                 S0-120
+  50  Micro_BarEntropy:lo + Micro_Hurst:hi + Session_High_Dist_ATR:lo             60-priced
+  51  Micro_BarOverlap:hi + Micro_HLAsymmetry:lo + PrevDay_High_Side:==1          S0-120
+  52  Micro_BarOverlap:lo + Micro_OrderFlowDelta:hi + Micro_PriceAccel:lo         OPTION-B
+  53  Micro_BarOverlap:lo + RangeOsc_State:==2 + OR_High_Side:==1                 OPTION-B
+  54  Micro_Entropy:lo + Micro_WickImbalance:lo + Lower_Wick:lo                   60-priced+OPTION-B
+  55  Micro_Entropy:lo + Micro_WickImbalance:lo + VAL_Side:==0                    OPTION-B+S0-120
+  56  Micro_Entropy:lo + PrevDay_High_Dist_ATR:lo + VWAP_Z:lo                     S0-120
+  57  Micro_FailedBreak:lo + Micro_FractalDim:lo + Micro_HLAsymmetry:hi           OPTION-B
+  58  Micro_FailedBreak:lo + Micro_HLAsymmetry:hi + Micro_VolAccel:hi             OPTION-B
+  59  Micro_FailedBreak:lo + Micro_PriceAccel:hi + VAH_Side:==-1                  S0-120
+  60  Micro_GarmanKlass:hi + WeeklyOpen_Dist_ATR:hi + PrevDay_High_Side:==1       OPTION-B
+  61  Micro_HLAsymmetry:hi + Micro_Hurst:lo + DailyOpen_Dist_ATR:hi               OPTION-B
+  62  Micro_HLAsymmetry:hi + MultiDay_Slope:hi + RangeOsc_State:==2               S0-120
+  63  Micro_HLAsymmetry:lo + Micro_Hurst:hi + Session_High_Dist_ATR:lo            OPTION-B
+  64  Micro_HLAsymmetry:lo + Micro_LogReturn:hi + MultiDay_Slope:hi               OPTION-B
+  65  Micro_Hurst:hi + Micro_Lambda:hi + Micro_RangeVelocity:lo                   OPTION-B
+  66  Micro_IBSP:hi + Micro_VolAccel:hi + VWAP_Z:lo                               BOOK-50
+  67  Micro_IBSP:lo + Micro_PriceAccel:hi + Session_High_Dist_ATR:lo              S0-120
+  68  Micro_LogReturn:hi + Micro_ThrustEff:lo + MultiDay_Slope:hi                 S0-120
+  69  Micro_LogReturn:lo + WeeklyOpen_Dist_ATR:hi + Lower_Wick:hi                 S0-120
+  70  Micro_MicroGap:hi + Micro_ThrustEff:lo + D2D_Signal:==-1                    S0-120
+  71  Micro_MicroGap:lo + Micro_OrderFlowDelta:lo + VWAP_Sigma:lo                 S0-120
+  72  Micro_MomoTransfer:hi + Micro_OrderFlowDelta:lo + Micro_Rejection:hi        S0-120
+  73  Micro_MomoTransfer:hi + Micro_RangeAccel:lo + OBVf_Signal:==1               OPTION-B
+  74  Micro_MomoTransfer:hi + Micro_WickImbalance:lo + VAL_Side:==0               OPTION-B
+  75  Micro_OrderFlowDelta:lo + PrevDay_High_Dist_ATR:lo + VAH_Side:==0           S0-120
+  76  Micro_PriceAccel:lo + Micro_RangeAccel:lo + VAL_Side:==0                    S0-120
+  77  Micro_RangeAccel:lo + VWAP_Dist_ATR:lo + D2D_Signal:==-1                    S0-120
+  78  Micro_RangeAccel:lo + VWAP_Sigma_ATR:lo + D2D_Signal:==-1                   S0-120
+  79  Micro_RangeVelocity:lo + Lower_Wick:lo + AT_Regime_ST:==0                   60-priced
+  80  Micro_VolAccel:hi + Body_Size:lo + OR_Low_Side:==-1                         BOOK-50+OPTION-B
+  81  Micro_VolOfVol:lo + VWAP_Sigma_ATR:lo + D2D_Signal:==-1                     S0-120
+  82  Momentum_Value:hi + Micro_VolAccel:lo + RangeOsc_State:==2                  S0-120
+  83  Momentum_Value:hi + Session_High_Dist_ATR:hi + TChan_A15:hi                 OPTION-B
+  84  OBV_Velocity:hi + Micro_RollProxy:hi + PrevDay_High_Dist_ATR:lo             OPTION-B
+  85  OBV_Velocity:lo + Micro_TickIntensity:hi + VAL_Side:==0                     S0-120
+  86  OBV_Velocity:lo + Micro_TickIntensity:lo + PoC_Side:==0                     OPTION-B
+  87  OBVf_DirStepCount:hi + VAL_Side:==0 + WeeklyOpen_Side:==-1                  BOOK-50+OPTION-B+S0-120
+  88  PrevDay_Close_Dist_ATR:lo + VWAP_Side:==1 + PrevDay_High_Side:==1           OPTION-B
+  89  Round_500_Dist_ATR:lo + RangeOsc_State:==2 + PrevDay_Close_Side:==-1        OPTION-B
+  90  Slope_Accel_LT:hi + RangeOsc_Val:lo + Dist_To_PoC_ATR:lo                    S0-120
+  91  Slope_Accel_LT:hi + RangeOsc_Val:lo + Micro_LogReturn:lo                    S0-120
+  92  Slope_Accel_LT:lo + Micro_OrderFlowDelta:hi + PoC_Side:==0                  BOOK-50
+  93  Slope_Accel_LT:lo + Micro_Rejection:hi + PrevDay_High_Side:==1              OPTION-B
+  94  Slope_Accel_LT:lo + Sqz_Val:hi + Micro_CSSpread:lo                          BOOK-50+OPTION-B
+  95  Slope_Accel_ST:lo + Volume_Avg_10:hi + VAL_Side:==-1                        OPTION-B
+  96  Slope_EMA_LT:hi + Micro_VPIN:lo + RangeOsc_State:==-1                       OPTION-B
+  97  Slope_EMA_ST:hi + Micro_MicroGap:hi + OBVf_Signal:==1                       OPTION-B
+  98  Slope_EMA_ST:hi + Slope_Accel_ST:hi + VA_Position:hi                        OPTION-B
+  99  Slope_EMA_ST:lo + Micro_ThrustEff:hi + ADX_Value:lo                         BOOK-50+OPTION-B
+ 100  Slope_EMA_ST:lo + OBV_Velocity:hi + Micro_BarOverlap:lo                     S0-120
+ 101  Sqz_Val:hi + Micro_OrderFlowDelta:hi + Session_High_Dist_ATR:hi             60-priced
+ 102  Sqz_Val:hi + Micro_TickIntensity:hi + Session_High_Dist_ATR:hi              60-priced
+ 103  Sqz_Val:hi + Volume_Avg_10:hi + PrevDay_Close_Dist_ATR:hi                   60-priced
+ 104  Volume_Avg_10:hi + Body_Size:hi + VWAP_Sigma:lo                             S0-120
+ 105  Volume_Ratio_10:hi + VWAP_Sigma:hi + RangeOsc_State:==-2                    OPTION-B
+ 106  Volume_Ratio_10:lo + Micro_RollProxy:lo + Volume:hi                         BOOK-50+OPTION-B
+
+================================================================================
+5. WHICH GATES ARE LIVE
+================================================================================
+
+5.1  LIVE
+  ATR_1M >= 20                                        every entry, both sides
+  Micro_Hurst > p90                                   LONG d3
+  Micro_Hurst > p90                                   SHORT d3
+  Micro_FailedBreak > p20 AND AT_Slope_ST > p90       LONG d4
+  Micro_FailedBreak > p20                             LONG d5+
+
+5.2  UNREACHABLE — A BUILD MUST NOT CARRY THESE
+  every LONG tier-1 and tier-2 cell        floor is 3
+  every SHORT tier-1 and tier-2 cell       floor is 3
+  SHORT d4, SHORT d5+                      free by design, see 5.3
+
+5.3  WHY SHORT d4 AND d5+ RUN FREE
+  Not by inheritance. Measured on the ungated field: SHORT d4 loses at 0.79%
+  and SHORT d5 at 2.00%, against LONG d4 at 10.85%. The per-direction gap at
+  d4 is 13x. SHORT d3 at 5.40% is the only short cell that warranted a gate and
+  it now has one. Option B's note that "Micro_Hurst gates LONGS ONLY — it
+  confers no short edge" was measured on a book where the jar was covering for
+  SHORT d3; under FLOORED it is the best short gate available and it clears its
+  null at p = 0.000.
+
+5.4  THE SOLO TICK GATE IS INERT — MEASURED
+  ON  5,541 trades, $84,032.22.   OFF  5,541 trades, $84,032.22.
+  Identical. Under the previous admission rule it was live through jar
+  occupancy and worth $1,063. The floor is now enforced at admission, solos
+  never open, and the mechanism is gone. Carry it or not; it does nothing here.
+
+================================================================================
+6. PERFORMANCE
+================================================================================
+
+All figures 0.30 lot base. Day key is the EXIT date throughout. Gap fillers
+excluded. Loss EVENTS are reported beside every loss-derived figure.
+
+6.1  TRADE STATISTICS
+  trades                          5,541
+  winners / losers                5,317 / 224
+  win rate                        95.96%
+  profit factor                   13.09
+  gross profit                    $90,982.68
+  gross loss                      $6,950.46
+  net                             $84,032.22
+  $/trade (expectancy)            $15.166
+  average win                     $17.112
+  average loss                    $31.029
+  win/loss ratio                  0.5515
+  largest win                     $350.10
+  largest loss                    -$89.25
+  longest winning streak          640
+  longest losing streak           16
+  days traded                     119 of 132 (90.2%)
+
+6.2  DURABILITY
+  break-even WR                   64.45%
+  actual WR                       95.96%
+  MARGIN                          31.50 points
+  net at WR -1                    $81,384
+  net at WR -3                    $76,041
+  net at WR -5                    $70,697
+
+6.3  RISK ON THE EVENT BASIS
+  losing trades                   224
+  DISTINCT BAR-EVENTS             43
+  DISTINCT DAYS carrying an event 36
+  losing bars / entry bars        43 of 1,006 = 4.27%
+  worst bar-event                 -$458.88
+  worst day                       -$107.46   (2.1% of the $5,000 daily)
+  losing days                     7 of 119
+  losing weeks                    0 of 26
+  worst week                      +$24.84
+  event size distribution         3:6  4:12  5:8  6:9  7:3  8:2  9:3
+                                  no singletons — the depth-3 floor guarantees
+                                  a minimum cluster of 3
+
+  ALL SAME-BAR SAME-DIRECTION TRADES ARE ONE TRADE REPLICATED. Identical entry,
+  stop, lag and conviction multiplier. 224 losses are 43 independent
+  observations and nothing in this document should be read as 224.
+
+  220 of the 224 losses are SL exits. FOUR ARE NOT — they total -$19.80 and
+  arise where a break-even lock net of the 3.0-point spread lands fractionally
+  negative. v1 claimed no BE or LF exit had ever lost; on THIS configuration
+  that is not true, and the correction is worth $19.80 and one sentence.
+
+6.4  INTRADAY FLOOR — RECONSTRUCTION, NOT ENGINE OUTPUT
+  Produced by dot_master_discovery/intraday_reconstruction.py. Convention:
+  each open position marked at the bar's adverse extreme, FLOORED AT ITS OWN
+  STOP in force during that bar (the engine's exit decision for that bar
+  establishes price did not reach it, so no intrabar ordering is assumed);
+  aggregated SIMULTANEOUSLY per bar; day key is the calendar date of the bar.
+
+  worst                           -$845.91   (16.9% of the $5,000 daily)
+  p50                             -$85.19
+  p90                             -$282.58
+  p99                             -$505.65
+  days below -$500                2 of 119
+  days below -$1,500              0 of 119
+
+  THE INTRADAY FLOOR IS INVARIANT ACROSS EVERY CONFIGURATION TESTED. Nine
+  compositions spanning 15 to 82 loss events all return -$845.91 or -$811.53.
+  It is driven by one bar-cluster event that every configuration admits.
+  Deployability does not discriminate between compositions and must not be used
+  to argue for one.
+
+6.5  EXPOSURE
+  peak OPEN positions             43
+  peak OPEN lots                  25.2
+  peak AT-RISK positions          16          (the cap, reached not approached)
+  peak AT-RISK lots               9.6
+  max simultaneous dollars at risk $1,440.00
+  ceiling = 16 x 150 x 2.0 x 0.30 $1,440 = 28.8% of daily, 14.4% of total
+
+  FTMO's $5,000 daily and $10,000 total are FIXED IN DOLLARS AND DO NOT SCALE
+  WITH LOT SIZE. That is the entire point of running at 0.30.
+
+  lot    ceiling   % daily   % total   worst day   worst intraday
+  0.10     $480       9.6%      4.8%     -$35.82        -$281.97
+  0.30   $1,440      28.8%     14.4%    -$107.46        -$845.91
+  0.50   $2,400      48.0%     24.0%    -$179.10      -$1,409.85
+  1.00   $4,800      96.0%     48.0%    -$358.20      -$2,819.70
+
+  SCALING IS EXACT AND PROVED, NOT ASSUMED. MAX_RISK is a POINTS cap, so the
+  stop sits in the same place at every lot size and the decision path is
+  byte-identical: same entry bar, exit bar, entry price, exit price, exit type
+  and stop distance on every row. Net drift from the engine's 1-decimal P&L
+  rounding is 0.042%. Only the dollars riding on each trade change.
+
+6.6  MONTHLY — SEVEN OF SEVEN POSITIVE
+  2026.01   $2,292      2026.05   $10,916
+  2026.02  $16,682      2026.06    $9,593
+  2026.03  $20,324      2026.07   $10,879
+  2026.04  $13,345
+
+  2026.06 IS THE WEAK MONTH: 14 of the 43 loss events land there and PF is
+  5.04 against 10.45-48.48 elsewhere. It is the same window that appears as the
+  weak split in every walk-forward column in section 9. It is identified,
+  consistent, and still profitable. Nobody has yet asked why.
+
+6.7  WEEKLY — TWENTY-SIX OF TWENTY-SIX POSITIVE
+  2292  3438  3224  2427  7594  4033  4095  1474  8920  5584  5533  1583  1913
+   722   798   892  7364  1673    54  4854   693  3869   200   875  9904    25
+  p10 $446 | p25 $879 | median $2,360 | p75 $4,664 | p90 $7,479
+  worst +$24.84 | best $9,904.02 | losing weeks 0
+
+6.8  EXIT MIX
+  BE   4,312 (77.8%)  mean  $8.718   total $37,592.55   median 3 bars
+  LF     997 (18.0%)  mean $52.656   total $52,498.29   median 14 bars
+  SL     220 ( 4.0%)  mean -$31.503  total -$6,930.66   median 10 bars
+  FC      12 ( 0.2%)  mean $72.670   total    $872.04   median 52 bars
+  18.0% of trades produce 62.5% of gross profit.
+
+6.9  PATH SPLIT
+  BASE  2,059 (37.2%)  loss rate 7.53%   net $21,276.00
+  MOM   3,482 (62.8%)  loss rate 1.98%   net $62,756.22
+  A 3.8x loss-rate gap. Section 3 records that it is not purely a stop-width
+  artefact.
+
+6.10  MAX_RISK CAP-BINDING SHARE — MEASURED ON THIS BOOK
+  all trades   38.98%
+  MOM path     58.04%
+  BASE path     6.75%
+  These are NOT the 21.72 / 42.70 / 4.52 figures measured on the cap-12
+  CURRENT-admission book. They are not transferable and were re-measured here.
+  The cap binds at the same bars regardless of lot size, because it is points.
+
+6.11  DEPTH LADDER PER DIRECTION
+  Cells below 20 trades report the count and decline the rate.
+
+  LONG    3,875 trades | 190 losses | 35 events | WR 95.10% | PF 11.43 | $62,730
+    d3        180 tr  WR  93.3  PF   5.67   12 losses   4 events   $2,410
+    d4        372 tr  WR  91.4  PF   4.34   32 losses   8 events   $3,746
+    d5        710 tr  WR  95.1  PF  10.74   35 losses   7 events   $8,909
+    d6        570 tr  WR  90.5  PF   3.03   54 losses   9 events   $3,926
+    d7        371 tr  WR  96.2  PF  27.53   14 losses   2 events   $7,105
+    d8-9      439 tr  WR  90.2  PF   4.84   43 losses   5 events   $4,849
+    d10-11    271 tr  WR 100.0  PF  blank    0 losses   0 events   $6,316
+    d12+      962 tr  WR 100.0  PF  blank    0 losses   0 events  $25,470
+
+  SHORT   1,666 trades |  34 losses |  8 events | WR 97.96% | PF 23.81 | $21,302
+    d3        186 tr  WR  96.8  PF  17.05    6 losses   2 events   $1,663
+    d4        724 tr  WR  97.8  PF  16.26   16 losses   4 events   $6,868
+    d5        330 tr  WR  98.5  PF  38.71    5 losses   1 event    $4,129
+    d6        180 tr  WR 100.0  PF  blank    0 losses   0 events   $2,397
+    d7        133 tr  WR  94.7  PF   4.65    7 losses   1 event      $988
+    d8-9       90 tr  WR 100.0  PF  blank    0 losses   0 events     $792
+    d10-11     10 tr  n<20      PF  blank    0 losses   0 events      $66
+    d12+       13 tr  n<20      PF  blank    0 losses   0 events   $4,400
+
+  LONG d10+ is 1,233 trades with ZERO losses ($31,786). SHORT d6+ is 426 trades
+  with 7 losses. SHORT d12+ carries $4,400 on 13 trades and that is one winner,
+  not a tier property.
+
+6.12  TRADE SPLIT
+  3,875 LONG / 1,666 SHORT = 2.33:1, against a 1.82:1 scan ratio and a terrain
+  ratio near parity. REPORTED, NEVER TARGETED.
+
+================================================================================
+7. OUT-OF-SAMPLE AND WALK-FORWARD
+================================================================================
+
+7.1  THE THREE SPLIT WINDOWS — LOSING-BAR RATE, THE EVENT BASIS
+  split 0   2026.04.22 -> 2026.05.20     3.06%
+  split 1   2026.05.25 -> 2026.06.19     9.30%
+  split 2   2026.06.24 -> 2026.07.21     3.88%
+  These are IN-SAMPLE WINDOWS of a book composed on the whole frame. They are
+  not a holdout and must not be quoted as one. Trade-level loss rates are not
+  reported anywhere in this document; v1 forbade them and then used them.
+
+7.2  THE ONE GENUINE HOLDOUT — JULY
+  The signal-selection folds cover 2026.01 to 2026.06. 19,842 bars of July were
+  in NO fold and played no part in selecting any signal.
+      in-fold Jan-Jun    5,122 tr | 40 events | WR 95.86% | PF 11.95 | $73,153
+      POST-FOLD July       419 tr |  3 events | WR 97.14% | PF 41.35 | $10,879
+                                     13 days | 1 losing day | worst day -$16.8
+  July is the strongest month in the book. BASE: 3 LOSS EVENTS AND 13 DAYS.
+  This is real evidence in the right direction and it cannot carry an interval.
+
+7.3  WALK-FORWARD OF THE COMPOSITION LAYER
+  Universe: 60 complete configurations (floors x LONG d3 gate x SHORT d3 gate
+  x d5+ gate). Selection rule FIXED BEFORE SCORING: lowest losing-bar rate on
+  the training window, ties broken by higher training net. Three expanding
+  windows. Scripts wfgrid.py / wfscore.py.
+
+  fold  train ends    picked on train                          test rank of pick
+  F1    2026.04.22    L4/S3 | Sd3=Hurst>p90 | d5=FailedBreak     36 of 60
+  F2    2026.05.20    L4/S3 | Sd3=Hurst>p90 | d5=FailedBreak     22 of 60
+  F3    2026.06.24    L4/S3 | Sd3=Hurst>p90 | d5=FailedBreak      6 of 60
+
+  THE PROCEDURE IS STABLE: the same configuration wins on all three training
+  windows, including one that has never seen May, June or July. It does not
+  thrash. Micro_Hurst > p90 at SHORT d3 is in every pick.
+
+  THE PICK DOES NOT BEAT THE FIELD OUT-OF-SAMPLE: mean rank 21 of 60 against a
+  chance expectation of 30. Better than chance, far from the top.
+
+  test-window range across all 60 configurations:
+      F1  losing-bar 2.23% - 5.34%    net  $9,966 - $12,802
+      F2  losing-bar 6.70% - 11.22%   net  $8,102 - $10,072
+      F3  losing-bar 2.70% - 7.10%    net $14,764 - $19,146
+  EVERY ONE OF THE 60 IS PROFITABLE IN EVERY TEST WINDOW. The spread between
+  best and worst composition is 25-30% of net.
+
+  THE CONFIGURATION IN THIS DOCUMENT IS L3/S3, NOT THE L4/S3 THE PROCEDURE
+  PICKS. They differ in one parameter, the LONG floor. Scored on the same three
+  test windows, L3/S3 ranks 32 / 25 / 18 against L4/S3's 36 / 22 / 6 —
+  indistinguishable. L3/S3 is defended by the d2->d3 cliff, which is a market
+  property measured in both directions. It is NOT defended by walk-forward
+  evidence over L4/S3, and this document does not claim it is.
+
+================================================================================
+8. RISK POSTURE
+================================================================================
+
+8.1  THE FAILURE MODE IS A SINGLE BAR, NOT A BAD DAY
+  Every loss event is one bar's cluster of 3 to 9 identical positions. The book
+  does not bleed; it takes occasional craters. The deepest reconstructed
+  intraday moment is -$845.91 and every deep day in the sample closed green.
+  THAT IS NOT REASSURANCE — it is 43 observations of a mechanism that has never
+  met a day where the recovery did not come.
+
+8.2  THE CAP IS AN EXPOSURE DIAL, NOT A FILTER
+  See section 3. Events flat 14->24, net monotone. Under the previous admission
+  rule the cap was silently filtering; it is not any more. v1's warning that
+  "cap 8 is the worst setting in every configuration and the reason is unknown"
+  does not hold here: net is monotone from 6 to 24 and cap 6 is the worst.
+
+8.3  THE THREE SPIKES
+  RISK_MULT, MAX_RISK and STEP_PCT are one surface and each sits on a point
+  where both neighbours are far worse. If live behaviour degrades without an
+  obvious cause, this is the first place to look. See section 3 and 0.3 R8.
+
+================================================================================
+9. BUILD ITEMS
+================================================================================
+
+B1  GAP FILLERS DO NOT SCALE WITH THE BASE LOT.
+    portfolio_simulation_engine.py L302 hardcodes glots = 1.0; L306 reads the
+    module constant D2D_GAP_LOTS = 2.0. Neither reads long_mult/short_mult.
+    At a 0.30 base, GAP_HURST and GAP_FB run at 3.33x intended size.
+    They are excluded from every figure in this document, so nothing here is
+    affected. A live deployment at 0.30 would carry them at full size.
+    DECIDE: scale them with the base lot, or disable them. Do not ship as is.
+
+B2  THE ADMISSION BATCH MUST BE ONE PASS AT BAR CLOSE.
+    Compute free once, decide the whole direction group, then open. An
+    implementation that opens positions inside the loop and re-reads free will
+    reproduce the v1 defect.
+
+B3  TWO F1 SEQUENTIAL SIGNALS NEED THE ST_Flip ANCHOR.
+    The F0 path does not supply it. See section 2 STEP 2.
+
+B4  NO POST-HOC FILTER ANYWHERE.
+    If any stage of the build deletes a trade after it was opened, the build is
+    wrong. Every gate and the floor are evaluated before any position exists.
+
+B5  MACRO ORDERING.
+    #define macros must precede first use. Standing check on any cross-section
+    move in the EA.
+
+================================================================================
+10. WHAT THIS DOCUMENT DOES NOT CLAIM
+================================================================================
+
+It does not claim this composition is optimal. Section 7.3 shows it is not
+distinguishable from 59 alternatives out-of-sample.
+
+It does not claim the composition has been tested forward. It has not.
+
+It does not claim 43 loss events support a confidence interval on anything
+day-keyed; those rest on 36 days.
+
+It does not claim the intraday figures are engine output. They are a
+reconstruction with a stated, arguable convention.
+
+It does not claim a second implementation has reproduced any of this. None has.
+
+WHAT IT DOES CLAIM: the signal layer was selected for 4-of-6-month consistency,
+the one true holdout available is the strongest month in the book, seven of
+seven months and twenty-six of twenty-six weeks are positive, and across sixty
+complete compositions and three walk-forward windows every single one is
+profitable. THE SIGNALS CARRY IT. THE COMPOSITION IS A PREFERENCE.
+
+================================================================================
+END OF SPECIFICATION
+================================================================================
