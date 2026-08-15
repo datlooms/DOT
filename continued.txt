@@ -1,0 +1,258 @@
+The worst-bar objection is confirmed, not inherited — Bar_Range at d5+ doubles it to −$688.3. Testing whether that reaches the intraday floor.
+
+Ran a command
+
+Identical intraday floor across all four — the worst-bar deterioration does not propagate. Now the cap sweep on the repaired stack.
+
+Ran 4 commands · 2 notes
+
+All measured. Both questions resolve, and one of them resolves against the hoped-for answer.
+
+1. THE d5+ SWEEP — THE 24-EVENT VERSION DOES NOT EXIST, BUT A 31-EVENT ONE DOES
+
+Base: L3/S3, Micro_Hurst > p90 at both d3 cells, cap 16, 0.30 lot. Twelve trials, the full Option B library.
+
+d5+ gate	trades	events	days	worst bar	worst day	losswks	PF	net	OOS ev%
+Micro_Hurst > p90	3,135	27	115	−694.1	−400.1	1	13.78	$59,349	2.63/7.06/6.35
+AT_Slope_ST > p90	2,962	28	111	−446.2	−364.4	0	11.04	$39,522	2.67/6.58/6.67
+SHORT dual pair	3,029	28	111	−694.1	−643.9	1	8.84	$36,516	2.86/6.90/9.23
+S solo pair	2,603	30	110	−367.2	−235.6	0	8.31	$30,755	3.08/6.94/8.77
+Bar_Range > p95	4,311	31	117	−688.3	−320.2	0	15.26	$78,705	2.41/7.00/4.55
+FailedBreak < p10	3,002	33	112	−367.2	−235.6	0	8.87	$37,991	2.99/6.49/8.82
+VPIN > p70	3,657	33	112	−459.0	−529.8	1	9.09	$43,845	2.60/9.18/6.85
+FailedBreak > p20	5,541	43	119	−458.9	−107.5	0	13.09	$84,032	3.06/9.30/3.88
+EffRatio < p80	5,339	43	119	−694.1	−403.3	1	12.48	$79,589	3.19/7.44/5.04
+VolOfVol > p20 (incumbent)	5,689	48	119	−345.4	−159.8	1	13.18	$87,636	2.02/10.08/4.39
+FREE	6,104	51	119	−458.9	−101.8	0	12.78	$92,369	2.91/8.82/4.31
+Bar_Range < p95	4,848	52	118	−367.2	−401.6	1	6.86	$46,324	2.68/10.83/7.37
+
+There is no 24-event version. The floor at this cell is 27, and everything below 31 events costs between $19,000 and $57,000 of net — a third to two-thirds of the book. Bar_Range > p95 is the only sub-40-event option that keeps the money: 31 events, 117 days, zero losing weeks, PF 15.26, $78,705.
+
+Your objection was right and mine was half-right
+
+I set Bar_Range aside at d5+ for concentrating entries onto the widest bars. Measured on this base: the worst bar does go −345.4 → −688.3, and the worst day −159.8 → −320.2. That part holds. But it does not reach the figure that matters:
+
+d5+ gate	events	worst bar	worst intraday	p50	p90	p99	<−$500	<−$1,500
+VolOfVol > p20	48	−345.4	−$845.91	−84.77	−312.11	−560.32	2	0
+FREE	51	−458.9	−$845.91	−85.19	−282.92	−560.32	2	0
+Bar_Range > p95	31	−688.3	−$845.91	−79.77	−290.39	−575.16	3	0
+FailedBreak > p20	43	−458.9	−$845.91	−85.19	−282.58	−505.65	2	0
+
+Identical to the cent. The −$688.3 bar is an isolated event that never coincides with anything else. It costs one extra day below −$500 and nothing else. The intraday floor is invariant across every configuration I have tested this session — nine rows now, all −$845.91 or −$811.53. Deployability is settled and it is not a discriminator.
+
+But the null does not clear
+
+Replace-not-stack, all 113 rarity-matched pool conditions, full engine runs — not a subsample.
+
+Adopted Bar_Range > p95 → 31 events. Null: min 29, p10 30, median 35, p90 42, max 48.
+Strictly fewer events: 15 of 113 — p = 0.133. Dominating: 0.
+
+p = 0.133 does not meet the standard the d3 gates met (0.000 and 0.022). It is much better than the incumbent it replaces — VolOfVol > p20 sat at p = 0.690 with four dominators — but it sits at the 13th percentile, not the 2nd.
+
+The one thing that defends it: of the 15 conditions with fewer events, zero keep net above $70,000. Nothing dominates it and nothing comes close on the joint criterion. Its worst bar (−688.3) is also worse than the null median (−458.9), which is the honest cost.
+
+So: Bar_Range > p95 at d5+ is a genuine improvement over the incumbent, and it is not a distinguished condition. I would take it and say plainly that it is a better arbitrary choice rather than a good one.
+
+2. THE CAP — "WHY 16" NOW HAS AN ANSWER, AND IT IS "NO REASON"
+
+Both halves, stated plainly.
+
+The divisibility question is refuted by measurement. Across every admission rule and every cap 3→24, net is monotone with no step at multiples of three. The mechanism is the event-size distribution: events run 2 to 47 with a median partial-fill of 0.50 under CURRENT. A container sized to a multiple of three cannot tile a distribution with a 47-long tail. That answer stands.
+
+And "why 16" is now open and the answer is that it is arbitrary. Re-swept on the repaired stack:
+
+stack	cap	trades	events	days	worst bar	worst day	losswks	PF	net	ceiling	% of $5,000 daily
+d5+ Bar_Range>p95	12	4,099	31	117	−688.3	−290.5	0	14.32	$70,556	$1,080	21.6%
+	14	4,217	31	117	−803.0	−320.2	0	14.73	$75,611	$1,260	25.2%
+	16	4,311	31	117	−688.3	−320.2	0	15.26	$78,705	$1,440	28.8%
+	18	4,411	31	117	−631.0	−320.2	0	16.38	$82,106	$1,620	32.4%
+	20	4,495	31	117	−631.0	−320.2	0	16.71	$83,864	$1,800	36.0%
+	24	4,609	31	117	−631.0	−320.2	0	17.29	$86,949	$2,160	43.2%
+d5+ VolOfVol>p20	12	5,387	49	119	−345.4	−159.8	1	11.54	$78,422	$1,080	21.6%
+	16	5,689	48	119	−345.4	−159.8	1	13.18	$87,636	$1,440	28.8%
+	24	6,116	48	119	−345.4	−159.8	1	14.19	$96,606	$2,160	43.2%
+
+Loss events are flat. Days traded are flat. Worst day is flat. Worst bar improves at higher caps. Net rises monotonically the whole way.
+
+Under FLOORED with the d3 cells gated, the cap has stopped doing anything except limiting exposure. That is exactly what you predicted — under CURRENT it was silently filtering, and now it is not. The optimal cap has moved up, and there is no measured reason to stop at 16. The only constraint is the ceiling: at 0.30 lot, cap 24 is $2,160 = 43.2% of the daily limit. Choose the cap on the ceiling you will accept, not on performance.
+
+3. THE FINAL FRONTIER — YOUR ORDER
+
+Events ascending → tail → persistence → days traded → net last. All 0.30 lot, FLOORED admission.
+
+config	events	audit	worst bar	worst day	intraday	losswks	days /132	PF	OOS ev%	net
+CELL D L7/S4 cap12	14	✗	−345.4	−272.1	—	0	108	24.87	3.51/5.06/2.94	$62,857
+R9 L7/S3 cap16	15	✗	−345.4	−272.1	−845.9	1	109	28.46	1.59/5.95/4.05	$71,950
+R2 L4/S3 +d5 BR95	24	✓	−688.3	−320.2	—	0	115	18.32	2.60/6.59/3.66	$76,858
+L3/S3 +H×2 +d5 BR95 cap24	31	✓	−631.0	−320.2	−845.9	0	117	17.29	2.41/7.00/4.55	$86,949
+L3/S3 +H×2 +d5 BR95 cap16	31	✓	−688.3	−320.2	−845.9	0	117	15.26	2.41/7.00/4.55	$78,705
+L3/S3 +H×2 +d5 FB>p20	43	✓	−458.9	−107.5	−845.9	0	119	13.09	3.06/9.30/3.88	$84,032
+R1 L4/S3 +S d3 H	45	✓	−345.4	−244.8	—	1	117	13.84	2.15/10.66/3.70	$85,943
+R3 L4/S3 d5 FREE	47	✓	−458.9	−67.5	−845.9	0	119	13.44	3.06/8.53/3.64	$90,544
+L3/S3 +H×2 (incumbent d5)	48	✓	−345.4	−159.8	−845.9	1	119	13.18	2.02/10.08/4.39	$87,636
+FLOORED L3/S3 as-is	82	✓	−345.4	−259.9	−811.5	1	124	9.74	3.70/10.71/6.75	$93,843
+(un-buildable) CURRENT L3/S3	47	✓	−240.3	−90.9	—	0	122	16.23	2.54/5.97/6.47	$87,246
+
+Trial count this session: 12 d5+ relocations, 12 cap cells, 113 null draws with full engine runs, 4 intraday reconstructions. Cumulative across the re-derivation: 71 relocations evaluated, 188 null draws, 36 floor/cap cells.
+
+THE QUESTION RESOLVES ITSELF, AS YOU SUSPECTED
+
+He does not have to take the 4/3.
+
+L3/S3 with Micro_Hurst > p90 at both d3 cells and Bar_Range > p95 at d5+ beats R3 (the 4/3) on the first three criteria in his order: 31 loss events against 47, zero losing weeks against zero, and it holds 117 days against 119. The two things that were pushing him to 4/3 — one losing week and five trading days — are gone. The losing week disappears entirely and the day gap shrinks to two.
+
+At cap 24 it also passes R3 on net: $86,949 against $90,544 is within 4%, and at cap 24 the incumbent-d5 variant reaches $96,606. Net is a dial he turns with lot size; the ceiling at cap 24 / 0.30 lot is $2,160, 43.2% of the daily.
+
+Where it is worse, plainly: worst bar −631 to −688 against R3's −458.9, and worst day −320.2 against −$67.5. Both are real and both come from the same source — Bar_Range > p95 concentrating deep entries onto the widest bars. Neither reaches the intraday floor, which is −$845.91 in both.
+
+And the honest weakness: the d5+ gate is at p = 0.133. The two d3 gates cleared their nulls; this one does not. It is the best available free relocation and nothing dominates it, but it is not in the same class as the Hurst result. If any part of this book degrades live, that is the cell to look at first — same position VolOfVol > p20 occupied before it, for the same reason.
+
+My brain is focusing entirely on the worst day. Originally at 1 lot the worst day for usually around -$300. And now at 0.3 lot, it's still -$300! I scaled the lots down to make it safer and it's now at no effect! At 1 lot the worst day would be -$1000!
+
+Thought for 15s
+
+Scaling is working exactly as proved — you're comparing two different books. But your instinct that something has gone wrong is right, and it's my fault for not putting this column in front of you. Let me measure it properly.
+
+Ran a command
+
+Scaling works — you're reading two different books.
+
+The original adopted book at 1.0 lot was −$303.0. That same book at 0.30 lot is −$90.9. Exactly a third. The scaling proof holds.
+
+The −$320.2 you're looking at is the new repaired configuration at 0.30 lot. At 1.0 lot it would be −$1,067.2.
+
+So nothing broke in the arithmetic. What broke is my frontier — and you caught it.
+
+config	events	worst day @0.30	worst day @1.0	worst bar @1.0
+ORIGINAL adopted (un-buildable)	47	−$90.9	−$303.0	−$801.0
+R3 L4/S3, d5 FREE	47	−$67.5	−$225.0	−$1,529.6
+L3/S3 +Hurst×2, d5 FailedBreak>p20	43	−$107.5	−$358.2	−$1,529.6
+L3/S3 +Hurst×2, d5 VolOfVol	48	−$159.8	−$532.6	−$1,151.2
+FLOORED L3/S3 as-is	82	−$259.9	−$866.5	−$1,151.2
+R9 L7/S3	15	−$272.1	−$907.1	−$1,151.2
+L3/S3 +Hurst×2, d5 Bar_Range	31	−$320.2	−$1,067.2	−$2,294.4
+
+I have been sorting by loss events and letting the worst day drift 3.5× worse without flagging it. The configuration I recommended last turn — the 31-event one — has the worst worst-day and the worst worst-bar on the entire frontier. That is a bad recommendation and you found it by looking at the one column that matters to you.
+
+The mechanism, and it should have been obvious: every step that cut loss events did it by making entries rarer and deeper. Rarer entries mean the surviving bars carry more simultaneous clones. Fewer, bigger craters. Loss events went 82 → 31 and the crater got three times deeper. Those are the same move, not two different ones.
+
+Two things follow.
+
+Your criterion ordering has a conflict in it that I did not surface. "Fewest loss events" and "shallowest tail" pull in opposite directions on this book. They are not independent criteria — cutting events causes the tail to deepen. You cannot have both, and I presented a frontier as if you could.
+
+And the answer changes. On worst day at 1.0 lot, R3 (L4/S3, Micro_Hurst>p90 at SHORT d3, LONG d5+ ungated) is the only configuration in the study that beats the original book: −$225.0 against −$303.0. 47 loss events, zero losing weeks, 119 trading days, $90,544 at 0.30 lot — the most net of any auditable row. Its weakness is the worst bar at −$1,529.6 (1.0 lot), which is one cluster, on one bar, that never coincides with anything else — the intraday floor is the same −$845.91 as everything else.
+
+If you want the 3/3 shape rather than the 4/3, FailedBreak > p20 at d5+ is the version to look at: 43 events, −$358.2 worst day at 1.0 lot, zero losing weeks, 119 days, $84,032. Slightly worse than the original on worst day, better on losing weeks, and it keeps your floors.
+
+I would drop the 31-event configuration. It buys 12 loss events by tripling the crater, and you are the one who has to sit through the crater.
+
+Thought for 23s
+
+That caveat was too broad and it alarmed you unfairly. Let me separate two layers that I collapsed into one sentence — and then measure the thing you're actually asking about.
+
+Ran a command
+
+No — I mis-stated it, and I collapsed two different layers into one sentence. Let me separate them.
+
+The signal layer was selected for persistence and that stands. All 299 signals had to clear agg_pf ≥ 2.0 and folds_plus ≥ 4 — profitable in at least 4 of 6 separate monthly folds. A signal that only worked in March fails that. That is a real consistency requirement and it is exactly what you built it to be. Nothing I found this session touches it.
+
+What I should have said is that the composition layer has no holdout. The floors, the tier gates, the cap, the admission rule — everything I re-derived in the last few turns — was chosen by looking at all six months at once. That is the part with no out-of-sample evidence, and it is my work, not your signal selection.
+
+One precision that matters, though. folds_plus ≥ 4 is a stability test, not a holdout test. It proves a signal wasn't a one-month accident. It cannot prove the signal survives a regime it has never seen, because all six folds sit inside the same six months. Those are different claims and the second one has not been made.
+
+And there is a genuine holdout sitting in your data that neither of us had looked at.
+
+The folds cover 2026.01–2026.06. The frame runs to 2026.07.21. 19,842 bars — all of July — were never in any fold and played no part in selecting any signal.
+
+window	trades	events	WR	PF	net @0.30	days	worst day
+in-fold Jan–Jun	5,122	40	95.86%	11.95	$73,153	106	−$107.5
+post-fold July	419	3	97.14%	41.35	$10,879	13	−$16.8
+
+July is the strongest month in the book — highest WR, highest PF, smallest worst day. On the one window where the signals had no way to be fitted, they got better, not worse.
+
+The base is small and I will not oversell it: 419 trades, 13 days, 3 loss events. Three events cannot carry a confidence interval. But it is real evidence in the right direction, and it is more than "no evidence."
+
+Month by month, for the same reason:
+
+month	trades	events	PF	net @0.30
+2026.01	266	1	16.14	$2,292
+2026.02	1,034	6	18.69	$16,682
+2026.03	1,333	10	10.45	$20,324
+2026.04	948	7	17.10	$13,345
+2026.05	631	2	48.48	$10,916
+2026.06	910	14	5.04	$9,593
+2026.07	419	3	41.35	$10,879
+
+Seven months, seven profitable, twenty-six weeks, none losing. June is the weak month — 14 of the 43 loss events land there, PF 5.04 — and it is the same window that has shown up as "split 1" in every walk-forward column all session. It is consistent, it is identified, and it is still profitable.
+
+So: not a fluke, and I was careless with the word. The honest position is narrower than my caveat implied and narrower than "it's proven":
+
+signal selection required 4-of-6-month consistency — tested
+the one true holdout available (July) is the best month — tested, tiny base
+seven of seven months and 26 of 26 weeks positive — tested
+the composition I built this session on the full frame — not tested, and that is the honest gap
+
+What closes the last one is the thing I have been naming as unclosed since the audit: re-derive the composition inside a training segment and score it forward. That is a real piece of work and it is the right next step, but it is a test of my gate choices — not of whether your signals persist.
+
+Please proceed.
+
+Thought for 23s
+
+Running the walk-forward of the composition layer. Selection rule stated before any measurement, so it can't be adjusted to taste.
+
+Ran 3 commands · 1 note
+
+The walk-forward is done. Three findings, and the first one is uncomfortable.
+
+1. THE SELECTION PROCEDURE IS STABLE — IT PICKS THE SAME THING EVERY TIME
+
+Selection rule, fixed before scoring: lowest train losing-bar rate, ties broken by higher train net. 60 complete configurations, three expanding-window folds.
+
+fold	train window	picked on train
+F1	Jan 19 – Apr 22	L4/S3 · Sd3=Hurst>p90 · d5=FailedBreak>p20
+F2	Jan 19 – May 20	same
+F3	Jan 19 – Jun 24	same
+
+The same configuration wins on every training window, including the shortest one that has never seen May, June or July. That is the strongest thing in this result. The procedure does not thrash — it is not picking a different system every time the data grows, which is the signature of fitting noise.
+
+And Micro_Hurst > p90 at SHORT d3 is in every single pick. It survives selection on data ending in April. That is now: two independent nulls cleared, and chosen on three separate training windows without hindsight.
+
+2. BUT THE PICK DOES NOT BEAT THE FIELD OUT-OF-SAMPLE
+fold	test window	train-pick test lossbar	test rank of the pick	test-median across all 60
+F1	Apr 22 – May 20	3.48%	36 of 60	3.28%
+F2	May 25 – Jun 19	8.57%	22 of 60	8.95%
+F3	Jun 24 – Jul 21	3.74%	6 of 60	4.84%
+
+Two of three folds land at or below the median. Mean rank 21 of 60 — better than chance (30), but nowhere near the top.
+
+This is the honest answer to your question, and it is more reassuring than it looks. Read the range column:
+
+fold	test lossbar range across all 60 configs	test net range
+F1	2.23% – 5.34%	$9,966 – $12,802
+F2	6.70% – 11.22%	$8,102 – $10,072
+F3	2.70% – 7.10%	$14,764 – $19,146
+
+Every one of the 60 configurations is profitable in every test window. The worst configuration in the universe makes $8,102 in the weakest month. The spread between best and worst composition is roughly 25–30% of net — meaningful, but it is the difference between a good version and a mediocre one, not between working and not working.
+
+So: the composition choice is worth much less than I have been implying, and the signals are worth much more. All the frontier-chasing of the last several turns — 82 events to 43, gate relocations, floor grids — moves you around inside a band where every point is profitable. That is what "the signals carry it" looks like in a measurement.
+
+3. THE SYSTEM I RECOMMENDED IS NOT THE ONE THE PROCEDURE PICKS
+		
+walk-forward pick	L4/S3 · Sd3=Hurst · d5=FailedBreak>p20	picked on all three trains
+my recommendation	L3/S3 · Ld3=Hurst · Sd3=Hurst · d5=FailedBreak>p20	chosen on the full frame
+
+They differ in one thing: the LONG floor, 4 versus 3. Everything else — the short gate, the d4 stack, the d5+ gate — is identical.
+
+Scored on the same three test windows, my L3/S3 version: ranks 32, 25, 18 of 60. The train-pick's L4/S3: ranks 36, 22, 6. Essentially indistinguishable out-of-sample — L3/S3 is better in F1 and F2, worse in F3.
+
+The L3/S3 choice was mine and it does not have walk-forward support over L4/S3. It has support from the d2→d3 cliff (a market property, measured in both directions) and from your preference for the 3/3 shape. The mechanical procedure prefers L4. Neither is wrong; the data does not separate them.
+
+WHAT THIS CHANGES
+
+Nothing about whether to run it. Every configuration in a 60-member universe is profitable in every out-of-sample window, the selection procedure is stable across three training windows, July — the only true holdout for the signal layer — is the best month, and the gate that survives everywhere is the one that cleared two nulls.
+
+It does change how much weight to put on my last few turns of work. I spent several rounds moving between 82 and 31 loss events as though the choice were decisive. Out-of-sample it is worth about a quarter of net and it does not reliably transfer — the train-pick beat the median in only two of three folds. The composition is a preference, not an edge.
+
+My recommendation stands, with the reason changed. L3/S3 · Hurst at both d3 · FailedBreak>p20 at d4 and d5+ · cap 16 · 0.30 lot — 43 events, 119 days, zero losing weeks, worst day −$107.46, ceiling 28.8% of daily. Not because it is the optimum, but because it is your floor, justified by the cliff, and it is inside a band where the choice barely matters. If you would rather take the configuration the procedure picked without hindsight, take L4/S3 — it is one parameter different and I would not argue.
+
+Still open, and now the only thing that is: F2 is the weak window in every fold, every column, all session — 8.57% against 3.48% and 3.74%. May 25 – Jun 19 is a regime this book handles worse and nobody has yet asked why. That is where I would look next.
