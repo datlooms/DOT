@@ -212,6 +212,21 @@ R8. THE SPIKE CONSTANTS. RISK_MULT 2.0, MAX_RISK 150 and STEP_PCT 0.30 each sit
     CHECK: section 8.3. If live behaviour degrades without an obvious cause,
     this surface is the first place noise would have been absorbed.
 
+R9. THE FILL MODEL HAS NO SLIPPAGE AND NO GAPS, AND EVERY CEILING AND INTRADAY
+    FIGURE INHERITS THAT.
+    The engine fills at current_sl exactly whenever a bar touches it. That
+    assumption is what makes "break-even-locked positions cannot lose" true,
+    and that claim is what licenses counting only at-risk positions toward the
+    $1,440 ceiling, which is what licenses 43 open against 16 at risk. One
+    assumption carries the entire exposure argument and the whole of section
+    6.4.
+    CHECK: compare live fills against modelled fills over a demo period —
+    for every exit labelled BE, LF or SL, the realised fill against
+    current_sl at that bar. Any systematic negative difference re-prices the
+    ceiling as (at-risk x MAX_RISK x conviction x lot) + (locked x gap-through
+    -lock), and the second term is currently zero by assumption, not by
+    measurement. See section 8.4.
+
 --------------------------------------------------------------------------------
 0.4  WHAT IS TESTED AND WHAT IS NOT — PLAINLY
 --------------------------------------------------------------------------------
@@ -972,10 +987,38 @@ excluded. Loss EVENTS are reported beside every loss-derived figure.
   stop, lag and conviction multiplier. 224 losses are 43 independent
   observations and nothing in this document should be read as 224.
 
-  220 of the 224 losses are SL exits. FOUR ARE NOT — they total -$19.80 and
-  arise where a break-even lock net of the 3.0-point spread lands fractionally
-  negative. v1 claimed no BE or LF exit had ever lost; on THIS configuration
-  that is not true, and the correction is worth $19.80 and one sentence.
+  220 of the 224 losses are SL exits. FOUR ARE NOT. They are Friday-cutoff (FC)
+  exits of ONE bar-event — entry bar 93435, LONG, ATR_1M 49.49, momentum path,
+  base_risk 98.97, be_trigger 29.69 points — that NEVER REACHED ITS BREAK-EVEN
+  TRIGGER (tiers = 0, be_nudged = False). Held 298 bars; price never gained the
+  29.69 points; the Friday cutoff closed it at market 10.22 points down, plus
+  the 3.0-point spread, for -13.20 per lot. These are ORDINARY OPEN-RISK LOSSES
+  THAT EXIT BY CUTOFF RATHER THAN BY STOP, correctly labelled by the engine.
+
+  NO BREAK-EVEN-LOCKED POSITION HAS EVER LOST. Measured across all 5,317
+  be-nudged trades in this book:
+      exits strictly below the lock level          0
+      minimum (exit - lock)                        0.0000 points
+      minimum points captured vs entry           +12.02 points
+      minimum P&L per lot                          +$9.00
+      be-nudged trades with negative P&L           0
+      be-nudged trades exiting via FC              8, all profitable
+  The +12.02-point floor is exactly what 0.30 x base_risk predicts at the
+  ATR >= 20 global gate on the base path. That is a prediction and a
+  measurement agreeing to two decimals.
+
+  THE MECHANISM, FROM SOURCE — THIS IS WHAT MAKES THE CEILING STRUCTURAL RATHER
+  THAN EMPIRICAL. The FC branch carries NO be_nudged guard, so a locked position
+  can structurally take that path. But the stop check runs FIRST on the same
+  bar and exits AT current_sl, so FC can only fire when low > current_sl for a
+  long, and close >= low > current_sl. THE FC EXIT PRICE IS BOUNDED BELOW BY
+  THE LOCK BY CONSTRUCTION, not by observation.
+
+  (v1 claimed no BE or LF exit had ever lost. That claim is correct here and
+  the earlier draft of this section explained these four losses as a spread
+  edge case on a lock. That explanation was wrong — the smallest possible lock
+  is 12 points against a 3-point spread, so it cannot arise — and it is
+  replaced by the reading above, taken from the engine.)
 
 6.4  INTRADAY FLOOR — RECONSTRUCTION, NOT ENGINE OUTPUT
   Produced by dot_master_discovery/intraday_reconstruction.py. Convention:
@@ -1163,6 +1206,38 @@ excluded. Loss EVENTS are reported beside every loss-derived figure.
   RISK_MULT, MAX_RISK and STEP_PCT are one surface and each sits on a point
   where both neighbours are far worse. If live behaviour degrades without an
   obvious cause, this is the first place to look. See section 3 and 0.3 R8.
+
+8.4  THE CEILING, AND THE ONE ASSUMPTION THE WHOLE EXPOSURE ARGUMENT RESTS ON
+
+  ceiling = MAX_POSITIONS x MAX_RISK x max conviction x lot
+          = 16 x 150 x 2.0 x 0.30 = $1,440 = 28.8% of the $5,000 FTMO daily
+
+  That figure counts AT-RISK positions only. Peak OPEN reaches 43 while peak
+  AT-RISK is exactly 16, and the difference is legitimate ONLY BECAUSE
+  BREAK-EVEN-LOCKED POSITIONS CANNOT LOSE. Section 6.3 establishes that from
+  source and from 5,317 measured trades.
+
+  IT IS TRUE OF THE SIMULATOR BY CONSTRUCTION. IT IS TRUE OF LIVE ONLY TO THE
+  EXTENT FILLS ARE CLEAN.
+
+  The engine fills at current_sl EXACTLY whenever the bar touches it. There is
+  no slippage model and no gap model anywhere in the exit path. A gap through
+  the lock fills BELOW the lock, and a locked position would then lose. This
+  frame cannot measure how far below, because the fill assumption is what
+  produced every exit price in it.
+
+  CONSEQUENCE, STATED WITHOUT SOFTENING:
+    - $1,440 is EXACT under the simulator's fill assumption
+    - $1,440 is a LOWER BOUND live
+    - every intraday figure in 6.4 inherits the same assumption, because the
+      marking is floored at each position's own stop
+    - the true live ceiling is (at-risk x MAX_RISK x conviction x lot)
+      + (locked positions x whatever a gap can take through the lock), and the
+      second term is UNMEASURED
+
+  THIS IS WHAT THE DEMO IS FOR. Comparing live fills against modelled fills
+  over a demo period is the only way to price the second term, and it is the
+  single most valuable measurement available before size is increased.
 
 ================================================================================
 9. BUILD ITEMS
