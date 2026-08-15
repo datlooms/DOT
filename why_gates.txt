@@ -1,0 +1,231 @@
+WHY THESE GATES — CONSTANT BY CONSTANT
+
+Everything below is measured this session at 0.33 lot, cap 16, +AT_Slope, on the 177,251-bar frame. The parameterised engine used for the eligibility sweeps is byte-identical to the ratified one at production values (43cee88f6664ca1c both sides), so a loosened gate is the only thing that differs in any loosened run.
+
+Baseline for every comparison: 5,461 trades · 47 loss events · 4.27% losing-bar rate · PF 16.23 · $95,970 · worst bar −$264.30 · worst day −$100.00 · OOS 2.54/5.97/6.47.
+
+FIRST — CORRECTIONS TO YOUR INVENTORY
+
+You asked to be corrected. Six things:
+
+1. Volume > 50 and the tick gate are two different constants and only one is redundant. Volume > 50 is bar eligibility. The tick gate is ticks >= 300 on solo entries — a separate condition at engine L273. You conflated them, and the conclusion flips depending on which you mean.
+
+2. §3 says the tick gate is "NOT USED. Unreachable under the depth floors." That is wrong. It is reachable through the jar. A solo that the gate blocks never occupies a slot, which changes which deeper trades get admitted later. Turning it off costs $1,063 and pushes OOS split-0 from 2.54% to 3.64%. It is live, it is load-bearing, and the spec tells a builder to delete it.
+
+3. The p≈0.19 null was for Bar_Range > p95 at d4 — not for AT_Slope_ST. Re-run properly for the adopted gate: p = 0.056, 7 of 126 rarity-matched conditions do strictly better, zero dominate. AT_Slope_ST > p90 is the best-supported gate in the stack, not the one carrying the weak null.
+
+4. "depth ≥3/≥3 DERIVED from the 13× LONG/SHORT d4 gap" — wrong justification. The d4 gap justifies per-direction gating. The floor is justified by a different measurement entirely, the d2→d3 cliff, and it is present in both directions independently.
+
+5. MAX_RISK is 150 points, not dollars — as established last turn. §3's wording is wrong.
+
+6. cap 16 chosen on ceiling — correct, and net is monotone all the way up. No optimum was passed.
+
+THE ELIGIBILITY LAYER — THE FOUR YOU SAID HAD NO DERIVATION
+ADX_Value >= 15 — it has a mechanism, and the mechanism is structural
+
+Mechanism, stated before the numbers: the threshold oracle's rolling 2,500-bar ring only admits bars where ADX >= 15 AND Volume > 50 (dots_thresholds.compute_adaptive_thresholds). Every hi/lo percentile in all 299 signals is therefore calibrated on the ADX≥15 population. Entering on a bar outside that population means firing thresholds against a distribution they were never computed from. ADX ≥ 15 is the self-consistency point between the oracle and the entry gate. That is why 15 and not 14 or 16 — it is not a tuned volatility filter, it is the same number twice.
+
+The sweep:
+
+ADX ≥	trades	events	lossbar%	PF	net	worst bar
+0 / 5	5,850	64	5.38	10.95	$95,868	−$706.9
+10	5,845	64	5.39	10.86	$95,749	−$706.9
+15	5,461	47	4.27	16.23	$95,970	−$264.3
+20	4,086	35	4.29	14.32	$71,962	−$490.9
+25	2,822	25	4.46	17.79	$57,883	−$504.9
+30	1,703	11	3.17	28.73	$39,376	−$270.8
+
+It removes 17 loss events for +$102 — it is free. And it is a cliff, not a plateau: 10→15 is a discontinuity, 15→20 costs $24,008. Normally a peak like that is a fit warning. Here it is not, for one reason: 15 was inherited, never searched on this book, and the mechanism above predicts the cliff sits exactly there. A constant that lands on a local maximum it was never fitted to is evidence, not overfit.
+
+Is it redundant against ATR ≥ 20? No — measured. With ATR≥20 still applied, dropping ADX to 0 takes the book from 47 to 64 events. It removes 17 events ATR does not. Unlike the tick gate, it is not decoration.
+
+Volume > 50 — ARBITRARY. It does nothing.
+
+Mechanism: stated in §3 as removing dead tape — below 50 ticks, median ATR is 5.27 and 0.1% of bars reach ATR 20. The mechanism is real but it is entirely subsumed by ATR_1M >= 20, which removes those bars anyway.
+
+Volume >	trades	events	PF	net
+0	5,456	47	16.24	$96,006
+10	5,456	47	16.24	$96,006
+25	5,453	47	16.22	$95,901
+50 (prod)	5,461	47	16.23	$95,970
+100	5,446	47	16.17	$95,885
+200	5,076	44	15.26	$92,127
+
+Removing it entirely is +$36 and changes nothing else. Zero to 100 is one flat line. A gate that costs nothing to remove is not a gate — your rule, and it fires here. It only starts to bite at 200+, where it costs money.
+
+It should be classified ARBITRARY, kept only because it also defines the oracle ring and changing it there would re-derive all 299 signals. That is a reason to leave it alone, not a justification.
+
+Friday cutoff 16:45 — ARBITRARY in-sample, defensible by mechanism only
+	trades	events	net
+ON (prod)	5,461	47	$95,970
+OFF	5,466	47	$95,998
+
+Five trades. $28. In this sample it is pure decoration.
+
+But its mechanism is not in this sample. It exists to avoid holding into a weekend gap, and a six-month frame with no weekend shock cannot price that. This is the one constant where I will defend a gate with zero measured effect: the tail it protects against did not occur. Classify it INHERITED — mechanism sound, effect unmeasurable on this frame. Do not remove it on the strength of $28.
+
+bar >= 6900 (DOTS_INITBARS) — INHERITED, mechanism sound, not swept this session
+
+The ring needs 2,500 eligible bars and saturates at bar 5,204; 6,900 is a further 1,696-bar margin, and it binds. The mechanism is right — no signal should fire on a partially-filled percentile ring. I did not sweep it, because loosening it means recomputing the oracle. What it costs is bounded by the trades foregone in 5,204→6,900, which is late January — the month with the smallest net ($876 at 0.1 lot). Named as untested rather than assumed harmless.
+
+ATR_1M >= 20 — A DIAL, NOT AN OPTIMUM, AND IT SITS ON THE KNEE
+ATR ≥	trades	events	lossbar%	PF	net	OOS ev%
+0	6,199	73	5.72	13.81	$97,720	6.41/8.18/7.56
+10	6,114	67	5.33	14.01	$97,707	5.92/7.79/7.06
+15	5,870	60	5.01	14.49	$97,325	4.48/6.25/7.32
+20	5,461	47	4.27	16.23	$95,970	2.54/5.97/6.47
+25	4,771	35	3.68	17.42	$91,503	2.97/5.04/5.26
+30	4,158	29	3.56	19.28	$87,242	3.26/6.06/4.35
+40	3,014	19	3.34	23.74	$76,758	2.82/6.06/4.92
+
+Perfectly monotone — no peak, no plateau, no spike. Events fall and net falls together, all the way. This constant cannot be "derived" because there is no optimum to find. It is a risk-appetite dial.
+
+What can be defended is where it sits on the curve — the price of a loss event:
+
+15 → 20: 13 events for $1,355 = 9.6 events per $1,000
+20 → 25: 12 events for $4,467 = 2.7 events per $1,000
+
+The price of an event jumps 3.5× immediately above 20. That is a genuine knee, and it is the strongest argument for the adopted value. It is also the point where OOS split 0 stops improving (4.48 → 2.54 → 2.97).
+
+THE DEPTH FLOOR — WHY THREE, AND WHY THE SAME BOTH WAYS
+
+This is the question you were right to press hardest, and the answer is better than the spec's.
+
+Per-direction loss rate by executed depth. Book trades, ATR≥20, no tier gates, no floor — so this is the terrain, not the book's own selection:
+
+depth	LONG trades	LONG loss%	LONG events	SHORT trades	SHORT loss%	SHORT events
+d1	1,454	16.23%	236	1,423	14.55%	207
+d2	2,066	16.55%	171	1,834	12.87%	118
+d3	1,254	9.81%	41	954	4.72%	15
+d4	1,008	10.32%	26	508	0.79%	1
+d5	740	6.76%	10	250	2.00%	1
+d6	480	7.50%	6	144	4.17%	1
+d7	336	0.00%	0	112	0.00%	0
+
+Three things fall straight out.
+
+(a) The cliff is at d2→d3, and it is in BOTH directions independently. LONG 16.55% → 9.81% (−41%). SHORT 12.87% → 4.72% (−63%). Depth 1 and 2 are indistinguishable from each other; 3 is a different regime. This is why the floor is 3.
+
+(b) The floor being the same value both directions is not an absolute threshold imposed — it is two separate per-direction measurements that agree. That is the correct application of your own principle. The pipeline's four previous absolute-threshold failures happened because nobody checked per direction. Here I checked, and both directions independently break at 3. Symmetry that survives a per-direction check is a finding, not a habit.
+
+(c) Your 13× d4 gap reproduces — 10.32% LONG vs 0.79% SHORT — and it justifies the GATE, not the floor. Look at LONG specifically: d3 9.81% → d4 10.32%, worse. The tier above the floor is worse than the floor. That inversion is the entire reason a LONG d4 gate exists, and it is confirmed here on the ungated field, independent of any book.
+
+The floor grid, all sixteen cells:
+
+L\S	≥2	≥3	≥4	≥5
+≥2	336 ev / $111,281	218 ev / $103,448	203 ev / $94,688	202 ev / $88,347
+≥3	165 ev / $103,803	47 ev / $95,970	32 ev / $87,211	31 ev / $80,869
+≥4	156 ev / $97,953	38 ev / $90,120	23 ev / $81,360	22 ev / $75,018
+≥5	153 ev / $93,932	35 ev / $86,099	20 ev / $77,339	19 ev / $70,997
+
+Any cell containing a 2 is catastrophic — 3.5× to 7× the loss events. Your note that d2 was "tested once and called genuinely bad on one run" is now tested sixteen ways: LONG≥2/SHORT≥3 is 218 events. It is not marginal, it is a different system.
+
+Above 3 the surface is a smooth plateau — every cell in the ≥3 block is risk-acceptable and simply costs net. Cliff below, plateau above. That is the best-evidenced constant in the entire stack.
+
+THE THREE TIER GATES — ONE IS NOT A GATE
+
+Counterfactual removal, one at a time:
+
+	trades	events	PF	net	worst day	events bought per $1,000
+full stack	5,461	47	16.23	$95,970	−$100.0	—
+− LONG d3 Bar_Range>p95	6,292	79	11.77	$100,923	−$100.0	6.5
+− LONG d4 FailedBreak>p20	5,497	47	16.31	$96,487	−$100.0	0.0
+− LONG d4 AT_Slope_ST>p90	6,045	67	11.34	$98,926	−$271.1	6.8
+− LONG d5+ VolOfVol>p20	5,828	51	14.77	$99,855	−$100.0	1.0
+− all four	7,423	106	8.83	$109,267	−$260.3	—
+Micro_FailedBreak > p20 at LONG d4 IS NOT A GATE. Remove it.
+
+47 events with it. 47 events without it. It costs $517 and buys nothing. Its pass rate is 80.2% — it was never going to do much — and with AT_Slope_ST > p90 now sitting alongside it, it is entirely subsumed. This is the same class of finding as Volume > 50, found by the same test, and it is the one concrete change I would make to the stack beyond what we already agreed.
+
+The nulls — replace-not-stack, 308 draws
+tier	adopted	null n	null events (min/median/max)	strictly better	p	dominate
+LONG d3	Bar_Range>p95	124	40 / 48 / 57	46	0.371	0
+LONG d4	AT_Slope_ST>p90	126	44 / 50 / 56	7	0.056	0
+LONG d5+	VolOfVol>p20	58	33 / 43 / 51	40	0.690	4
+
+AT_Slope_ST > p90 at d4 is the only gate in the stack that comes close to significance. p = 0.056, nothing dominates it. Your instinct to take the dominant option was right and it is better supported than the gate it replaced.
+
+Bar_Range > p95 at d3 sits at the median of its null (p = 0.371). It is not special. What defends it is that nothing dominates it — no rarity-matched alternative gets fewer events and more net. It survives as "arbitrary but Pareto-safe," and its removal costs 32 events, so the tier needs a gate even if this one isn't distinguished.
+
+Micro_VolOfVol > p20 at LONG d5+ is the weakest constant in the system. p = 0.690 — 40 of 58 alternatives do strictly better, and four dominate it outright. Bar_Range:hi at that tier gives 46 events and $98,006 (vs 47 and $95,970). It also buys the fewest events per dollar of any gate (1.0 per $1,000, against 6.5 and 6.8). I am not recommending the swap — that would be exactly the unpriced selection my audit criticised, and swapping on a p=0.69 null is fitting. I am naming it as the least-defended constant you have, so you know where the soft ground is.
+
+MOMENTUM_THRESHOLD 0.00012 — THE SURPRISE: IT IS ON A PLATEAU
+
+You called this the sharpest split with no derivation. Swept:
+
+threshold	events	PF	net	worst bar	MOM share	MOM loss%	BASE loss%
+all-momentum	32	15.58	$92,996	−$403.9	100%	—	—
+0.00000	43	16.27	$95,429	−$422.6	62.5%	1.42%	6.72%
+0.00003	43	16.31	$95,665	−$422.6	61.2%	1.44%	6.49%
+0.00006	46	15.71	$95,546	−$422.6	59.5%	1.48%	6.75%
+0.00012	47	16.23	$95,970	−$264.3	56.5%	1.10%	7.07%
+0.00024	49	15.26	$96,041	−$287.2	50.3%	1.23%	6.68%
+0.00048	60	13.08	$91,737	−$292.0	35.3%	1.07%	6.94%
+all-base	69	10.94	$86,397	−$367.7	0%	—	—
+
+Zero to 0.00024 is a plateau — net $95.4k–$96.0k, events 43–49, PF 15.3–16.3. The adopted value sits mid-plateau and has by far the best worst bar (−$264 against −$422 either side). It degrades only past 0.00048.
+
+So it is undeserved luck rather than a fit — nobody derived it, but the surface around it is flat, so it could not have been fitted. Reclassify: ARBITRARY in origin, SWEPT and defensible in fact. The most important thing here is that the loss-rate gap (1.1% vs 7.1%) is stable across the whole plateau — it is not created by the threshold's position.
+
+And your question — is it the condition or the stop width?
+
+The old claim was "mostly a stop-width effect; at ATR≥75 the gap collapses." On this configuration it narrows but does not collapse:
+
+ATR band	MOM n	MOM loss%	BASE n	BASE loss%	ratio
+20–37.5 (cap binds on neither)	1,112	0.90%	1,106	9.86%	10.96×
+37.5–75 (cap binds on momentum only)	1,355	1.33%	987	5.07%	3.81×
+75+ (cap binds on both — stops equalised at 150 pts)	619	0.97%	282	3.19%	3.29×
+
+Where the stop widths are identical, a 3.29× gap survives on 901 trades. So the old spec was half right — most of the 11× gap is stop width — but it over-claimed in dismissing the condition entirely. Micro_LogReturn × direction is carrying real information beyond the stop it selects. That is a correction to §3.
+
+TRADE MANAGEMENT — "ALL ALTERNATIVES WORSE" IS TRUE AND IT IS NOT REASSURING
+
+§3 presents these as swept and validated. They are swept. Three of them are spikes, and a spike is a fit, not a defence:
+
+constant	−2	−1	adopted	+1	+2	shape
+RISK_MULT	1.0: 116 ev / $53,369	1.5: 70 ev / $72,311	2.0: 47 ev / $95,970	2.5: 75 ev / $76,262	3.0: 81 ev / $80,870	SPIKE
+MAX_RISK	75: 128 ev / $55,908	100: 82 ev / $71,058	150: 47 ev / $95,970	200: 50 ev / $90,164	300: 52 ev / $84,624	SPIKE
+STEP_PCT	0.15: 38 ev / $55,285	0.20: 39 ev / $61,517	0.30: 47 ev / $95,970	0.45: 124 ev / $73,718	0.60: 163 ev / $61,354	SHARP SPIKE
+MOMENTUM_SL_MULT	2.0: 67 ev / $94,955	3.0: 53 ev / $95,363	4.0: 47 ev / $95,970	5.0: 47 ev / $95,741	6.0: 47 ev / $95,651	KNEE → plateau
+LOCK_FRAC	0.5: $77,343	0.7: $84,179	0.9: $91,381 → 1.0: $95,970	—	—	MONOTONE to boundary
+
+RISK_MULT 2.0, MAX_RISK 150 and STEP_PCT 0.30 each sit on a point where both neighbours are dramatically worse. STEP_PCT is the starkest: 0.30 gives 47 events, 0.45 gives 124. A 50% move in one constant triples the loss events. That is not a robust plateau — it is a knife edge, and three of them multiply.
+
+I am not saying they are wrong. RISK_MULT 2.0 and STEP_PCT 0.30 interact directly (step_size = STEP_PCT × base_risk, base_risk = ATR × RISK_MULT), so they are one surface, not three. But §3's framing — "SWEPT BOTH WAYS, ALL ALTERNATIVES WORSE" — presents spike geometry as validation. It is the opposite. These are the constants most likely to have absorbed noise, and they are all in the sacred layer.
+
+LOCK_FRAC 1.0 is monotone up to the boundary and was never tested above 1.0. Worth knowing that the sweep stopped where the parameter's conventional range stopped, not where the surface turned.
+
+SPREAD 3.0 is a pure cost model, linear as expected: $0 → $102,536, $2 → $98,165, $3 → $95,970, $5 → $91,588. Your conservatism costs $2,195 at 0.33 lot against a live 2.0. That is money deliberately left on the table and it is the right call.
+
+Conviction sizing ON vs OFF: $95,970 vs $72,682 — +$23,288 (+32%) on identical trades and identical 47 events. It changes nothing about which trades happen, only how much rides on them. It is the single most efficient constant in the system on a risk-per-dollar basis — and the entire reason the ceiling is $1,584 rather than $792.
+
+THE CLASSIFICATION
+constant	value	bucket	one-line basis
+depth floor LONG / SHORT	≥3 / ≥3	DERIVED	d2→d3 cliff, measured independently in both directions; 16-cell grid
+ADX_Value >=	15	DERIVED (retrospectively)	self-consistency with the oracle ring; removes 17 events for +$102; not redundant vs ATR
+ATR_1M >=	20	SWEPT	monotone curve, no optimum; sits on the knee where event price jumps 3.5×
+AT_Slope_ST >	p90 @ LONG d4	SWEPT + NULLED	p = 0.056 over 126 alternatives; nothing dominates
+MAX_POSITIONS	16	SWEPT	net monotone 6→16; bounded by ceiling, not by performance
+MOMENTUM_SL_MULT	4.0	SWEPT	knee into a plateau; 4/5/6 all 47 events
+MOMENTUM_THRESHOLD	0.00012	ARBITRARY origin, SWEPT in fact	never derived; plateau 0→0.00024; best worst-bar of the plateau
+Bar_Range >	p95 @ LONG d3	SWEPT, null NOT significant	p = 0.371, median of its null; nothing dominates; the tier needs a gate (32 events)
+Micro_VolOfVol >	p20 @ LONG d5+	SWEPT, null POOR	p = 0.690; 40 of 58 alternatives better; 4 dominate. Softest ground in the stack.
+RISK_MULT / MAX_RISK / STEP_PCT	2.0 / 150 / 0.30	SWEPT — but SPIKES	all neighbours far worse; geometry is a knife edge, not a plateau
+LOCK_FRAC	1.0	SWEPT to boundary	monotone increasing; above 1.0 never tested
+conviction ×2.0 / ×1.25	—	INHERITED	+$23,288 at zero event cost; never swept at other multipliers
+hi/lo = p80 / p20	—	INHERITED	never tested; changing it re-derives all 299 signals
+DOTS_INITBARS	6900	INHERITED	mechanism sound (ring saturates at 5,204); not swept this session
+Friday cutoff	16:45	INHERITED	$28 in-sample; defended by a tail this frame does not contain
+solo tick gate	≥300	INHERITED, and LIVE	worth $1,063 via jar occupancy; §3 wrongly calls it inert
+SPREAD	3.0	DELIBERATE	costs $2,195 vs live 2.0; conservative by choice
+Volume >	50	ARBITRARY	0 to 100 is one flat line; removal is +$36; subsumed by ATR≥20
+Micro_FailedBreak >	p20 @ LONG d4	ARBITRARY	47 events with, 47 without. Costs $517, buys zero. Not a gate.
+WHAT I'D ACT ON
+
+Two constants are not doing anything and can be said so plainly: Volume > 50 and Micro_FailedBreak > p20 at LONG d4. The second is the cleaner kill — it is inside the tier stack, it costs $517, and its removal changes the loss-event count by exactly zero. Volume > 50 I would leave in place despite being decoration, purely because it also defines the oracle ring and touching it re-derives all 299 signals for +$36.
+
+One constant is the soft ground: Micro_VolOfVol > p20 at LONG d5+. p = 0.690, four dominating alternatives, worst events-per-dollar in the stack. I am deliberately not recommending the swap — that is the unpriced selection I criticised yesterday, and doing it on a p=0.69 null would be fitting. But if any part of this system degrades live, that is where I would look first.
+
+One framing in the existing spec should be reversed: RISK_MULT / MAX_RISK / STEP_PCT are spikes. "All alternatives worse" reads as validation and means the opposite. They are in the sacred layer, they interact as one surface, and they are the likeliest place noise has been absorbed. That is not an argument to change them — it is an argument to know it.
+
+And the best-evidenced thing in your system is the one you built it around. The depth floor. Cliff below, plateau above, confirmed independently in both directions, sixteen cells deep. Concurrence earns its place on the measurement, not on the story.
