@@ -73,6 +73,42 @@ Valid stages: S0 S1 S2 S2B S3 S3B S4 S5 S5D S6 S5B S5C S7 S8 S8B S9 S10
 
 `--stage S10` re-collects at any time without re-running the pipeline.
 
+## Scoring an existing book file — 16 SECONDS
+
+**This is the fast path. It replays a committed book and prints its full scorecard.**
+
+    python master.py --data data --workers 14 --out discovery\full --stage S8 --book book50_signals.csv
+
+`--book` IS THE SWITCH. Without it S8 runs in DISCOVER-FRESH mode, has nothing to score, and
+exits in 0.01s printing an explanation. `frozen = book_file is not None` at master.py L989 is
+the whole mechanism — no `--book`, no scoring.
+
+It prints book rows, trades, win rate, profit factor, net P&L, worst day, max drawdown,
+folds positive with min-fold PF, and the OOS PF and net on the final third.
+
+**BOOK-50 REFERENCE — RUN THIS FIRST EVERY SESSION:**
+
+    book rows 50 | trades 3,101 | WR 90.6% | PF 4.81 | net $97,675
+    worst day -$565.3 | max DD -$999.9 | folds 6/6 min-fold PF 5.05
+    OOS (2026.05.25 -> 2026.07.21) PF 2.95 | net $22,688
+
+**THE CANARY ONLY FIRES FOR `book50_signals.csv`** (master.py L1027, keyed on the exact
+basename). It asserts `$92,347 / 2,698 tr — engine intact`. **Any other filename skips that
+check entirely, so score BOOK-50 first to confirm the engine before scoring anything new.**
+
+### Scoring a different book
+
+Same command, different `--book`. The file lives in `engine\` and must carry these three
+columns, in this order:
+
+    trigger,direction,signal_def
+    F0,LONG,KAMA_Dist:lo + Micro_WickImbalance:hi + OR_High_Side:==-1
+
+**S8 SCORES AT THE ENGINE'S OWN SETTINGS — cap 6, 1.0 lot, no depth floor.** It does not read
+a depth floor, a per-tier gate stack, or an admission rule. A book designed around those runs
+here without them, so the figures are a like-for-like comparison against BOOK-50 and NOT the
+book's own configured performance.
+
 ## Scoring a book you assembled yourself
 
 `python score_book.py --book <your_book.csv> --data <frame> --out <dir>`
