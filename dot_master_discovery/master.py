@@ -1029,6 +1029,118 @@ def loss_events(trades):
     return int(len(los)), n_ev, int(len(days))
 
 
+SACRED_PATH_BOOKS = ('book50_signals.csv',)
+
+
+def _assert_fork_parity(df, sigs, ad, st, w, conv, window=None):
+    """GUARD (b). adm_engine is a FORK with the sacred admission path duplicated
+    verbatim in its elif branch. If the sacred entry block ever changes, the fork
+    must be updated in lockstep or PARITY SILENTLY BREAKS. Re-prove it at entry."""
+    import adm_engine as _adm
+    import portfolio_simulation_engine as _sac
+    import hashlib as _h
+    # THE FULL FRAME, NOT A SLICE. The adaptive oracle is computed over the whole
+    # frame, so a sliced df broadcasts (40000,) against (177251,) and raises inside
+    # condition_mask. Re-slicing the oracle to match would be a second implementation
+    # of the threshold layer, which is exactly what must not exist.
+    d = df.copy()
+    _keep = dict(rule=_adm.ADMISSION_RULE, mx=_adm.MAX_POSITIONS, tg=_adm.ADM_TIERGATES,
+                 gt=_adm.ADM_GATES)
+    _adm.ADMISSION_RULE, _adm.MAX_POSITIONS = 'CURRENT', 6
+    _adm.ADM_TIERGATES, _adm.ADM_GATES = None, None
+    try:
+        a = _sac.run_portfolio(d, sigs, adaptive=ad, structural=st, warmup=w, verbose=False,
+                               conviction=conv)
+        b = _adm.run_portfolio(d.copy(), sigs, adaptive=ad, structural=st, warmup=w,
+                               verbose=False, conviction=conv)
+    finally:
+        _adm.ADMISSION_RULE, _adm.MAX_POSITIONS = _keep['rule'], _keep['mx']
+        _adm.ADM_TIERGATES, _adm.ADM_GATES = _keep['tg'], _keep['gt']
+    cols = [c for c in a.columns if c in b.columns]
+    ha = _h.sha256(a[cols].to_csv(index=False).encode()).hexdigest()[:16]
+    hb = _h.sha256(b[cols].to_csv(index=False).encode()).hexdigest()[:16]
+    print(f'  FORK PARITY ({len(d):,} bars, full frame): sacred {ha} | adm_engine(CURRENT) {hb} '
+          f'-> {"IDENTICAL" if ha == hb else "MISMATCH"}', flush=True)
+    if ha != hb:
+        raise SystemExit(
+            f'ABORT [fork parity] adm_engine under CURRENT admission no longer reproduces the '
+            f'sacred engine ({ha} vs {hb}). The sacred admission path is duplicated verbatim '
+            f'inside the fork; if one changed and the other did not, every configured score is '
+            f'wrong and nothing else would have said so.')
+
+
+def _score_configured(df, sigs, ad, st, w, conv, cfg):
+    """Score through adm_engine with the book config's rules."""
+    import adm_engine as _adm
+    import swept_thresholds as _swt
+    G = _swt.build_whole_dot_gates(df)
+    print(f'  GATE MASKS: HU90 {100 * G["HU90"].mean():.4f}%  FB20 {100 * G["FB20"].mean():.4f}%'
+          f'  ATS90 {100 * G["ATS90"].mean():.4f}%  HU90&ATS90 '
+          f'{100 * (G["HU90"] & G["ATS90"]).mean():.4f}%', flush=True)
+    _adm.ADMISSION_RULE = cfg['admission']
+    _adm.MAX_POSITIONS = int(cfg['max_positions'])
+    _adm.ADM_FLOOR = {1: int(cfg['long_depth_floor']), -1: int(cfg['short_depth_floor'])}
+    _adm.ADM_GATES = {'ATR': df['ATR_1M'].values.astype(float),
+                      'atr_min': float(cfg['global_gate']['value'])}
+    _NAME = {('Micro_Hurst', 90): 'HU90', ('Micro_FailedBreak', 20): 'FB20',
+             ('AT_Slope_ST', 90): 'ATS90'}
+    tg = {}
+    for dname, dv in (('LONG', 1), ('SHORT', -1)):
+        for tier, gates in cfg['tier_gates'][dname].items():
+            if not gates:
+                continue
+            t = 5 if tier == '5+' else int(tier)
+            ms = []
+            for g in gates:
+                key = _NAME.get((g['variable'], int(g['pct'])))
+                if key is None:
+                    raise SystemExit(f'ABORT [tier gate] no swept mask for {g["variable"]} '
+                                     f'p{g["pct"]} - swept_thresholds supplies HU90/FB20/ATS90 '
+                                     f'only; ad[(var,"hi")] is p80 and is NOT a substitute.')
+                ms.append(G[key])
+            tg[(dv, t)] = ms
+    _adm.ADM_TIERGATES = tg
+    td_full = _adm.run_portfolio(df, sigs, adaptive=ad, structural=st, warmup=w, verbose=False,
+                                 conviction=conv)
+    # THE SPEC QUOTES THE BOOK-ONLY POPULATION. GAP FILLERS ARE A SEPARATE POPULATION
+    # and master's own trades.csv header already draws the line:
+    #   "population=FULL (BOOK F0+F1 plus gap fillers). BOOK-only = rows whose
+    #    signal_name is not GAP_HURST/GAP_FB/GAP_D2D."
+    # Scoring FULL gave 6,229 trades against the spec's 5,799 - the 430 difference is
+    # exactly the gap fillers. Every figure reproduces on BOOK-only.
+    import cluster_profiler as _cp
+    td = td_full[~td_full['signal_name'].isin(_cp.GAP_NAMES)]
+    print(f'  POPULATION: {len(td_full)} FULL rows -> {len(td)} BOOK-only '
+          f'({len(td_full) - len(td)} gap fillers excluded). The spec quotes BOOK-only.',
+          flush=True)
+    import numpy as _np
+    p = _np.asarray(td['pnl'].values, dtype=float)
+    gl = -p[p < 0].sum()
+    day = pd.Series(td['exit_time'].astype(str).values).str[:10].values
+    _byday = pd.Series(p).groupby(day).sum()
+    _eq = _byday.cumsum()
+    _blank = {k: '' for k in ('fold_count', 'fold_days_each', 'folds_basis',
+                              'folds_evaluable', 'folds_plus', 'folds_status', 'min_fold_pf',
+                              'oos_legacy_months', 'oos_legacy_stale', 'oos_net', 'oos_pf',
+                              'oos_prop_days', 'oos_prop_evaluable', 'oos_prop_net',
+                              'oos_prop_pf', 'oos_prop_window', 'oos_rel_months',
+                              'oos_rel_net', 'oos_rel_pf')}
+    _blank['folds_evaluable'] = False
+    _blank['oos_prop_evaluable'] = False
+    _blank['folds_status'] = 'NOT COMPUTED on the configured path'
+    return (dict(_blank, **{'trades': int(len(td)), 'WR': round(float((p > 0).mean() * 100), 2),
+             'PF': round(float(p[p > 0].sum() / gl), 2) if gl > 0 else '',
+             'net': round(float(p.sum()), 2),
+             'daily_wd': round(float(_byday.min()), 2),
+             'daily_mDD': round(float((_eq - _eq.cummax()).min()), 2),
+             'worst_bar': round(float(td.groupby('entry_bar')['pnl']
+                                                        .sum().min()), 2),
+             'losing_weeks': int((pd.Series(p).groupby(
+                 pd.Series(td['exit_time'].astype(str).values).str[:8].values)
+                 .sum() < 0).sum()),
+             'days_pos': int((_byday > 0).sum()), 'days_total': int(len(_byday))}), td)
+
+
 def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
     import conviction as C
     import score_g
@@ -1051,6 +1163,18 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
         return None
     sigs = score_g.build_book(df, pool, anchor, book, adaptive=ad, structural=st)
     _cfg, _cfg_path = book_config_for(book_file)
+    # GUARD (a). CONFIG-NOT-FOUND MUST RAISE. Keyed on an EXPLICIT list, never on
+    # absence: a missing config previously routed a configured book down the SACRED
+    # path and scored a DIFFERENT SYSTEM WITH NO ERROR. Scoring the wrong system
+    # silently is strictly worse than refusing to start.
+    if _cfg is None and os.path.basename(book_file or '') not in SACRED_PATH_BOOKS:
+        raise SystemExit(
+            f'ABORT [book config] {os.path.basename(book_file or "<none>")} has no sidecar '
+            f'config and is not in SACRED_PATH_BOOKS {list(SACRED_PATH_BOOKS)}. Expected '
+            f'<book>_config.json or the short form beside it. A book without a config would '
+            f'be scored by the SACRED engine at MAX_POSITIONS=6, flat rules and no depth '
+            f'floor - a completely different system from any configured one, and nothing '
+            f'downstream would say so.')
     if _cfg:
         _cv = _cfg.get('conviction', {})
         print(f'  BOOK CONFIG: {os.path.basename(_cfg_path)} - conviction hurst='
@@ -1065,7 +1189,12 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
                                   d2d_gap=bool(_cv.get('d2d_gap', True)))
     else:
         conv = C.build_conviction(df, True, True, True, d2d_conviction=True, d2d_gap=True)
-    r, executed = _score(df, sigs, ad, st, w, conv, want_trades=True)
+    if _cfg:
+        _assert_fork_parity(df, sigs, ad, st, w, conv)
+        r, executed = _score_configured(df, sigs, ad, st, w, conv, _cfg)
+    else:
+        r, executed = _score(df, sigs, ad, st, w, conv, want_trades=True)
+    _tl, _ev, _dy = loss_events(executed)
     lines = []
     lines.append(f'COMMITTED SYSTEM SCORE — {book_tag}')
     lines.append(f'  book rows           : {len(book)}')
@@ -1073,6 +1202,10 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
     lines.append(f'  win rate            : {r["WR"]}%')
     lines.append(f'  profit factor       : {r["PF"]}')
     lines.append(f'  net P&L $           : {r["net"]}')
+    lines.append(f'  trade losses        : {_tl}')
+    lines.append(f'  LOSS EVENTS         : {_ev}   (distinct entry BARS - the bar is the risk '
+                 f'unit, not the trade)')
+    lines.append(f'  distinct loss days  : {_dy}')
     lines.append(f'  daily worst-day $   : {r["daily_wd"]}')
     lines.append(f'  daily max-drawdown $: {r["daily_mDD"]}')
     if r['folds_evaluable']:
@@ -1118,6 +1251,12 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
 
 
 LOADER_ALLOWLIST = {
+    # adm_engine.py is a FORK of portfolio_simulation_engine and carries the same two
+    # occurrences the sacred file is already allowed: the def itself plus its __main__
+    # standalone block (L516). NEITHER IS ON THE S8 PATH - master injects the frame,
+    # and adm_engine.run_portfolio takes df as its first argument. Allowed on that
+    # basis: same count, same shape, same reason as the file it forks.
+    'engine/adm_engine.py': 2,
     'engine/analysis_engine.py': 2, 'engine/portfolio_simulation_engine.py': 2,
     'engine/run_full_analysis.py': 1, 'engine/score_book50.py': 1, 'engine/score_g.py': 1,
     'engine/wf.py': 1, 'orchestrator/discovery_orchestrator.py': 2,
