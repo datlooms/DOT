@@ -1471,3 +1471,285 @@ The eligible subset stays fully recoverable: a per-episode `start_bar_eligible` 
 The corrected dataset supersedes `DOT_stitched172_jan19_jul21_part01..09.csv` for all future runs.
 The EA fix is documented in S.22 and deferred while the EA is frozen; the acceptance gate is that a
 fresh export reproduce the corrected columns bit-for-bit. Sacred five intact and unmodified.
+
+
+---
+
+## 2026-08-13/17 — THE DISCOVERY REBUILD, THREE ADMISSION DEFECTS, AND THE WHOLE DOT
+
+*The record from the cold-run acceptance through to the adopted 299-signal system. Three structural
+defects were found in this period, all three by the operator's questions rather than by an analyst's
+sweep, and each one invalidated figures that had already been reported as final.*
+
+### 1. THE PIPELINE, COLD-RUN ACCEPTED
+
+MASTER COMPLETE 1:35:35, all stages ok, 97.5% concurrent, 90 artifacts. Sweep coverage **71 of 71
+artifacts, zero sentinel cells, zero missing-required columns.**
+
+The work that made that possible: a `--smoke` path with 14 of 14 caps installed through
+`dot_frame_binding.py` and non-empty stage assertions; `scanner_sha` written into family markers so S3
+invalidates on a code change instead of counting files; all seven 999/inf producers converted to
+`PF_UNDEFINED = float('nan')` with a ten-site consumer table; and coverage reporting on all four
+detectors, each now exiting 1 on a gap rather than passing silently.
+
+**F12 GRID ERROR.** The null baseline swept k=1..8 on *condition-count* depth while the book measures
+*signal-count* depth. `depth_long` is never below 8, so `depth>=k` was vacuous at every k tested.
+Replaced with per-direction grids from the measured distribution — LONG [8,17,22,27,34,48,59], SHORT
+[8,12,18,23,29,40,48] — with k=8 kept as an explicit vacuity contrast and labelled per row.
+
+### 2. THE EIGHT-PHASE BRIEF — CLOSED, WITH FIVE PERMANENT NEGATIVES
+
+All eight phases closed. The results that matter for future work are the negatives, because each cost
+real time and each will look re-openable to a fresh instance:
+
+- **F5 and F8 are structurally dead.** F8 is `Slope_EMA_ST > Slope_EMA_LT` — one must always exceed the
+  other. It is not a weak signal, it is a partition of the space.
+- **Stacked descriptor states are dead on both selection rules.** The intersection curve collapses
+  geometrically at 3-4 descriptors.
+- **Single-descriptor gates fail the cross-book check.** The one result strong enough to price —
+  F4 as a negative screen on SHORT triple — inverted on the second book, and a rarity-matched null put
+  the expected number of such results from that search at 0.70. One was found.
+- **The tick gate is redundant against `ATR_1M >= 20`** — 98.3% overlap, and dropping it cost 14 trades
+  for +$456.
+- **The adaptive convergence engine is dead three ways:** raw condition depth is never below 8, the
+  intersection curve collapses, and the whole field at triple+ is PF 1.29 with a -$6,230 worst day.
+
+And two positives that carried forward: depth and duration are **one axis** (0 of 28 cells clear
+p<=0.05, min p=0.335), and the walk-forward decay is **regime, not dilution** — fixed-population decay
+0.6738 -> 0.4882 -> 0.3557.
+
+### 3. THE FUSION — 299 SIGNALS FROM FOUR OBJECTIVES
+
+BOOK-50 (3,101 trades, WR 90.6%, PF 4.81, net $97,675, folds 6/6, OOS PF 2.95) remains the incumbent
+and the engine canary. OPTION-B — 120 signals with the p90 gate stack — gave 1,812 trades and 27 loss
+events at PF 16.29.
+
+**The union of BOOK-50, the 60-priced, OPTION-B and S0-120 gives 299 distinct signals from 385
+(193L/106S, 1.82:1).** S0-120 contributes **111 unique signals at 1-8% overlap with every prior
+selection**. Four different selection objectives, four different error modes, and that diversity is the
+finding rather than any one member. The 35-q set contributes nothing unique — it is a strict subset of
+the 60 — and must stop being counted as a source.
+
+**Every large draw from the union beats OPTION B by 55-87%.** The union is the achievement.
+
+### 4. DEFECT ONE — THE BAR IS THE RISK UNIT, NOT THE TRADE
+
+Found by the operator asking for all 48 loss rows to be printed individually rather than summarised.
+
+**The 48 losses collapsed to SEVEN bar-events.** The jar had admitted 4-9 lots of the same losing trade
+— identical ATR, identical entry price, identical exit bar. Every loss rate, confidence interval and
+profit factor in the project to that point had been computed on replicas of one decision.
+
+**All loss statistics are now stated as events, and no ratio is reported without its event count.**
+Under the adopted configuration 224 trade-losses are 43 events on 36 distinct days. Option B's 27
+events remains the only well-sampled loss figure produced in this project; a 7-event book cannot be
+audited inside a year of live trading, which is why the operator rejected the safest-looking books.
+
+### 5. DEFECT TWO — THE JAR WAS ACTING AS A HIDDEN GATE, AND `CURRENT` ADMISSION IS NOT BUILDABLE
+
+Found by the operator asking why `MAX_POSITIONS` was 16.
+
+The engine's per-signal loop refused at `live_lots >= MAX_POSITIONS` **mid-event**. A chopped event
+therefore recorded a LOWER executed depth and received a STRICTER gate: `AT_Slope_ST > p90` passes
+6.2% of bars where `VolOfVol > p20` passes 82%. Measured, re-tiered bars gave 601 trades at a **1.66%
+loss rate against 3.95% for correctly-tiered ones.**
+
+**That accidental filter was worth 35 loss events. Nobody chose it, nobody could state its mechanism in
+advance, and it would not survive a change of cap, lot size or signal count.**
+
+**And it cannot survive to a build.** Executed depth is only knowable after a bar's admissions finish,
+so the post-hoc floor filter deletes **9,356 trades that a live engine has already opened** — 1,391 of
+them from valid depth>=3 events. A live EA built to the `CURRENT` specification would run a book that
+had never been scored.
+
+**FLOORED is the only buildable rule:** batch the bar, take `n = min(admissible, free)`, refuse the
+whole group if `n < 3`, gate on `tier(n)`. Everything is knowable at bar close. **No position is ever
+opened and then removed. Backtest equals live, exactly.**
+
+The honest cost, before repair: 47 loss events -> 82, PF 16.23 -> 9.74. The repair — gating LONG d3,
+which the jar had been covering — brought it back to 43 events at PF 13.09.
+
+**AND THE REFERENCES DID NOT SURVIVE EITHER.** Re-scored under FLOORED, OPTION B goes 27 -> 79 loss
+events and PF 16.29 -> 7.65, because its gate stack lives at solo and dual and depended entirely on the
+jar chopping deep events down into those tiers. CELL D degrades least (7 -> 14 events) because a deep
+floor produces rare, large events the jar rarely chops. **Depth confers robustness to this defect, and
+that is the mechanism behind the whole table.**
+
+### 6. DEFECT THREE — `recentfb_sizing` WAS SIZING UP LOSERS MORE THAN WINNERS
+
+Found by the operator asking whether conviction sizing had ever been swept. It never had, in 17 months.
+
+Removing `recentFB x1.25` drops lots on winners 1.256 -> 1.183 (-5.8%) and lots on losers 1.186 ->
+1.094 (**-7.8%**). **It was adding 25% size to trades that lose more often than they win.**
+
+Removing it takes **20% off the worst bar** (-$458.9 -> -$367.2) for 3.9% of net. Setting it to 1.5
+instead deepens the worst bar to **-$550.8** — the direction is confirmed both ways.
+
+**The other two multipliers earn their place decisively.** `Micro_Hurst x2.0` off costs $9,043 and
+introduces a losing week; `D2D-agree x2.0` off costs $3,824 and worsens the worst day. Flat sizing costs
+$20,380 with a -$211.1 worst day. **Two of three sound, one a tail-deepener.**
+
+### 7. THE DERIVATIONS THAT SURVIVED
+
+**The d2->d3 cliff, measured independently in both directions** on the ungated field: LONG d2 16.55% ->
+d3 8.75%; SHORT d2 12.54% -> d3 5.40%. Depth 1 and 2 are indistinguishable; three is a different
+regime. The 16-cell floor grid confirms it — any cell containing a 2 gives 3.5x to 7x the loss events.
+**Cliff below, plateau above: the best-evidenced constant in the stack, and it is the operator's
+original triple-triple.**
+
+**`Micro_Hurst > p90` cleared two independent nulls** — p = 0.000 at SHORT d3 (0 of 30 rarity-matched
+alternatives strictly better) and p = 0.022 at LONG d3 (1 of 45). **The only condition in this project
+ever to clear one.** For contrast, `Bar_Range > p95` sits at p = 0.371, the median of its own null, and
+`VolOfVol > p20` at p = 0.690 with 40 of 58 alternatives doing better.
+
+**`ADX >= 15` is structural rather than tuned.** The threshold oracle builds its rolling percentile ring
+only from bars where `ADX >= 15`, so every threshold in all 299 signals is calibrated on that
+population. Trading outside it fires thresholds against a distribution they were never computed from.
+The same number twice.
+
+**`ATR_1M >= 20` is a knee, not an optimum.** The curve is monotone in both directions — it is a risk
+dial. 15->20 buys 13 loss events for $1,355 (9.6 per $1,000); 20->25 buys 12 for $4,467 (2.7 per
+$1,000). The price of an event jumps 3.5x immediately above 20.
+
+**And the cap curve, 18 to 96, locates both boundaries at 22.** First losing week: 22. Worst day first
+past -$150: 22. The break is a cliff, not a drift — worst day -$104.0 -> -$277.5 and worst week +$16.6
+-> -$110.9 for one extra slot, turning 26 consecutive positive weeks into 25. **Cap 21 is the last safe
+value and the margin is one slot wide.** The cap stops binding entirely at 57 at-risk positions.
+
+**The cap never touches the tail.** Worst bar -$367.2 and worst intraday -$845.91 are identical at all
+thirteen cap values. The cap controls accumulation, not depth. **And divisibility does nothing** — swept
+3/6/9/12/15/16/18/21 under all three admission rules, monotone throughout, no step at multiples of
+three, because events run 2 to 47 deep and cannot tile a fixed container.
+
+### 8. THE SELECTION LAYER REBUILT — AND THE REBUILD LOST
+
+The selection layer was the one thing never redone honestly, and all four union sources had been chosen
+while the `CURRENT` admission defect was silently filtering. It was therefore rebuilt from the ground
+up: a train-only screen with a **proportional** fold criterion (`folds_plus >= 4` as a count is
+arithmetically unsatisfiable for 503 signals that lack four buckets), holdout Jun 1 - Jul 21 held back
+and scored once.
+
+**12 of 12 random draws beat the rebuilt selector on losing-bar rate. The adopted book beat 11 of 12 on
+net and sits at roughly the 4th percentile of random selection.** The rebuild's objective — minimising
+the union of losing bars — selects for signals that *lose together*, which is the many-clones-on-one-bar
+mechanism written into an objective function on purpose. It was reported as worse than random rather
+than dressed up.
+
+**253 of the adopted 299 clear the independent rebuild (84.6%),** with every failure accounted: 25 fail
+the train screen, 16 were never scanned (14 BOOK-50 orphans plus 2 F1 pairs correctly absent from an F0
+scan), 5 failed the field filters. **The book is not an artefact of the admission defect, and it is now
+confirmed from a second, independent direction.**
+
+**Decorrelation on solo losses is invalid as a selection tool regardless of basis.** Solo, a signal
+trades alone on every bar its mask fires; in the book only depth-gated bars produce entries. Solo loss
+bars are not the population the book loses on — solo pairwise Jaccard 0.0026 with 99.3% of pairs sharing
+zero losing bars, against 0.0247 and 94.8% at book level. **Delete the stage, do not repair it.**
+
+### 9. COVERAGE SATURATES AT 68 SIGNALS
+
+The terrain map was built to expose the incumbent's poor participation, and the question was finally
+asked of the adopted book.
+
+**Greedy marginal coverage over all 4,575 qualified survivors exhausts after 68 signals.** After that,
+no remaining signal in the field reaches a single permitted episode the first 68 do not already reach.
+The solo-reach union of the entire qualified field is **101 UP / 91 DOWN of 498/486 permitted (20%)**,
+and it is flat at every book size from 299 to 4,575. **The 4,276 unused signals are not unused coverage
+— they are redundant on the coverage axis.**
+
+And chasing coverage is catastrophic: a 500-signal coverage book gives 285 loss events, PF 1.78 and a
+-$4,352 intraday floor. **More signals does not mean more distinct opportunities; it means more signals
+piling onto the same bar.** Size costs concentration, not exposure — the jar holds at 16 either way.
+
+**Solos and duals were then tested as a separate strictly-gated admission path and closed.** Strictness
+and coverage are anti-correlated and the correlation is near-perfect: the two strictest gates in the
+library (0.489% and 0.684% pass rate) reach **zero** new episodes. A 2-bar episode requires firing on
+one of two specific bars, and any condition rare enough to be trusted alone is too rare to be there.
+**Rarity and presence are the same axis pointing opposite ways.**
+
+**`ATR_1M >= 20` removes 76% of reachable terrain before any signal is consulted** — 2,087 UP episodes
+become 498. That is a structural ceiling no selection can lift, and it is the gate doing its job.
+
+### 10. WHAT THE SYSTEM IS BLIND TO
+
+Characterised for the first time, and the answer is clean.
+
+| | traded | unreached |
+|---|---|---|
+| duration | 6-9 bars | **2 bars** |
+| thrust size | ~180 pts | 132 pts |
+| ATR at start | 30-32 | 24 |
+| ADX / efficiency | 25-27 / 0.45-0.52 | 24-25 / 0.50 |
+
+**ADX and efficiency are indistinguishable.** It is not a trend-quality filter — it is a **duration**
+filter. Session distribution is proportional rather than selective, so the blindness is structural, not
+temporal.
+
+**The mechanism is the depth floor: concurrence takes time to form.** A 2-bar move ends before three
+independent patterns can agree it is real. **This is a property of concurrence as an entry mechanism,
+not a tunable parameter — to be accepted and documented rather than engineered around.**
+
+### 11. THE ADOPTED SYSTEM
+
+`foundational_documents/The_Whole_DOT_spec.txt` — 1,293 lines, sha `21c611512e04`. It supersedes
+`The_Whole_DOT_rule_master_spec.txt` and `_2`, and both of those superseded
+`DOT_rule_master_spec_OPTION_B.txt`.
+
+**299 signals · LONG depth >= 3, SHORT depth >= 3 · FLOORED admission · `Micro_Hurst > p90` at LONG d3
+and SHORT d3 · `Micro_FailedBreak > p20 AND AT_Slope_ST > p90` at LONG d4 · `Micro_FailedBreak > p20` at
+LONG d5+ · SHORT d4 and d5+ FREE · `ATR_1M >= 20` global · `MAX_POSITIONS 21` counting at-risk positions
+only · conviction `Micro_Hurst x2.0` and `D2D-agree x2.0`, `recentfb_sizing = FALSE`.**
+
+At 1.0 lot: 5,799 trades, WR 96.09%, PF 14.31, net $285,356.50, **43 loss events on 36 days**, worst bar
+-$1,224.00, worst day -$346.60, worst intraday -$2,819.70, **zero losing weeks of 26**, 119 of 132 days
+traded, durability margin 32.91 points against a break-even win rate of 63.18%.
+
+**Linearity is proved by direct re-run rather than asserted.** 1.0 and 0.30 run independently give 5,799
+rows both, identical on every row for entry bar, exit bar, entry price, exit price, exit type, depth and
+stop distance; lots ratio uniformly 0.300; drift $1.65 (0.0019%), which is engine P&L rounding.
+`MAX_RISK` is **150 POINTS, not dollars** — it enters the decision path nowhere, and `lots` appears at
+exactly two lines, both P&L multiplications.
+
+**1.0 lot is not deployable** — its ceiling is 126% of the FTMO daily. At 0.30 lot: net $85,607, worst
+day -$104.00, worst intraday -$845.91, ceiling $1,890 = **37.8% of the $5,000 daily and 18.9% of the
+$10,000 total.**
+
+### 12. THE FINDING THAT REFRAMES THE PROJECT
+
+Across **60 complete compositions and three walk-forward windows, every single one is profitable** —
+field net $12,788-$18,532, survivor net $14,987-$19,119, spread 25-30% of net. And **24 random
+299-signal draws from the qualified field are all profitable out of sample.**
+
+**The signals carry it. The composition is a preference, and selection above a competent screen is worth
+surprisingly little.**
+
+This is the most important measurement produced in this project. It means the system does not depend on
+any clever choice being right — which is also why the composition arguments of this period, however
+long they ran, moved the result around inside a band where every point works.
+
+### 13. WHAT IS NOT PROVEN
+
+- **Nothing is out-of-sample in the strict sense.** The three walk-forward windows come from a book
+  selected on the full frame. July is the one genuine signal-layer holdout — no fold touched its 19,842
+  bars — and it is the best month in the book at PF 41.35 on 3 loss events. Small base, right direction.
+- **The process is not walked forward.** Only S0-120 can be re-derived inside a training segment; the
+  field and three of four union sources are full-sample.
+- **43 loss events bound every risk claim and 36 distinct days bound every day-keyed one.**
+- **The fill model is the last unmeasured assumption.** The engine fills at `current_sl` exactly whenever
+  the bar touches it, with no slippage and no gap modelling. "Locked positions cannot lose" is true of
+  the simulator **by construction** and true live only to the extent fills are clean. Verified within the
+  simulator across all 5,317 be-nudged trades — exits strictly below the lock 0, minimum captured +12.02
+  points, minimum P&L +$9.00 per lot, **and +12.02 is exactly what `0.30 x base_risk` predicts at the
+  ATR-20 gate on the base path.** A prediction and a measurement agreeing to two decimals. The ceiling is
+  exact under the fill assumption and a lower bound live. **This is what the demo period is for.**
+- **Three defects have now been found by readers rather than by the analyst, and all three share a
+  shape:** the specification described something the engine computed differently, or a story got attached
+  to a number nobody traced. **Expect a fourth and read `§0.3` of the spec first.**
+
+### 14. STATUS
+
+The Whole DOT is specified and the research is closed. What remains is engineering: S8 cannot yet score
+the book (`master.py` L1005 hardcodes `recentFB=True`, and S8 reads no floor, no tier gates and no
+admission rule — it scores at cap 6, 1.0 lot, flat rules), `whole_dot_signals.csv` is unbuilt, the
+gap-filler lot defect is unfixed, and the rejection log for FTMO's fill-or-kill execution does not
+exist. Steps 30-35 of the execution sequence carry these. **Sacred five intact and unmodified
+throughout.**
