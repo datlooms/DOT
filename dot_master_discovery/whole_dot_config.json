@@ -1,0 +1,73 @@
+{
+  "_source": "foundational_documents/The_Whole_DOT_spec.txt \u00a72 (execution order) and \u00a73 (constant registry). READ FROM THE SPEC, NOT RETYPED FROM A PROMPT - the spec is the source of truth and every constant there carries a derivation and a status label.",
+  "long_depth_floor": 3,
+  "short_depth_floor": 3,
+  "_depth_floor_note": "DERIVED, per direction independently. The d2->d3 cliff: LONG 16.55% -> 8.75%, SHORT 12.54% -> 5.40%. Same value both sides because two independent measurements agree, not because a threshold was imposed.",
+  "admission": "FLOORED",
+  "_admission_note": "DERIVED. The only buildable rule. CURRENT opened 9,356 trades and deleted them post-hoc; ATOMIC refused 189 valid events for $20,373.",
+  "adm_order": [
+    "LONG",
+    "SHORT"
+  ],
+  "max_positions": 21,
+  "_max_positions_note": "SWEPT. 21 is the LAST SAFE VALUE - the margin is ONE SLOT WIDE (\u00a78.1).",
+  "global_gate": {
+    "variable": "ATR_1M",
+    "op": ">=",
+    "value": 20,
+    "kind": "raw"
+  },
+  "_global_gate_note": "SWEPT. Raw ATR at the entry bar, not a percentile. A risk dial with no optimum; 20 is the knee.",
+  "tier_gates": {
+    "LONG": {
+      "3": [
+        {
+          "variable": "Micro_Hurst",
+          "op": ">",
+          "pct": 90
+        }
+      ],
+      "4": [
+        {
+          "variable": "Micro_FailedBreak",
+          "op": ">",
+          "pct": 20
+        },
+        {
+          "variable": "AT_Slope_ST",
+          "op": ">",
+          "pct": 90
+        }
+      ],
+      "5+": [
+        {
+          "variable": "Micro_FailedBreak",
+          "op": ">",
+          "pct": 20
+        }
+      ]
+    },
+    "SHORT": {
+      "3": [
+        {
+          "variable": "Micro_Hurst",
+          "op": ">",
+          "pct": 90
+        }
+      ],
+      "4": [],
+      "5+": []
+    }
+  },
+  "_tier_note": "tier = min(depth, 5). Thresholds are mechanism-D adaptive percentiles at the entry bar. TIER 1 AND TIER 2 ARE NOT CARRIED - they are unreachable under a floor of 3 and the spec states a build must not carry them. SHORT d4/d5+ are FREE by measurement (\u00a75.3), not by inheritance.",
+  "conviction": {
+    "hurst": true,
+    "recentfb": false,
+    "d2d": true,
+    "d2d_conviction": true,
+    "d2d_gap": true
+  },
+  "_conviction_note": "recentfb FALSE is DERIVED - DISABLED ON MEASUREMENT. It sized losers up more than winners (winners 1.256->1.183, losers 1.186->1.094) and removing it takes 20% off the worst bar. master.py L1005 hardcoded it TRUE.",
+  "base_lot": 1.0,
+  "_base_lot_note": "\u00a76 is quoted at 1.0 lot base. The adopted live figure is 0.30; scaling is exact because the engine fills at the same price regardless of lot size."
+}

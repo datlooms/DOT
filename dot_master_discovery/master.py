@@ -981,6 +981,54 @@ def s7_contenders(df, ad, st, w, sigs, out, input_sha):
 
 
 # ── S8 COMMITTED (frozen-book replay vs discover-fresh) ──
+def book_config_for(book_path):
+    """The sidecar config beside a book file, or None.
+
+    ROUTING IS ON THE CONFIG, NOT ON THE BOOK NAME. A book with no config takes the
+    SACRED engine exactly as today - that is what keeps the BOOK-50 canary honest,
+    because book50_signals.csv has no config and must score identically to the cent.
+    """
+    if not book_path:
+        return None, None
+    base = os.path.splitext(book_path)[0]
+    # Accept BOTH conventions: the strict sidecar <book>_config.json, and the shorter
+    # form the spec names - whole_dot_signals.csv pairs with whole_dot_config.json, so
+    # a trailing _signals is stripped. Deriving only the strict form silently found no
+    # config and routed the Whole DOT down the SACRED path, scoring a different system.
+    _alt = base[:-8] if base.endswith('_signals') else base
+    for cand in (base + '_config.json', base + '.config.json',
+                 _alt + '_config.json', _alt + '.config.json'):
+        if os.path.exists(cand):
+            try:
+                with open(cand, encoding='utf-8') as f:
+                    return json.load(f), cand
+            except Exception as exc:
+                raise SystemExit(f'ABORT [book config] {cand} is unreadable: '
+                                 f'{type(exc).__name__}: {str(exc)[:90]}')
+    return None, None
+
+
+def loss_events(trades):
+    """LOSS EVENTS AND DISTINCT LOSS DAYS. THE BAR IS THE RISK UNIT, NOT THE TRADE.
+
+    224 trade-losses are 43 events on 36 days. A scorecard reporting only
+    trade-losses reports a number that was wrong for the life of this project: a bar
+    that opens six positions and loses on all six is ONE decision that went wrong,
+    not six.
+    """
+    if trades is None or not len(trades):
+        return 0, 0, 0
+    los = trades[trades['pnl'] < 0]
+    if not len(los):
+        return 0, 0, 0
+    bars = los['entry_bar'].values if 'entry_bar' in los.columns else []
+    n_ev = int(len(set(int(b) for b in bars))) if len(bars) else int(len(los))
+    days = set()
+    if 'exit_time' in los.columns:
+        days = {str(t)[:10] for t in los['exit_time'].values}
+    return int(len(los)), n_ev, int(len(days))
+
+
 def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
     import conviction as C
     import score_g
@@ -1002,7 +1050,21 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
               'has been run. S8 FROZEN path is untouched and still scores the ratified book.')
         return None
     sigs = score_g.build_book(df, pool, anchor, book, adaptive=ad, structural=st)
-    conv = C.build_conviction(df, True, True, True, d2d_conviction=True, d2d_gap=True)
+    _cfg, _cfg_path = book_config_for(book_file)
+    if _cfg:
+        _cv = _cfg.get('conviction', {})
+        print(f'  BOOK CONFIG: {os.path.basename(_cfg_path)} - conviction hurst='
+              f'{_cv.get("hurst", True)} recentfb={_cv.get("recentfb", True)} '
+              f'd2d={_cv.get("d2d", True)}. master.py hardcoded recentfb TRUE; the adopted '
+              f'configuration sets it FALSE (DERIVED - it sized losers up more than winners).',
+              flush=True)
+        conv = C.build_conviction(df, bool(_cv.get('hurst', True)),
+                                  bool(_cv.get('recentfb', True)),
+                                  bool(_cv.get('d2d', True)),
+                                  d2d_conviction=bool(_cv.get('d2d_conviction', True)),
+                                  d2d_gap=bool(_cv.get('d2d_gap', True)))
+    else:
+        conv = C.build_conviction(df, True, True, True, d2d_conviction=True, d2d_gap=True)
     r, executed = _score(df, sigs, ad, st, w, conv, want_trades=True)
     lines = []
     lines.append(f'COMMITTED SYSTEM SCORE — {book_tag}')
