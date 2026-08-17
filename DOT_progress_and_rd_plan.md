@@ -2150,6 +2150,161 @@ otherwise byte-identical, so every prior Book B figure is unaffected.** Both cop
 Same ancestor as the sidecar fallthrough and the swept-spec instruction, and it is spec §0.3 R2 — an
 instruction or a reference that resolves somewhere the author did not intend.
 
+### 11n. THE PER-SIGNAL QUALIFICATION QUESTION — CLOSED ON 297 OF 297
+
+The objective was never a prune. **Which tests must a signal pass to earn its place, so that a future month
+of data can be assessed by running a stage rather than repeating a week of conversation?** The 297 are a
+union of four different objectives — BOOK-50 by decorrelation, the 60-priced by chance-pricing, OPTION-B as
+a gated production book, S0-120 by seed-0 decorrelation — and **no single reproducible procedure produces
+them.** That is precisely why monthly re-qualification could not be run.
+
+**AND THE OBVIOUS METHOD WAS INVALID, CAUGHT BEFORE IT SHIPPED.** Attributing in-book trades to individual
+members works in Book B, where the depth floor is 1 and a signal fires alone. **IT DOES NOT WORK HERE.** A
+signal in a depth-5 bar opened one of five trades, but only because four others fired. **The proof was
+already in the record: the six LONG orphans earned $2,649 directly and removing them cost $3,923.**
+Attribution misses the entire depth effect and gets the sign wrong.
+
+**Leave-one-out is the only valid measure in a depth-floored book** — remove member X, re-run the full book,
+record the deltas. **297 runs, 5 parity re-runs, 50 ablation draws, 4 partition cuts: 356 engine runs. Zero
+gates fitted, zero thresholds changed, and nothing about the adopted 297 proposed to change.**
+
+### 11o. THE BOOK IS HOMOGENEOUS
+
+    d_net    min -$902.90 | p10 $270.60 | p25 $531.60 | median $1,005.60
+             p75 $1,798.90 | p90 $2,871.70 | max $8,952.30
+             12 of 297 negative (4.0%) | 149 >$1k | 63 >$2k | 7 >$5k | 0 >$10k
+             sum of all deltas $401,542 against a $284,974 book — ratio 1.41
+
+**A 3.4x interquartile band with no tail either side. No stars, no dead weight, no dilution band, nothing to
+prune.** `d_events` moves by zero for **212 of 297** members — 36 by -1, 42 by +1, 4 by -2, 3 by +2, and on a
+42-event base **every one is a one-event observation.** Report the count, decline the rank.
+
+**And provenance does not separate the four sources.** Medians run $1,280 shared, $1,181 60-priced, $1,066
+OPTION-B, $983 BOOK-50, $759 S0-120 — a **1.7x spread** on 19-111 members per cell. S0-120 has the lowest
+median while holding the single largest contributor at $8,952. **THE UNION ADDED VARIETY WITHOUT ADDING
+DIFFERENTIATION**, and that is the closest thing to a verdict on the union itself.
+
+### 11p. THE ALARM WAS A SAMPLE-SIZE ARTEFACT, AND THE MECHANISM PROPOSED FOR IT WAS ALSO WRONG
+
+On the first 40 members the split-half came in at **Spearman -0.4594, p = 0.00286** — significantly
+anti-correlated, worse than the F1 reach ratio, and it looked like either a mechanism or an alarm.
+
+**ON ALL 297 IT IS -0.0597, p = 0.305. NOT ANTI-CORRELATED. NOT CORRELATED AT ALL.**
+
+The hypothesis offered for the -0.4594 was substitutability: at a depth-3 bar the floor needs three signals
+and which three does not matter, so if X is the marginal third in one half, another member may be in the
+other — anti-correlation by construction rather than by decay. **THE PARTITION REFUTES IT.** The negative
+correlation is confined to the **LOW** depth-3 group, not the high one — **the opposite of the prediction** —
+at +0.1363 (p = 0.079) high against -0.2811 (p = 0.0012) low. And across four overlapping cuts chosen after
+seeing the data, none survives correction.
+
+**The honest reading: `d_net` carries no persistent per-member signal at all.** And 13% of the book in
+`spec_idx` order was not safe to read as a sample — a caveat stated in advance, twice, which then earned
+itself.
+
+### 11q. THE ABLATION — NOTHING IS HIDING
+
+Leave-one-out measures marginal contribution against a book still holding the other 296, so a set that is
+individually free but **collectively load-bearing** would be invisible to it. Random-subset ablation is the
+test that would find it: 50 draws, K = 30 members (10% of the book), observed loss against summed individual
+deltas.
+
+    ratio   min 0.790 | p10 0.878 | p25 0.910 | median 0.967 | p75 0.999 | p90 1.044 | max 1.085
+            mean 0.960, sd 0.066 | 12 of 50 above 1, 38 below
+
+**NO SUPERADDITIVE STRUCTURE.** The ratio would systematically exceed 1 and it does not. It falls slightly
+short, which is **mild substitutability**, consistent with the sum-of-deltas ratio of 1.41 against the book.
+Dropping 10% costs 137 entry bars and 1-8 loss events. **Members overlap a little; nothing is hiding.**
+
+### 11r. NONE OF THE SIX TESTS DISCRIMINATE
+
+| test | discriminating power | verdict |
+|---|---|---|
+| `d_net` | flat, 3.4x IQR, 4% negative, no tail | does not discriminate |
+| `d_net` split-half | rho = -0.060, p = 0.305 | no persistence — cannot be encoded |
+| `d_events` | 212 of 297 move by zero | one-event observations — cannot rank |
+| per-signal OOS | rho 0.335 with full-sample `d_net`, shared data | not independent |
+| provenance | 1.7x spread across four sources | does not separate |
+| ablation | mean 0.960, sd 0.066 | no hidden structure |
+
+**THE UNION IS HOMOGENEOUS. THERE IS NO PER-SIGNAL COMPONENT WORTH ENCODING. THE MONTHLY QUALIFIER IS THE
+BOOK-LEVEL BATTERY ALONE.** Simpler than the tool that was asked for, not weaker — and measured on 297 of 297
+rather than inferred from 40.
+
+### 11s. AND THE STRUCTURAL CONCLUSION THAT STANDS INDEPENDENTLY
+
+**`d_net` measures floor-criticality, not quality.** 121 of 973 entry bars — 12.4% — sit at depth **exactly
+3**, so removing any member of such a bar drops it below the floor and kills every trade on it. A member's
+delta is therefore largely **how often it happens to be the marginal third signal**, which is a structural
+property of which bars it co-fires on rather than a statement about its merit. **TWO SIGNALS OF IDENTICAL
+QUALITY WOULD SHOW DIFFERENT `d_net`.**
+
+**And there is no uncontaminated alternative — stated rather than invented.** Every per-member metric
+available here is measured inside a book whose admission rule makes members interdependent by construction:
+attribution misses the depth effect, leave-one-out measures floor position, and the split-half says nothing
+persists in either case. **A clean per-signal quality metric would need a scoring regime where members do not
+gate each other, and that regime is not this system.**
+
+### 11t. THE PERFORMANCE DIAGNOSIS — WRONG TWICE, THEN MEASURED
+
+| suspect | measured | verdict |
+|---|---|---|
+| `build_signal_masks` rebuilding 296 masks per run | 0.3s for all 297 | not the bottleneck |
+| strided column slice x 177,251 bars | 0.3s C-order, 0.2s F-order | not the bottleneck |
+| the analyst's own `stats()` function | **6.10s of 11.68s** | this is it |
+
+The cost was never in the engine. It was in the pandas wrapped around it — `groupby('day')`,
+`pd.to_datetime(...).dt.strftime`, `groupby(['entry_bar','direction'])` and two `set(zip(...))` constructions
+on 5,776 rows, 297 times. Vectorised with `np.unique` and `np.bincount` the same measurements run in 1.26s,
+taking the per-run cost from **11.68s to 2.50s.**
+
+**Both previously shipped fixes were inert.** `PRE_MASKS` and `asfortranarray` changed nothing — 11.68s
+before and after — correct in isolation and irrelevant. **READ-BEFORE-YOU-OPTIMISE, LANDING ON THE ANALYST
+RATHER THAN THE CODE, TWICE IN ONE TURN, AND REPORTED AS SUCH.**
+
+Parity was proved before resuming: five completed members re-measured at `d_net` identical to the cent —
+2349.30 / 1430.80 / 1154.00 / 854.10 — and the baseline reproducing at exactly $284,974.0 / 42 events / 973
+bars / 5,776 trades. **A faster function that returns a different number is worse than a slow one.**
+
+### 11u. WHAT `QUALIFY` MUST DO — SPECIFIED, NOT YET BUILT
+
+`master.py` can score a book it is handed. **It cannot say whether the one in use is still right.** Every
+month brings roughly 21 new trading days and there is currently no way to ask that question without
+repeating a week of dialogue.
+
+**The battery is book-level throughout, with no per-signal component, because 11r says there is nothing to
+encode:**
+
+- **the train-only screen** — how many of the 297 still clear `trades >= 12`, `agg_pf >= 2.0`, at least three
+  monthly buckets present, and profitable in **at least 2/3 of the buckets actually present.** The fold
+  criterion must be a **proportion, not a count** — `folds_plus >= 4` as a count is arithmetically
+  unsatisfiable for 503 signals lacking four buckets, a defect that has already cost a turn. 253 of 299
+  cleared the last rebuild at 84.6%; **a drop to 180 is a different signal from a drop to 250.**
+- **the d2->d3 cliff, re-derived per direction** on the current data. LONG 16.55% -> 8.75%, SHORT 12.54% ->
+  5.40% on the ungated field. **If that cliff flattens, the floor is no longer justified, and it is the
+  earliest structural warning available.**
+- **the cap boundary re-located.** Both boundaries sit at 22 with cap 21 adopted on a **one-slot margin.**
+  **If the cliff moves to 21 the adopted cap is unsafe, and that outranks everything else the stage prints.**
+- **the gate nulls re-run.** `Micro_Hurst > p90` cleared at p = 0.000 at SHORT d3 and p = 0.022 at LONG d3 —
+  the only condition in this project ever to clear one, and it cleared two. **If either stops clearing, the
+  gate is no longer earned.**
+- **the random-book null.** The adopted book sits at roughly the 4th percentile of random draws from the
+  qualified field. **If a future book cannot beat its own null, the stage says so.**
+- **and the book's performance on the new period alone**, beside the full-frame figures. **The point is to
+  separate "the book got worse" from "the market moved".**
+
+**One verdict line: PASS, PASS-WITH-WARNINGS, or FAIL, with the reason.** Not a table to interpret at 2am.
+
+**And the three modes stay separate.** `QUALIFY` answers whether the current book still passes, produces no
+new book and causes no churn — **that is the monthly job.** `RESELECT` produces a comparison. `REPLACE`
+requires **dominance on the stated criteria rather than mere difference**, and must refuse rather than pick
+when the comparison is ambiguous. **A qualifier that re-selects every month chases the last month and never
+holds a position long enough to know whether it was right.**
+
+Deterministic throughout: byte-identical artifacts across runs and worker counts, every random draw
+explicitly seeded with the seed recorded in the artifact, no wall-clock in any CSV. Sacred five untouched;
+`adm_engine` and `swept_thresholds` with the fork-parity assertion retained.
+
 ### 14. STATUS
 
 The Whole DOT is specified and the research is closed. What remains is engineering: S8 cannot yet score
