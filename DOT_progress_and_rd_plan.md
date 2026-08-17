@@ -1931,6 +1931,225 @@ gate against a p80 threshold is a looser gate: 6,753 trades against 5,799 and 10
 COMPLETE — AND SPEC §0.3 R2 IS NOW "ANY INSTRUCTION IN THIS DOCUMENT THAT A SECOND PARTY CANNOT EXECUTE",
 with the check being to demand a symbol rather than a prose description.**
 
+### 11f. BOOK B — THE ANTI-SYSTEM, BUILT AND CLOSED
+
+The operator's question was direct: can a full book be composed from solos, duals and every non-F0 family,
+under one hard rule — **no signal may trigger on any of the primary engine's 973 entry bars.** Not a research
+question about whether it should exist, but a build.
+
+It was built. **755 signals at `agg_pf >= 8`** — F1 750, F9 3, F13 2, drawn from 449,399 scanned non-F0 rows
+of which 43,436 qualify. Exclusion asserted on every arm, aborting rather than warning.
+
+    755 signals · 6,106 entry bars · 17,531 trades · WR 84.97% · PF 1.70 · net $166,255
+    1,012 LOSS EVENTS on 122 days · worst bar -$1,606.80 · worst day -$2,775.50
+    4 losing weeks of 26 · 127 of 132 days · episodes 56 UP / 67 DOWN
+    break-even WR 76.88% against 84.97% actual — an 8.09-point MARGIN
+    $164 net per loss event, against the primary's $6,785
+
+**AND THE EXCLUSION ASSERTION FOUND AN ENGINE FACT BY FIRING RATHER THAN BY BEING READ.**
+`portfolio_simulation_engine.py` L299 checks only `conviction is not None`, `len(active_trades) == 0` and
+`bar >= warmup`. **The gap fillers never consult `entry_ok` or `mask_window`, so they bypass ADX>=15,
+Volume>50, the Friday cutoff and any bar exclusion.** They fired on 36 primary bars on the first attempt.
+Same class as everything in spec §0.1 — a population the specification describes differently from what the
+engine does.
+
+### 11g. WHY 755 SIGNALS AT PF>=8 COMPOSE TO PF 1.70
+
+Every member carries `agg_pf >= 8` standalone. The composed book is 1.70. That paradox had to be resolved
+before pruning anything, because if standalone PF were noise then the whole ladder was the wrong tool.
+
+**IT IS NOT NOISE.** Standalone `agg_pf` against in-book net per loss event: **Spearman 0.3315,
+p = 1.07e-17**, with a monotone band structure:
+
+| PF band | n | median in-book net | % net-NEGATIVE in book |
+|---|---|---|---|
+| 8-10 | 261 | $23.40 | **46%** |
+| 10-15 | 253 | $261.40 | 22% |
+| 15-20 | 85 | $410.50 | 11% |
+| 20+ | 34 | $505.70 | **3%** |
+
+**261 of 755 members sit in the band where nearly half lose money inside the book** despite every one
+clearing PF 8 standalone. 186 of the 699 that traded (27%) are net-negative in-book.
+
+**AND OVERLAP IS NOT THE CAUSE.** 2,635 losing trades collapse to 1,012 events — a **2.60 replica ratio
+against the primary's 5.33** — with 60.3% of events charged to more than one member. The event count is
+genuine, not a replica count, so the prune target is quality rather than co-firing.
+
+The mechanism is visible in two correlations: `Spearman(solo_pf, in-book trades) = 0.39` but
+`Spearman(solo_pf, in-book loss events) = 0.17`. **High-PF members trade more without proportionally more
+loss events.**
+
+### 11h. THE PRUNE, AND THE SPLIT-HALF CHECK THAT DISCIPLINED IT
+
+Two rankings were available — standalone PF from the scan, and in-book net per loss event. **The second is
+in-sample and unpriced, which is the shape that produced a selector worse than random earlier in this
+project**, so it was split-half tested before being trusted.
+
+**The contribution ranking persists** — `Spearman(npe_A, npe_B) = 0.2228, p = 5.4e-6` — unlike the F1 reach
+ratio at -0.064. **But the top-10 slice goes NEGATIVE out of sample**, at -$17.30 median half-B npe against
+the population's +$17.00. And **PF ranking beats contribution ranking at every matched size out of sample**,
+because PF is measured by the scan on a different population than the book.
+
+| arm | sigs | events | PF | margin | worst day | net | npe | -wks | days |
+|---|---|---|---|---|---|---|---|---|---|
+| CONTRIB top 10 | 10 | 42 | 4.34 | **17.79** | -$370 | $12,842 | $306 | **0** | 116 |
+| CONTRIB top 25 | 25 | 92 | 3.41 | 15.86 | -$1,104 | $26,825 | $292 | 2 | 118 |
+| CONTRIB top 50 | 50 | 184 | 3.51 | 16.75 | -$1,250 | $55,203 | $300 | **0** | 125 |
+| PF>=20 | 34 | 189 | 2.27 | 12.73 | -$1,006 | $33,251 | $176 | 2 | 124 |
+| CONTRIB top 100 | 100 | 396 | 3.11 | 16.10 | -$1,578 | $106,198 | $268 | 1 | 126 |
+| PF>=15 | 124 | 452 | 2.12 | 11.35 | -$2,169 | $89,078 | $197 | 2 | 127 |
+| CONTRIB top 200 | 200 | 621 | 2.71 | 14.38 | -$2,463 | $169,254 | $273 | 1 | 126 |
+| PF>=10 | 408 | 794 | 1.93 | 9.86 | -$2,904 | $156,687 | $197 | 4 | 127 |
+| FULL 755 | 755 | 1,012 | 1.70 | 8.09 | -$2,776 | $166,255 | $164 | 4 | 127 |
+
+**Top 10 and top 50 are the only arms with zero losing weeks, and top 10 carries exactly 42 loss events — the
+same as the entire primary book.** But the split-half says the extreme slice does not hold, so **top 50 is
+the strongest defensible arm.**
+
+**And July splits the two rankings.** All three PF-ladder arms are negative in July (-$363, -$1,239,
+-$1,073); every contribution arm is positive (+$263 to +$5,056). **July is the primary's best month and the
+only genuine signal-layer holdout.**
+
+### 11i. THE TRADE-MANAGEMENT SWEEP — THE ATTRIBUTION TESTED RATHER THAN INFERRED
+
+The margin verdict after the prune was "partly size, mostly family" — 9.7 points bought by shrinking, 15.3
+points remaining. **That attribution was untested, and the five trade-management constants had been swept on
+a depth-3+ book at cap 21, never on a depth-1 book at cap 6.** The payoff ratio was named as the binding
+constraint, so the sweep aimed at it.
+
+**THE PREMISE THAT MOTIVATED THE RUN WAS REFUTED FIRST, WHICH IS THE RIGHT ORDER.** The hypothesis was that
+Book B's winners never run — that every exit is at the break-even lock and `LF` never fires because a depth-1
+book cannot reach `tiers >= 3`. **False.** Exit mix is **72.1% BE at $19.51 / 12.8% LF at $69.81 / 14.8% SL**
+against the primary's 78.3% / 17.7% / **3.8%**. Winners do run.
+
+**And the payoff gap is not truncation.** Average loss is nearly identical — $90.18 against $94.06. The
+difference is entirely on the win side and decomposes into two: **an SL rate of 14.8% against 3.8% (3.9x)**
+and **an LF mean of $69.81 against $174.85 (2.5x lower)**. More stop-outs, and the trails that do run capture
+less.
+
+**THE PAYOFF RATIO MOVES AND IT BUYS NOTHING.** `BE_TRIG_FRAC 2.0` takes it from 0.347 to 0.522 — a 50%
+improvement — and it is the worst row in the table at margin 10.27, 467 loss events and PF 1.65.
+`STEP_PCT 0.60` reaches 0.510 at margin 9.79. **Every setting that improves the ratio converts winners into
+stop-outs faster than into runners**, SL share going 10% -> 19% and 10% -> 29%. Tightening is symmetric:
+`STEP_PCT 0.15` nearly doubles LF share to 30.4% and drops the margin to 10.87.
+
+**The baseline is the maximum of the margin surface in every direction tested. Eighteen settings, five
+constants, both directions. Nothing beats 16.75.**
+
+**And `LF_TIER_MIN` is inert.** At 1, 2 and 3 the net, events, PF and margin are identical to the cent at
+$55,203.40; only the BE/LF label moves, with LF share running 14.9% -> 26.3% -> 90.9%. **The trail already
+engages at `tiers >= lag + 1`; the `tiers < 3` literal only decides which bucket a completed trade is filed
+under.** That closes the most direct fix anyone proposed, on a measurement rather than an argument.
+
+### 11j. BOOK B CLOSES: MOSTLY FAMILY, PROVEN
+
+The prune buys 9.7 points of margin. **The remaining 15.3-point gap to the primary's 33.07 is structural and
+it is not the exit logic** — the trade management is already at its margin-maximising value on a depth-1 book
+at cap 6, which is the same place it landed on a depth-3+ book at cap 21.
+
+**It is the entry population.** A 14.8% stop-out rate against 3.8%, and LF capturing 2.5x less. **ONE SIGNAL
+FIRING ON A BAR IS A WORSE BAR THAN THREE SIGNALS AGREEING — WHICH IS THE d2->d3 CLIFF ARRIVED AT FROM THE
+OPPOSITE DIRECTION.** The depth thesis has now been confirmed by building the anti-system and watching it
+underperform, which is a stronger form of evidence than the original measurement.
+
+**Not adopted.** On the operator's ordering, adding Book B buys **19% more money for 438% more loss events** —
+$55,203 and 184 events against $284,974 and 42.
+
+**One property of B is worth keeping.** It accumulates evidence roughly **nine times faster** than A: 1,965
+entry bars and 184 loss events against A's 973 and 42, which is 11 bars per event against 23. **A poor book
+and a good sensor** — thin margin, high frequency, trading bars A never sees. If the market shifts, B shows
+it first. Worth running on demo alongside as a leading indicator; not worth running for money.
+
+### 11k. COVERAGE IS CLOSED ON EVERY FAMILY — IT IS A SELECTIVITY CEILING
+
+The density control — does a mask reach more permitted episodes than the same number of **random** available
+bars — was built for this question and answered it at both ends of the selectivity axis.
+
+| population | density control |
+|---|---|
+| F3, F9, F4, F2, F11 as unions | ALL at or below random |
+| 43 PF>=4 members individually | 4 pass, **all in one window** (Thu 10:00), union 23 of 40 summed |
+| F13 tight percentiles p95-p99 | 0 of 15 pass; `Micro_Hurst:hi@p99` at **0.65** |
+| B-strict composed (4 F9) | 1.71 on the mask — but $93 per event and 8 losing weeks in 25 days |
+| B-full composed (103 signals) | 0.73 |
+| F1 members, k>=10 | **1.19 / 1.28 across halves — REPLICATES** |
+| F1 ratio-selected | **ANTI-PREDICTIVE, Spearman -0.064** |
+| F1 composed, unbiased | 1.01 |
+| F1 composed, executed | 0.94 |
+
+**F1 is the only population ever to beat the control at the median** — 1.092 on 748 members with 395 beating
+it, against ~0.6 and 4-of-43 for every state family. **And it scales with k:** k<=3 at 0.782 with 18%
+beating, k>=10 at 1.141 with 61%, **Spearman(k, ratio) = 0.185 at p = 3.4e-7.** At short lags the pair is
+effectively a same-bar conjunction and fails exactly as state masks do; by k=10-15 it stops tracking any
+single bar's state. **The control had only ever seen state masks, and F1 is the first non-state grammar it
+was given.**
+
+**But the population effect survives neither selection nor composition.** Reach efficiency does not persist
+across halves at all, and every top slice does *worse* out of sample than the population it was drawn from.
+The unbiased composed arm fails at 1.01, and the executed book at 0.94 once admission, the depth floor and
+the jar reduce 1,668 mask bars to 758 entry bars.
+
+**AND THE FIGURE THAT SETTLES IT: all 29,948 available bars together reach 491 of 498 UP and 480 of 486 DOWN.
+98% of the permitted landscape is reachable by being present on almost every bar.** Episode coverage is a
+near-linear function of how many bars you fire on. **The F0 ceiling of 101/91 was never a reach limit — it is
+a selectivity consequence.**
+
+Selectivity-adjusted, the primary is in a different class: **41.1 episodes per 1,000 bars against F3's 18.7,
+F9's 21.4 and F11's 19.2 — twice the best alternative.**
+
+**Coverage should not be re-opened without a family whose grammar is neither state-based nor pair-based, and
+no such family exists in this project.**
+
+### 11l. THE GAP FILLERS — DEFINED, SCORED, NULLED, AND A BUILD ITEM RETIRED
+
+BOOK-50 was **48 triples + 2 sequential + 3 singles = 53 members** in a file named for 50. The three singles
+were implemented as hardcoded gap-fill paths rather than CSV rows, which is why the file shows no
+single-condition entries and why every "50-signal book" figure in this project was really 53.
+
+**Their definitions were written down for the first time** (`conviction.py` L51-56, firing at
+`portfolio_simulation_engine.py` L300-322). Common gate `ADX_Value >= 15 AND Volume >= 300` — **a tick gate,
+not the book's `Volume > 50` eligibility gate** — admitting 6.87% of bars, plus `len(active_trades) == 0`:
+**they fire only when the book is completely flat.** Priority is a strict elif chain, D2D -> HURST -> FB.
+
+    GAP_D2D    D2D_Signal != 0 AND ADX >= 30 AND Micro_Hurst >= p30    2.0 lots, LOCK_FRAC 1.0,  36 bars
+    GAP_HURST  Micro_Hurst > p97 AND D2D_Trend_Dir == +1               1.0 lot,  GAP_LOCK 3.0, 170 bars
+    GAP_FB     Micro_FailedBreak > p90 AND D2D_Trend_Dir == -1         1.0 lot,  GAP_LOCK 3.0, 573 bars
+
+Scored at 1.0 lot: **GAP_HURST 55 trades / PF 6.48 / $3,036 / 7 events**; **GAP_FB 355 / PF 5.29 / $19,879 /
+32 events / zero losing weeks across 103 trading days**; GAP_D2D 20 / PF 1.83 / $506. All three together: 430
+trades, PF 5.04, $23,421, 41 events. **At $54-56 per trade they beat the book's $49.34.**
+
+**Against 5,160 scanned singles, GAP_HURST and GAP_FB sit in the top 0.1%** — and the highest-PF row in the
+entire F13 scan is `Micro_Hurst:hi@p99 LONG` at PF 8.199, **the same variable at a marginally stricter
+percentile, found twice by different routes.**
+
+**Both clear their null at p = 0.000 on profit factor** against draws of the same firing count from the same
+gate population. GAP_FB clears on net as well; **GAP_HURST does not, at p = 0.214 — its edge is per-trade
+quality, not aggregate.** A rarity-matched null could not be built: pool pass rates run 4.82%-18.62% and the
+fillers fire on 0.02-0.32%, two orders of magnitude apart.
+
+**They do not belong in the book.** Adding them takes loss events 42 -> 83 and degrades all three OOS
+windows, while improving worst day and losing days because they trade on five days the book never touches.
+**And they cleared their nulls on profit factor, not on coverage — excellent entries on bars that are not
+scarce, reaching no terrain the primary misses.** That distinction was conflated once and is now separated by
+measurement.
+
+**AND BUILD ITEM B1 IS RETIRED.** `DOT.cs`, 11,673 lines, grepped exhaustively: **gap filling does not exist
+in the EA.** No `HURST_GAP`, no `GAP_LOCK`, no `D2D_GAP_LOTS`, no enter-when-flat logic, and the EA's
+percentile calls are p80/p20 only. **The L302/L306 lot defect cannot affect a live deployment because the
+mechanism is not deployed.** It remains a simulator correctness note for anyone reading absolute-survival
+figures.
+
+### 11m. A THIRD PATH-RESOLUTION DEFECT
+
+`sys.path` resolved `adm_engine` to the repo copy at `dot_master_discovery/engine/` rather than the working
+copy, so an `LF_TIER_MIN` edit went to a file that was not being imported. **Diffed before proceeding —
+otherwise byte-identical, so every prior Book B figure is unaffected.** Both copies synced.
+
+**Third defect of this shape in the project: a thing resolving somewhere other than where it was written.**
+Same ancestor as the sidecar fallthrough and the swept-spec instruction, and it is spec §0.3 R2 — an
+instruction or a reference that resolves somewhere the author did not intend.
+
 ### 14. STATUS
 
 The Whole DOT is specified and the research is closed. What remains is engineering: S8 cannot yet score
