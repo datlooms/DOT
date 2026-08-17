@@ -109,6 +109,28 @@ a depth floor, a per-tier gate stack, or an admission rule. A book designed arou
 here without them, so the figures are a like-for-like comparison against BOOK-50 and NOT the
 book's own configured performance.
 
+## THE TWO BOOK COMMANDS
+
+**BOOK-50 — the incumbent and the engine canary. Run this first every session.**
+
+    python master.py --data data --workers 14 --out discovery\full --stage S8 --book book50_signals.csv
+
+    3,101 trades | WR 90.6% | PF 4.81 | net $97,675
+    folds 6/6 min-fold PF 5.05 | OOS PF 2.95 net $22,688
+
+**THE WHOLE DOT — the adopted system, 297 F0 triples.**
+
+    python master.py --data data --workers 14 --out discovery\full --stage S8 --book whole_dot_signals.csv
+
+    5,776 trades | WR 96.1% | PF 14.53 | net $284,974
+    42 LOSS EVENTS on 35 days | worst day -$346.60 | worst bar -$1,224.00
+    0 losing weeks of 26 | folds 6/6 min-fold PF 11.00
+    OOS (final third) PF 9.78 net $73,851
+
+Both at 1.0 lot. `whole_dot_config.json` must sit in the same directory as
+`whole_dot_signals.csv` — routing is on the config, not the book name, and a missing
+config aborts rather than silently scoring the sacred path.
+
 ## Scoring a book you assembled yourself
 
 `python score_book.py --book <your_book.csv> --data <frame> --out <dir>`
