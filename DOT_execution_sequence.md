@@ -171,7 +171,7 @@
 - [x] **19. THE EIGHT-PHASE QUANT BRIEF — ALL EIGHT CLOSED.** Phase 0: all headlines reproduce, six fixes verified. Phase 1: pricing floor corrected; 60 signals at E<1, 25 orderable, all LONG. Phase 2: the walk-forward decay is REGIME, not dilution — fixed-population decay 0.6738 -> 0.4882 -> 0.3557. Phase 3: two real tiers (35 at zero, 25 orderable); q<0.10 selects exactly the 35. Phase 4: depth and duration are ONE AXIS — 0 of 28 cells clear p<=0.05, min p=0.335; regime rotation refuted at constant 0.21pp occupancy spread while the book rate fell 42%. Phase 5: coverage saturates; **F5 and F8 CLOSED PERMANENTLY** (F8 is `Slope_EMA_ST > Slope_EMA_LT` — one must always exceed the other). Phase 6 skipped, answered by Phase 4. Phase 7: the tick gate is REDUNDANT against ATR>=20 (98.3% overlap; dropping it cost 14 trades and +$456). Phase 8: **THE ADAPTIVE CONVERGENCE ENGINE IS DEAD THREE WAYS** — raw condition depth is never below 8, the intersection curve collapses geometrically at 3-4 descriptors, and the whole field at triple+ is PF 1.29 with a -$6,230 day.
   **PERMANENT NEGATIVES — DO NOT RE-OPEN:** F5/F8 structural; stacked descriptor states dead on both selection rules; single-descriptor gates failing the cross-book check; the tick gate redundant; the adaptive engine dead.
 
-- [x] **20. THE BOOK LINEAGE — BOOK-50 -> OPTION-B -> THE UNION -> THE WHOLE DOT.** BOOK-50: 3,101 trades, WR 90.6%, PF 4.81, net $97,675, folds 6/6, OOS PF 2.95 — the incumbent and the canary. OPTION-B: 120 signals with the p90 gate stack, 1,812 trades, 27 loss events, PF 16.29. **THE FUSION:** the union of BOOK-50, the 60-priced, OPTION-B and S0-120 gives **299 distinct signals from 385 (193L/106S, 1.82:1)**, with S0-120 contributing **111 unique at 1-8% overlap with every prior selection** — four different objectives, four different error modes, and that diversity is the finding. The 35-q set contributes nothing unique and must stop being counted as a source.
+- [x] **20. THE BOOK LINEAGE — BOOK-50 -> OPTION-B -> THE UNION -> THE WHOLE DOT.** BOOK-50: 3,101 trades, WR 90.6%, PF 4.81, net $97,675, folds 6/6, OOS PF 2.95 — the incumbent and the canary. OPTION-B: 120 signals with the p90 gate stack, 1,812 trades, 27 loss events, PF 16.29. **THE FUSION:** the union of BOOK-50, the 60-priced, OPTION-B and S0-120 gives **299 distinct signals from 385 (193L/106S, 1.82:1)** — later reduced to **297 (191L/106S, 1.80:1)** at step 28a, with S0-120 contributing **111 unique at 1-8% overlap with every prior selection** — four different objectives, four different error modes, and that diversity is the finding. The 35-q set contributes nothing unique and must stop being counted as a source.
   **AND EVERY LARGE DRAW FROM THE UNION BEATS OPTION B BY 55-87%.** The union is the achievement, not any particular selection from it.
 
 - [x] **21. DEFECT ONE — THE BAR IS THE RISK UNIT, NOT THE TRADE. FOUND BY THE OPERATOR ASKING FOR ALL 48 LOSS ROWS PRINTED INDIVIDUALLY.** 48 losses collapsed to **SEVEN bar-events** — the jar had admitted 4-9 lots of the same losing trade at identical ATR, identical price, identical exit bar. Every loss rate, CI and PF in the project was computed on replicas. **ALL LOSS STATISTICS ARE NOW STATED AS EVENTS, AND EVERY RATIO CARRIES ITS EVENT COUNT.** Option B's 27 events is the only well-sampled figure in the study; the 7-event books cannot be audited inside a year.
@@ -186,7 +186,7 @@
 - [x] **24. THE DERIVATIONS THAT SURVIVED ATTACK.**
   **THE d2->d3 CLIFF, MEASURED INDEPENDENTLY IN BOTH DIRECTIONS** on the ungated field (floor=1, ATR>=20): LONG d2 16.55% -> d3 8.75%; SHORT d2 12.54% -> d3 5.40%. Depth 1 and 2 are indistinguishable; three is a different regime. The 16-cell floor grid confirms it — **any cell containing a 2 gives 3.5x to 7x the loss events.** Cliff below, plateau above. The best-evidenced constant in the stack, and it is the operator's original triple-triple.
   **`Micro_Hurst > p90` CLEARED TWO INDEPENDENT NULLS** — p = 0.000 at SHORT d3 (0 of 30 rarity-matched alternatives strictly better) and p = 0.022 at LONG d3 (1 of 45). **THE ONLY CONDITION IN THIS PROJECT EVER TO CLEAR ONE.** For contrast: `Bar_Range > p95` sits at p = 0.371, the median of its own null; `VolOfVol > p20` at p = 0.690 with 40 of 58 alternatives better.
-  **`ADX >= 15` IS STRUCTURAL, NOT TUNED:** the threshold oracle builds its rolling percentile ring only from bars where `ADX >= 15`, so every threshold in all 299 signals is calibrated on that population. Trading outside it fires thresholds against a distribution they were never computed from. **THE SAME NUMBER TWICE.**
+  **`ADX >= 15` IS STRUCTURAL, NOT TUNED:** the threshold oracle builds its rolling percentile ring only from bars where `ADX >= 15`, so every threshold in all 297 signals is calibrated on that population. Trading outside it fires thresholds against a distribution they were never computed from. **THE SAME NUMBER TWICE.**
   **`ATR_1M >= 20` IS A KNEE, NOT AN OPTIMUM:** the curve is monotone in both directions, so it is a risk dial. 15->20 buys 13 loss events for $1,355 (9.6 per $1,000); 20->25 buys 12 for $4,467 (2.7 per $1,000). **THE PRICE OF AN EVENT JUMPS 3.5x IMMEDIATELY ABOVE 20.**
 
 - [x] **25. THE CAP CURVE, 18 TO 96 — BOTH BOUNDARIES AT 22, AND IT IS A CLIFF.** First losing week: cap 22. Worst day first past -$150: cap 22. **THE SAME VALUE, AND THE BREAK IS ONE SLOT WIDE** — worst day -$104.0 -> -$277.5 and worst week +$16.6 -> -$110.9 for a single extra slot; 26 consecutive positive weeks becomes 25. **CAP 21 IS THE LAST SAFE VALUE, ADOPTED.** The cap stops binding entirely at 57 at-risk positions.
@@ -204,15 +204,143 @@
 
 - [x] **27. WHAT THE SYSTEM IS BLIND TO — CHARACTERISED FOR THE FIRST TIME.** Traded episodes last 6-9 bars, 180 points, ATR 30-32. Unreached episodes last **2 bars**, 132 points, ATR 24. **ADX AND EFFICIENCY ARE INDISTINGUISHABLE BETWEEN THEM** — it is not a trend-quality filter, it is a DURATION filter. Session distribution is proportional, not selective; the blindness is structural, not temporal. **THE MECHANISM IS THE DEPTH FLOOR: CONCURRENCE TAKES TIME TO FORM.** A 2-bar move ends before three independent patterns can agree it is real. This is a property of concurrence as an entry mechanism, not a tunable parameter — to be accepted and documented, not engineered around.
 
-- [x] **28. THE WHOLE DOT — ADOPTED CONFIGURATION.** Specification at `foundational_documents/The_Whole_DOT_spec.txt` (1,293 lines, sha `21c611512e04`), which supersedes `The_Whole_DOT_rule_master_spec.txt` and `_2`.
-  **299 signals · LONG depth >= 3, SHORT depth >= 3 · FLOORED admission · `Micro_Hurst > p90` at LONG d3 AND SHORT d3 · `Micro_FailedBreak > p20 AND AT_Slope_ST > p90` at LONG d4 · `Micro_FailedBreak > p20` at LONG d5+ · SHORT d4/d5+ FREE · `ATR_1M >= 20` global · `MAX_POSITIONS 21` at-risk only · conviction `Micro_Hurst x2.0` and `D2D-agree x2.0`, `recentfb_sizing = FALSE`.**
-  At 1.0 lot: 5,799 trades, WR 96.09%, PF 14.31, net $285,356.50, **43 loss events on 36 days**, worst bar -$1,224.00, worst day -$346.60, worst intraday -$2,819.70, **0 losing weeks of 26**, 119 of 132 days, durability margin 32.91 points. **Linearity proved by direct re-run, not asserted** — 1.0 and 0.30 identical on every row for entry bar, exit bar, prices, exit type, depth and stop distance; lots ratio uniformly 0.300; drift $1.65 (0.0019%), engine rounding. **1.0 LOT IS NOT DEPLOYABLE — its ceiling is 126% of the FTMO daily.** At 0.30: net $85,607, worst day -$104.00, ceiling $1,890 = 37.8% of the $5,000 daily.
+- [x] **28. THE WHOLE DOT — ADOPTED CONFIGURATION, 297 SIGNALS.** Specification at
+  `foundational_documents/The_Whole_DOT_spec_v2.txt` (1,524 lines, sha `1d0323b1ecfa`). It supersedes
+  `The_Whole_DOT_spec.txt`, `The_Whole_DOT_rule_master_spec.txt` and `_2`, all three now in
+  `foundational_documents/former/`.
+  **297 signals — ALL F0 TRIPLES, ONE GRAMMAR · LONG depth >= 3, SHORT depth >= 3 · FLOORED admission ·
+  `Micro_Hurst > p90` at LONG d3 AND SHORT d3 · `Micro_FailedBreak > p20 AND AT_Slope_ST > p90` at LONG d4 ·
+  `Micro_FailedBreak > p20` at LONG d5+ · SHORT d4/d5+ FREE · `ATR_1M >= 20` global · `MAX_POSITIONS 21`
+  counting at-risk positions only · conviction `Micro_Hurst x2.0` and `D2D-agree x2.0`, `recentfb_sizing =
+  FALSE`.**
+  At 1.0 lot: **5,776 trades, 5,552 winners, 224 losers, WR 96.12%, PF 14.53, net $284,974.00** — gross
+  profit $306,043.80, gross loss $21,069.80, average win $55.123, average loss $94.062, win/loss ratio
+  0.5860, expectancy $49.338, largest win $1,167.00, largest loss -$297.50, longest streaks 697 / 19.
+  **42 LOSS EVENTS on 35 distinct days across 973 ENTRY BARS.** Worst bar -$1,224.00, worst day -$346.60,
+  worst intraday -$2,819.70 with p50 -$295.45 / p90 -$944.65 / p99 -$1,784.60, 11 days below -$1,000, one
+  below -$2,500, none below -$5,000. **0 losing weeks of 26**, 112 of 119 days-with-a-trade positive against
+  132 trading days in the frame. Folds 6/6 at 14 trading days each, min-fold PF 11.0. **OOS final third
+  (2026.05.25 -> 2026.07.21) PF 9.78, net $73,851** — event-basis rates 3.00 / 9.30 / 3.67. **Break-even WR
+  63.05% against 96.12% actual — a 33.07-point MARGIN**; net at WR -1/-3/-5 gives $276,321 / $259,165 /
+  $241,860. Peak 42 open positions, **21 at-risk**, 42.0 lots, ceiling $6,300. Event sizes 3:5 4:12 5:8 6:9
+  7:2 8:2 9:3 10:1. Population 6,206 FULL rows -> 5,776 BOOK-only, 430 gap fillers excluded.
+  **Linearity proved by direct re-run on the 297 book, not asserted** — path identical on all 5,776 rows,
+  drift 0.0016%. **1.0 LOT IS NOT DEPLOYABLE — its ceiling is 126% of the FTMO daily.** At 0.30 lot the
+  ceiling is $1,890 = 37.8% of the $5,000 daily.
+
+- [x] **28a. THE TWO F1 SEQUENTIAL PAIRS DROPPED — 299 -> 297.** `Sqz_Val:hi ->13-> Micro_OrderFlowDelta:lo`
+  (35 trades, PF 5.90, 6/6 folds) and `ADX_Rising:==0 ->8-> D2D_DirStep:==-1` (42 trades, PF 4.75, 6/6
+  folds), both LONG, both inherited from BOOK-50 lines 50-51 and carried through every fusion because the
+  union filtered by nothing. **THEY WERE NOT ORPHANS — both carry full statistics in
+  `results_F1_sequential_temporal`.** In-book they were 12 trades and $476.2 combined, 0.21% by count and
+  0.17% by net.
+  **REMOVAL IS BETTER ON EVERY AXIS THE OPERATOR RANKS:** loss events 43 -> 42, event-days 36 -> 35,
+  losing-bar rate 4.40% -> 4.32%, PF 14.31 -> 14.53 — and **identical to the cent on worst bar, worst day,
+  worst intraday, losing days, losing weeks, worst week and days traded.** Cost $382.50, which is 0.13% of
+  net and a lot-size dial. Their net depth contribution is about -$94, so **removing them very slightly
+  helped the rest of the book.** The orphan count is unchanged at 14 (6 LONG, 8 SHORT) and the scan ratio
+  moves 1.82:1 -> **1.80:1** because both drops were LONG.
+  **AND THE LARGER PRIZE IS STRUCTURAL:** the F1 path leaves the configured scoring path entirely, so
+  `score_g.build_book` writes nothing back into the frame and **THE FRAME-OBJECT TRAP IS NOW IMPOSSIBLE
+  RATHER THAN AVOIDED.** That defect cost 11 trades and produced a plausible wrong answer rather than an
+  error. `sequential_temporal.pair_mask` and `anchor_array(df,'ST_Flip')` are no longer needed here, build
+  item B3 is retired, and **every row of the listing is now the same three-condition shape — checkable by a
+  build script rather than by eye.** `_assert_book_grammar` aborts a configured book containing any
+  non-triple.
+
+- [x] **28b. JUNE INVESTIGATED — THE FLATNESS HYPOTHESIS IS REFUTED AND NO GATE WAS FITTED.** June carries
+  **14 of the 42 loss events on 164 of 973 bar-events**, PF 5.34, and it is the weak split in every fold and
+  walk-forward column. **BUT JUNE IS NOT FLAT — IT IS THE SECOND-BUSIEST MONTH OF SEVEN:** ATR 11.12,
+  Volume 94 and Bar_Range 11.0 all rank 6 of 7, TickIntensity 6 of 7, ADX 22.61 ranks 4 of 7. All three
+  operator hypotheses point the wrong way.
+  **AND THE COUNTEREXAMPLE IS DECISIVE: MAY IS THE FLATTEST MONTH IN THE FRAME — lowest ATR 9.07, lowest
+  Volume 67, fewest eligible bars 12.2% — AND MAY IS THE BEST MONTH AT PF 60.64 ON 2 LOSS EVENTS.**
+  June's losers are separated from June's winners by the same variables in the same direction by the same
+  magnitudes as everywhere else. The elevation is **uniform** — BASE 2.65x, MOM 1.56x, LONG 2.55x, SHORT
+  1.80x — which is the signature of a month, not of a bar-level state. `Bars_Since_Flip` appeared to
+  separate at 4.04x and collapsed on inspection: the fourteen values are bimodal (0,3,3,7,14,21,28,81,111,
+  114,188,286,287,359), seven under 30 bars and seven over 80, and half the losses are on fresh flips.
+  W23 is four days, not one, with 3 of its 6 events on 2026.06.05 and two of those on consecutive bars at
+  22:52 and 22:53 — **one move, two minutes, 19 trades, -$1,290 combined, and it entangles the "weak d9 /
+  strong d10" contrast from the ladder.**
+  **TRIAL COUNT ZERO. NO GATE PROPOSED.** Eleven variables at bar level, six at event level, two path
+  controls and two direction controls, on a base of fourteen events. `Efficiency_Ratio < p80` was the only
+  free candidate matching the direction and it refuses 31% of all winning events. **FOURTEEN EVENTS CANNOT
+  SUPPORT A THRESHOLD, AND THE NEXT VARIABLE TESTED WOULD EVENTUALLY SEPARATE THEM BY CHANCE.** June is a
+  documented limitation in spec §9.1, not a defect: it remains profitable at net +$32,591, the fifth-best
+  month of seven, and it never produced a losing week.
+
+- [x] **28c. THE WEAK DEPTH CELLS ARE MOSTLY SMALL CELLS, AND THE TIER CAP IS WHY THEY CANNOT BE TARGETED.**
+  The breakdown report exposed a strongly non-monotone LONG ladder — PF 7.20 / 5.10 / 10.59 / **3.26** /
+  58.46 / 9.32 / **1.70** / 23.96 / inf at depths 3 through 11+. **BUT `tier = min(depth, 5)` MERGES LONG
+  DEPTHS 5 THROUGH 21 INTO ONE GATE CELL — 3,559 trades, 86.7% of the LONG book, all gated by
+  `FailedBreak > p20` alone.** So d6 at PF 3.26 and d9 at PF 1.70 are gated identically to d7 at 58.46 and
+  d11+ at infinity. **THE TIER STACK IS STRUCTURALLY INCAPABLE OF DISTINGUISHING THEM, AND `min(depth,5)`
+  APPEARS NOWHERE WITH A DERIVATION — IT IS INHERITED FROM OPTION B AND IS NOW LABELLED AS SUCH IN SPEC
+  §3.3.**
+  **AND THREE OF THE FIVE WEAK CELLS CANNOT BE READ AS RATES AT ALL.** LONG d3, LONG d9 and SHORT d7 rest on
+  3, 3 and 1 loss events. **d9's PF 1.70 becomes 2.99 on one event fewer; SHORT d7 becomes infinite on
+  zero.** Only LONG d6 has a base worth arguing about at nine events — and 5 of those 9 are in June.
+  The neighbour comparison found **nothing to gate on**: d6 against d7, gated identically and 18x apart,
+  matches within noise on ATR, ADX, Hurst, FractalDim, VolOfVol, EffRatio, bars-since-flip, session hour and
+  momentum share. The only difference is 54 stop-outs against 7, **which is the outcome restated, not a
+  cause.**
+  **MOVING THE TIER CAP WAS CONSIDERED AND DECLINED ON ARITHMETIC:** opening d6 and d9 as their own cells is
+  2 cells x 11 library relocations = **22 trials against 12 events, and Bonferroni needs p < 0.0023.**
+  Nothing in this project has ever cleared that. **A GATE FITTED TO d6 WOULD BE A JUNE FILTER WEARING A
+  DEPTH COSTUME, FITTED ON FIVE EVENTS.**
+  And one ladder figure was checked before anything was built on it: **SHORT d11+ is thirteen replicas of a
+  single trade** — all entering 2026.02.23 at 16:47 and exiting 18:20, 567.1 points over 93 bars, $1,128.30
+  each. **Not a 14x per-trade edge. One bar.** Same caution applies to SHORT d8, d9 and d10.
+
+- [x] **28d. THE ENTRY-BAR FUNNEL — THE CLEAREST STATEMENT OF WHAT THE SYSTEM IS.**
+  177,251 frame bars -> 170,351 post-warmup -> **36,526 at `ATR_1M >= 20` (20.6%)** -> **973 ENTRY BARS.**
+  That is 0.5% of the frame and **2.7% of the eligible population** — 8.2 entry bars and 49 trades per
+  trading day, $293 of net per entry bar. **`ATR_1M >= 20` IS THE LARGEST FILTER IN THE SYSTEM AND IT
+  REMOVES 76% OF REACHABLE TERRAIN BEFORE ANY SIGNAL IS CONSULTED.** By contrast `FailedBreak > p20` admits
+  80.19% of bars and is barely a gate at all.
+  **AND EVERY ATTEMPT TO WIDEN THE FUNNEL FAILED, MEASURED:** the 500-signal coverage book gave 285 loss
+  events, PF 1.78 and a -$4,352 intraday floor; the strictly-gated solo/dual path found strictness and
+  coverage **anti-correlated**, with the two strictest gates in the library (0.489% and 0.684% pass rate)
+  reaching **zero** new episodes. **THE 0.5% IS THE EDGE, NOT A SHORTFALL — CONCURRENCE TAKES TIME TO FORM.**
 
 - [x] **29. THE FINDING THAT REFRAMES THE PROJECT.** Across **60 complete compositions and three walk-forward windows, every single one is profitable** — field net $12,788-$18,532, survivor net $14,987-$19,119, spread 25-30%. And **24 random 299-signal draws from the field are all profitable out of sample.** **THE SIGNALS CARRY IT. THE COMPOSITION IS A PREFERENCE, AND SELECTION ABOVE A COMPETENT SCREEN IS WORTH SURPRISINGLY LITTLE.** This is the most important measurement in the project: it means the system does not depend on any clever choice being right.
 
-- [ ] **30. S8 CANNOT SCORE THE WHOLE DOT — THIS BLOCKS LOCAL DETERMINISTIC VERIFICATION.** `master.py` L1005 hardcodes `build_conviction(df, True, True, True, d2d_conviction=True, d2d_gap=True)` — the second `True` is `recentFB`, which is now FALSE. S8 also reads no depth floor, no per-tier gate stack and no admission rule: **it scores at cap 6, 1.0 lot, flat rules.** The operator needs `python master.py --data data --workers 14 --out discovery\full --stage S8 --book whole_dot_signals.csv` to reproduce the spec's figures at 1.0 lot. **PRESERVE THE BOOK-50 CANARY** — it keys on the exact basename `book50_signals.csv` (L1027) and asserts `$92,347 / 2,698 tr — engine intact`; any other filename skips it, so BOOK-50 stays the per-session engine check.
+- [x] **30. S8 SCORES THE WHOLE DOT — THE DETERMINISTIC LOCAL PATHWAY EXISTS AND THE OPERATOR HAS RUN IT.**
 
-- [ ] **31. `whole_dot_signals.csv` TO BE PRODUCED** — 299 rows, columns `trigger,direction,signal_def`, from §4 of `The_Whole_DOT_spec.txt`. Two of the 299 are F1 sequential pairs (`A ->k-> B`) and must not be mis-parsed as triples.
+      python master.py --data data --workers 14 --out discovery\full --stage S8 --book whole_dot_signals.csv
+
+  Reproduces spec §6 to the cent on the operator's own machine in 37 seconds: 5,776 / 96.1% / 14.53 /
+  $284,974 / 42 events / 35 days / -$346.60 / -$1,224.00. **BOOK-50 unchanged at 3,101 / 90.6% / 4.81 /
+  $97,675 with the canary firing.** Determinism identical at 14 and 4 workers. Sacred five all match.
+  Delivered: `engine/adm_engine.py` (`6d1ed10a5f81`) — a FORK of the sacred engine implementing FLOORED
+  admission, the per-direction floor, the per-tier stack and a configurable `MAX_POSITIONS`, defaulting to
+  `CURRENT`/6/`None` so an unconfigured import behaves as sacred; `engine/swept_thresholds.py`
+  (`4356d2bb9973`) — mechanism-D percentiles at arbitrary levels by substituting `dt._D_SPEC` and calling the
+  sacred `compute_adaptive_thresholds`, so **the ring, eligibility mask, day-refresh and floor-index are
+  bit-identical to production by construction rather than by inspection**; `whole_dot_config.json` carrying
+  the rules with derivation labels inline; config-presence routing accepting both sidecar conventions; and
+  `_metrics_from_trades` shared by both paths **so folds and OOS cannot drift between BOOK-50 and a
+  configured book.**
+  **TWO GUARDS, BOTH AGAINST SILENT FAILURE:** a startup fork-parity assertion re-running `adm_engine` under
+  CURRENT against the sacred engine on the full frame and failing loudly on mismatch — **necessary because
+  the sacred admission path is duplicated verbatim inside the fork's `elif` branch, which is why parity holds
+  and is the landmine if sacred ever changes** — and config-not-found now aborting rather than falling
+  through, after the sidecar name mismatched during development and the Whole DOT **silently took the sacred
+  path and scored the wrong system with no error.**
+  **AND A FULL BREAKDOWN REPORT ON EVERY RUN:** weekly (26 ISO periods) and monthly (7) tables with trades,
+  wins, trade-losses, **loss EVENTS**, W/L ratio, WR, PF, net, LONG and SHORT counts and worst day; the depth
+  ladder per direction; gate admit/refuse rates for all five live gates; top 5 signals by net with the
+  ranking key stated; and the population and denominator lines named rather than implied. **THE PARITY SHA IS
+  NOW STABLE ACROSS MACHINES** — it was float-repr and column-order dependent, and `_canon_trade_sha()` fixes
+  it with an explicit ten-column list, an explicit sort and fixed 2dp formatting.
+  **AND THREE DEFECTS THE DEVELOPER FOUND BY RUNNING RATHER THAN READING:** the sidecar-name fallthrough; a
+  sliced frame against a full-length oracle; and the week counter using `exit_time[:8]`, a day-level slice
+  rather than an ISO week, which reported 7 weeks where the spec has 26. **All three fixed. The 430-trade
+  discrepancy that blocked acceptance for two turns was the FULL-versus-BOOK-only population — `master.py`'s
+  own `trades.csv` header states the distinction and nobody had read it.**
+
+- [x] **31. `whole_dot_signals.csv` BUILT AND VERIFIED — 297 rows.** Columns `trigger,direction,signal_def`, from §4 of `The_Whole_DOT_spec_v2.txt`. Verified mechanically at assembly: 297 rows, 191 LONG / 106 SHORT, trigger F0 throughout, **zero rows containing `->`, zero rows that are not a three-condition triple.** `_assert_book_grammar` aborts a configured book containing any non-triple.
 
 - [ ] **32. THE GAP-FILLER LOT DEFECT.** `portfolio_simulation_engine.py` L302 hardcodes `glots = 1.0` and L306 reads module constant `D2D_GAP_LOTS = 2.0`; neither reads `long_mult`/`short_mult`. At a 0.30 base, `GAP_HURST` (18 trades) and `GAP_FB` (131 trades) run **more than three times intended size**. They are excluded from the reported book so no figure above is affected, but a live deployment carries them at full size. **BUILD ITEM.**
 

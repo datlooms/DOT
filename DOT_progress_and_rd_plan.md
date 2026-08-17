@@ -1690,16 +1690,16 @@ not a tunable parameter — to be accepted and documented rather than engineered
 
 ### 11. THE ADOPTED SYSTEM
 
-`foundational_documents/The_Whole_DOT_spec.txt` — 1,293 lines, sha `21c611512e04`. It supersedes
+`foundational_documents/The_Whole_DOT_spec_v2.txt` — 1,524 lines, sha `1d0323b1ecfa`. It supersedes
 `The_Whole_DOT_rule_master_spec.txt` and `_2`, and both of those superseded
 `DOT_rule_master_spec_OPTION_B.txt`.
 
-**299 signals · LONG depth >= 3, SHORT depth >= 3 · FLOORED admission · `Micro_Hurst > p90` at LONG d3
+**297 signals, ALL F0 TRIPLES · LONG depth >= 3, SHORT depth >= 3 · FLOORED admission · `Micro_Hurst > p90` at LONG d3
 and SHORT d3 · `Micro_FailedBreak > p20 AND AT_Slope_ST > p90` at LONG d4 · `Micro_FailedBreak > p20` at
 LONG d5+ · SHORT d4 and d5+ FREE · `ATR_1M >= 20` global · `MAX_POSITIONS 21` counting at-risk positions
 only · conviction `Micro_Hurst x2.0` and `D2D-agree x2.0`, `recentfb_sizing = FALSE`.**
 
-At 1.0 lot: 5,799 trades, WR 96.09%, PF 14.31, net $285,356.50, **43 loss events on 36 days**, worst bar
+At 1.0 lot, as adopted at 297 signals: 5,776 trades, WR 96.12%, PF 14.53, net $284,974.00, **42 loss events on 35 days across 973 entry bars**, worst bar
 -$1,224.00, worst day -$346.60, worst intraday -$2,819.70, **zero losing weeks of 26**, 119 of 132 days
 traded, durability margin 32.91 points against a break-even win rate of 63.18%.
 
@@ -1744,6 +1744,192 @@ long they ran, moved the result around inside a band where every point works.
 - **Three defects have now been found by readers rather than by the analyst, and all three share a
   shape:** the specification described something the engine computed differently, or a story got attached
   to a number nobody traced. **Expect a fourth and read `§0.3` of the spec first.**
+
+### 11a. THE BOOK REDUCED TO 297 — THE TWO F1 SEQUENTIAL PAIRS DROPPED
+
+The operator asked why two of the 299 were not triples. Both entered with BOOK-50 at lines 50-51 and
+survived every fusion because the union filtered by nothing — `Sqz_Val:hi ->13-> Micro_OrderFlowDelta:lo`
+(35 trades, PF 5.90, 6/6 folds) and `ADX_Rising:==0 ->8-> D2D_DirStep:==-1` (42 trades, PF 4.75, 6/6 folds),
+both LONG, both `d2d confirm`. **THEY WERE NOT ORPHANS** — both carry full statistics in
+`results_F1_sequential_temporal`, so the orphan count stays at 14 (6 LONG, 8 SHORT) and only the scan ratio
+moves, 1.82:1 -> **1.80:1**, because both drops were LONG.
+
+In-book they were 12 trades and $476.2 combined — 0.21% by count, 0.17% by net.
+
+**REMOVAL IS BETTER ON EVERY AXIS THE OPERATOR RANKS AND IDENTICAL ON THE REST:**
+
+| | 299 | 297 |
+|---|---|---|
+| loss events | 43 | **42** |
+| event-days | 36 | **35** |
+| losing-bar rate | 4.40% | **4.32%** |
+| PF | 14.31 | **14.53** |
+| worst bar / day / intraday | -$1,224.0 / -$346.6 / -$2,819.7 | identical |
+| losing weeks / worst week / days traded | 0 / +$55.2 / 119 | identical |
+| net | $285,356.5 | $284,974.0 |
+
+Cost $382.50, which is 0.13% and a lot-size dial. **Their net depth contribution is about -$94, so removing
+them very slightly helped the rest of the book** — the orphan effect that made the six LONG BOOK-50 members
+cost $3,923 to remove while earning $2,649 does not repeat here.
+
+**AND THE LARGER PRIZE IS STRUCTURAL RATHER THAN NUMERICAL.** The F1 path leaves the configured scoring path
+entirely, so `score_g.build_book` writes nothing back into the frame and **the frame-object trap becomes
+impossible rather than avoided.** That defect cost 11 trades and produced a plausible wrong answer rather
+than an error. `sequential_temporal.pair_mask` and `anchor_array(df,'ST_Flip')` are no longer needed, build
+item B3 is retired, and **every row of the listing is now the same three-condition shape — verifiable by a
+build script rather than by eye.**
+
+### 11b. JUNE INVESTIGATED — THE FLATNESS HYPOTHESIS REFUTED, NO GATE FITTED
+
+June carries **14 of the 42 loss events on 164 of 973 bar-events**, PF 5.34, the book's worst day at
+-$346.60, and it is the weak split in every fold and walk-forward column. The operator's hypothesis was that
+the month is too flat and that some regime characteristic — insufficient momentum, ADX too high, ticks too
+low — should be factored into a global gate.
+
+**ALL THREE POINT THE WRONG WAY. JUNE IS THE SECOND-BUSIEST MONTH OF SEVEN.** ATR 11.12, Volume 94 and
+Bar_Range 11.0 all rank 6 of 7; TickIntensity 6 of 7; ADX 22.61 ranks 4 of 7, and May has a higher share of
+ADX>=30 bars. Bars at `ATR_1M >= 20` are 19.6% in June, second only to March's 40.7%.
+
+**AND THE COUNTEREXAMPLE IS DECISIVE. MAY IS THE FLATTEST MONTH IN THE FRAME — lowest ATR at 9.07, lowest
+Volume at 67, lowest Bar_Range at 8.5, fewest eligible bars at 12.2% — AND MAY IS THE BEST MONTH IN THE BOOK
+AT PF 60.64 ON TWO LOSS EVENTS.** Flatness is not the mechanism.
+
+At event level, June's losers are separated from June's winners by the same variables, in the same direction,
+by the same magnitudes as everywhere else. ATR ratio 0.96 against 0.82 elsewhere; ADX 1.13 against 1.17;
+EffRatio 1.60 against 1.23; Hurst 0.96 against 0.98; VPIN 0.91 against 0.87. **There is no June-specific
+signature.**
+
+**AND THE ELEVATION IS UNIFORM, WHICH IS THE SIGNATURE OF A MONTH RATHER THAN OF A BAR-LEVEL STATE:**
+BASE 13.75% against 5.18% (2.65x), MOM 3.57% against 2.29% (1.56x), LONG 11.32% against 4.44% (2.55x),
+SHORT 3.45% against 1.91% (1.80x). **Every sub-population is worse and none is untouched.**
+
+The one apparent exception collapsed on inspection. `Bars_Since_Flip` showed 4.04x in June against 1.00x
+elsewhere, but the fourteen values are bimodal — 0, 3, 3, 7, 14, 21, 28, 81, 111, 114, 188, 286, 287, 359 —
+seven under 30 bars and seven over 80, with **half the losses on fresh flips.** The median of 54.5 is an
+artefact of a 7-and-7 split on fourteen observations, June's winning events already have an upper quartile of
+69, and no threshold separates them. `Bars_Since_Flip` is also not in the Option B library, so a gate there
+would be a new threshold on a bimodal split of 14 events.
+
+W23 is four days, not one. Six events across 06.01, 06.02, 06.04 and 06.05, with 3 of the 6 on 06.05 — the
+book's worst day — and two of those three on **consecutive bars at 22:52 (depth 9) and 22:53 (depth 10): one
+move, two minutes, 19 trades, -$1,290 combined.** That entangles the "weak d9 / strong d10" contrast from
+the depth ladder and is worth recording for that reason alone.
+
+**TRIAL COUNT ZERO. NO GATE PROPOSED.** Eleven variables at bar level, six at event level, two path controls
+and two direction controls, on a base of fourteen events. `Efficiency_Ratio < p80` was the only free library
+candidate matching the direction and it refuses 31% of all 931 winning events to catch half the June losses.
+**FOURTEEN EVENTS CANNOT SUPPORT A THRESHOLD, AND THE NEXT VARIABLE TESTED WOULD EVENTUALLY SEPARATE THEM BY
+CHANCE. THAT IS THE POINT AT WHICH A SEARCH BECOMES FITTING.**
+
+**June is therefore a documented limitation and not a defect.** It is 33% of the loss events on 17% of the
+bar-events, it costs nothing in profitability at net +$32,591 — the fifth-best month of seven — it never
+produced a losing week, and **no bar-level state would have warned the engine.**
+
+### 11c. THE DEPTH LADDER — MOSTLY SMALL CELLS, AND A TIER CAP THAT CANNOT TARGET THEM
+
+The full depth ladder now prints on every run, and the LONG side is strongly non-monotone: PF 7.20 at d3,
+5.10 at d4, 10.59 at d5, **3.26 at d6**, 58.46 at d7, 9.32 at d8, **1.70 at d9**, 23.96 at d10 and infinite
+at d11+, where 1,202 trades carry $96,712 with **zero loss events** — a fifth of the trades and a third of
+the net.
+
+**THE FIVE WEAK CELLS — LONG d3, d4, d6, d9 AND SHORT d7 — ARE 1,445 TRADES, 24 OF THE 42 LOSS EVENTS AND
+ONLY $44,635 OF $284,974.** That reads as a targetable inefficiency and it is not.
+
+**FIRST, `tier = min(depth, 5)` MERGES LONG DEPTHS 5 THROUGH 21 INTO ONE GATE CELL — 3,559 trades, 86.7% of
+the LONG book, all gated by `FailedBreak > p20` alone.** So d6 at PF 3.26 and d9 at PF 1.70 are gated
+identically to d7 at 58.46 and d11+ at infinity. **THE TIER STACK IS STRUCTURALLY INCAPABLE OF
+DISTINGUISHING THEM**, and `min(depth,5)` appears nowhere with a derivation — it is inherited from Option B
+and now carries a registry line saying so.
+
+**SECOND, THREE OF THE FIVE CANNOT BE READ AS RATES.** LONG d3, LONG d9 and SHORT d7 rest on 3, 3 and 1 loss
+events. **d9's "PF 1.70" becomes 2.99 on one event fewer and 1.30 on one median event more; SHORT d7 becomes
+infinite on zero.** Only LONG d6 has a base worth arguing about at nine events, and five of those nine are in
+June.
+
+**THIRD, THE NEIGHBOUR COMPARISON FOUND NOTHING TO GATE ON.** d6 and d7 are gated identically and perform 18x
+apart, and they match within noise on ATR (36.63 vs 40.33), ADX (23.79 vs 21.67), Hurst (0.4260 vs 0.4235),
+FractalDim, VolOfVol, EffRatio, bars-since-flip (7 vs 7), session hour (10 vs 10) and momentum share (64.8%
+vs 66.7%). **The only real difference is 54 stop-outs against 7, which is the outcome restated, not a cause.**
+The same holds for d9 against d10 and SHORT d7 against d6, where ATR and VolOfVol run *higher* in the strong
+cell — the opposite of a "weak cells are quieter" story.
+
+**MOVING THE TIER CAP WAS CONSIDERED AND DECLINED ON ARITHMETIC.** Opening d6 and d9 as their own cells is
+2 cells x 11 library relocations = **22 trials against 12 loss events, and Bonferroni needs p < 0.0023.**
+Nothing in this project has cleared that; `Micro_Hurst` reached p = 0.000 only because it was one relocation
+at one cell on 15 events. **A GATE FITTED TO d6 WOULD BE A JUNE FILTER WEARING A DEPTH COSTUME, FITTED ON
+FIVE EVENTS.**
+
+And one ladder figure was checked before anything was built on it. **SHORT d11+ is thirteen replicas of a
+single trade** — all entering 2026.02.23 at 16:47 at 49427.90 and exiting 18:20 at 48860.75, 567.1 points
+over 93 bars, trailed out at 26 tiers, $1,128.30 each, identical to the cent. **Not a 14x per-trade edge
+against LONG d11+'s $80. One bar, thirteen times** — the same replica structure every loss event has, on the
+winning side. Same caution applies to SHORT d8 (72 trades), d9 (18) and d10 (10), all printing infinite PF on
+a handful of bars.
+
+### 11d. THE ENTRY-BAR FUNNEL
+
+    177,251 frame bars
+    170,351 post-warmup (bar >= 6900)
+     36,526 at ATR_1M >= 20                     20.6% of the frame
+        973 ENTRY BARS                           0.5% of the frame, 2.7% of the eligible population
+
+**973 entry bars over 119 trading days — 8.2 bars and 49 trades per day, $293 of net per entry bar.**
+
+**`ATR_1M >= 20` IS THE LARGEST FILTER IN THE SYSTEM.** It admits 20.6% of bars and removes 76% of reachable
+terrain before any signal is consulted. By contrast `FailedBreak > p20` admits 80.19% and is barely a gate;
+`Micro_Hurst > p90` admits 9.75%; `AT_Slope_ST > p90` 6.22%; the stacked LONG d4 form 0.68%.
+
+**AND EVERY ATTEMPT TO WIDEN THE FUNNEL FAILED, MEASURED.** The 500-signal coverage book gave 285 loss
+events, PF 1.78 and a -$4,352 intraday floor. The strictly-gated solo/dual path found strictness and coverage
+**anti-correlated** — the two strictest gates in the library, at 0.489% and 0.684% pass rate, reached **zero**
+new episodes, because a 2-bar episode requires firing on one of two specific bars and any condition rare
+enough to be trusted alone is too rare to be there. **THE 0.5% IS THE EDGE, NOT A SHORTFALL. CONCURRENCE
+TAKES TIME TO FORM.**
+
+### 11e. THE DETERMINISTIC LOCAL SCORING PATHWAY — BUILT AND RUN BY THE OPERATOR
+
+    python master.py --data data --workers 14 --out discovery\full --stage S8 --book whole_dot_signals.csv
+
+Reproduces the specification to the cent on the operator's own machine in 37 seconds. **Before this, every
+figure in the project was something an analyst reported; now it is something he can produce.**
+
+Delivered: **`engine/adm_engine.py`** (`6d1ed10a5f81`) — a FORK of the sacred engine implementing FLOORED
+admission, the per-direction depth floor, the per-tier gate stack and a configurable `MAX_POSITIONS`,
+defaulting to `CURRENT`/6/`None` so an unconfigured import behaves as sacred, and **proved byte-identical to
+the sacred engine under CURRENT admission on the full frame.** **`engine/swept_thresholds.py`**
+(`4356d2bb9973`) — mechanism-D percentiles at arbitrary levels by substituting `dt._D_SPEC` and calling the
+sacred `compute_adaptive_thresholds`, so **the ring, the eligibility mask, the day-refresh and the
+floor-index are bit-identical to production by construction rather than by inspection.**
+`whole_dot_config.json` carries the rules with derivation labels inline; routing is on config presence and
+accepts both sidecar conventions; and `_metrics_from_trades` is shared by both paths **so folds and OOS
+cannot drift between BOOK-50 and a configured book.**
+
+**TWO GUARDS, BOTH AGAINST SILENT FAILURE.** A startup fork-parity assertion, necessary because **the sacred
+admission path is duplicated verbatim inside the fork's `elif` branch** — that duplication is why parity
+holds and is the landmine if sacred ever changes. And config-not-found now **aborts**, after the sidecar name
+mismatched during development and the Whole DOT silently took the sacred path, scoring the wrong system with
+no error.
+
+**AND A FULL BREAKDOWN REPORT ON EVERY RUN:** weekly (26 ISO periods) and monthly (7) tables carrying trades,
+wins, trade-losses, **loss EVENTS**, W/L ratio, WR, PF, net, LONG and SHORT counts and worst day; the depth
+ladder per direction; admit and refuse counts for all five live gates; the top five signals by net with the
+ranking key stated; and the population and denominator lines named rather than implied.
+
+**THREE DEFECTS WERE FOUND BY RUNNING RATHER THAN READING:** the sidecar-name fallthrough, a sliced frame
+against a full-length oracle, and a week counter using `exit_time[:8]` — a day-level slice, not an ISO week —
+which reported 7 weeks where the spec has 26. **And the 430-trade discrepancy that blocked acceptance for two
+turns was the FULL-versus-BOOK-only population: `master.py`'s own `trades.csv` header states the distinction
+and nobody had read it.** The parity sha is now stable across machines — it was float-repr and column-order
+dependent, and `_canon_trade_sha()` fixes it with an explicit column list, an explicit sort and fixed 2dp
+formatting.
+
+**AND ONE INSTRUCTION-CLASS DEFECT WORTH RECORDING AS ITS OWN THING.** The Quant's handover said the gate
+masks were "built via the swept-spec mechanism, not the default p80/p20 hi/lo" — **a description of something
+only its author could execute.** The Developer fell back to `ad[(var,'hi')]`, which is p80, and a `> p90`
+gate against a p80 threshold is a looser gate: 6,753 trades against 5,799 and 100 loss events against 42.
+**IT IS THE SAME CLASS AS THE SIDECAR FALLTHROUGH AND THE `_adm_pass` PERMISSIVE LOOKUP — A GAP THAT READS AS
+COMPLETE — AND SPEC §0.3 R2 IS NOW "ANY INSTRUCTION IN THIS DOCUMENT THAT A SECOND PARTY CANNOT EXECUTE",
+with the check being to demand a symbol rather than a prose description.**
 
 ### 14. STATUS
 
