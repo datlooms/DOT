@@ -896,8 +896,16 @@ def fold_plan(df, warmup):
 
 def _score(df, sigs, ad, st, w, conv, want_trades=False):
     import portfolio_simulation_engine as engine
-    import wf
     td = engine.run_portfolio(df, sigs, adaptive=ad, structural=st, warmup=w, verbose=False, conviction=conv)
+    return _metrics_from_trades(df, td, w, want_trades=want_trades)
+
+
+def _metrics_from_trades(df, td, w, want_trades=False):
+    """THE ONE metric block, taking a trade table. Folds and OOS were STUBBED on the
+    configured path and printed 'NOT COMPUTED'; reusing this instead of writing a second
+    implementation means the configured path computes them the same way BOOK-50 does,
+    and a fold definition cannot drift between the two paths."""
+    import wf
     p = td['pnl'].values
     d = wf.daily_pnl_points(td).sort_values('exit_date')
     eq = d['pnl'].cumsum().values
@@ -1032,6 +1040,38 @@ def loss_events(trades):
 SACRED_PATH_BOOKS = ('book50_signals.csv',)
 
 
+TRIPLE_RE = re.compile(r'^[A-Za-z_0-9]+:(hi|lo|==-?\d+)$')
+
+
+def _assert_book_grammar(book):
+    """A CONFIGURED BOOK MUST BE ALL THREE-CONDITION F0 TRIPLES.
+
+    The Whole DOT is 297 pure F0 triples. With no F1 members, score_g.build_book
+    writes no sequential columns into the frame, so THE FRAME-OBJECT TRAP DISAPPEARS
+    ENTIRELY - that defect cost 11 trades, took a diff to find, and produced a
+    PLAUSIBLE WRONG ANSWER rather than an error. This guard keeps the grammar uniform
+    so the trap cannot return by the back door.
+
+    The F1 machinery is NOT removed from the codebase: BOOK-50 carries both pairs and
+    must keep scoring identically. This applies to the CONFIGURED path only.
+    """
+    bad = []
+    for i, row in book.iterrows():
+        sd = str(row.get('signal_def', ''))
+        trg = str(row.get('trigger', ''))
+        parts = [x.strip() for x in sd.split(' + ')]
+        if trg != 'F0' or len(parts) != 3 or not all(TRIPLE_RE.match(x) for x in parts):
+            bad.append((int(i), trg, sd[:60]))
+    if bad:
+        raise SystemExit(
+            f'ABORT [book grammar] {len(bad)} of {len(book)} rows in a CONFIGURED book are not '
+            f'three-condition F0 triples: {bad[:4]}. A configured book must be uniform - a book '
+            f'that silently admits a different grammar reintroduces the sequential-column '
+            f'write-back that produced a plausible wrong answer with no error.')
+    print(f'  BOOK GRAMMAR: all {len(book)} rows are three-condition F0 triples - no sequential '
+          f'members, so build_book writes nothing back into the frame.', flush=True)
+
+
 def _assert_fork_parity(df, sigs, ad, st, w, conv, window=None):
     """GUARD (b). adm_engine is a FORK with the sacred admission path duplicated
     verbatim in its elif branch. If the sacred entry block ever changes, the fork
@@ -1119,26 +1159,22 @@ def _score_configured(df, sigs, ad, st, w, conv, cfg):
     day = pd.Series(td['exit_time'].astype(str).values).str[:10].values
     _byday = pd.Series(p).groupby(day).sum()
     _eq = _byday.cumsum()
-    _blank = {k: '' for k in ('fold_count', 'fold_days_each', 'folds_basis',
-                              'folds_evaluable', 'folds_plus', 'folds_status', 'min_fold_pf',
-                              'oos_legacy_months', 'oos_legacy_stale', 'oos_net', 'oos_pf',
-                              'oos_prop_days', 'oos_prop_evaluable', 'oos_prop_net',
-                              'oos_prop_pf', 'oos_prop_window', 'oos_rel_months',
-                              'oos_rel_net', 'oos_rel_pf')}
-    _blank['folds_evaluable'] = False
-    _blank['oos_prop_evaluable'] = False
-    _blank['folds_status'] = 'NOT COMPUTED on the configured path'
-    return (dict(_blank, **{'trades': int(len(td)), 'WR': round(float((p > 0).mean() * 100), 2),
-             'PF': round(float(p[p > 0].sum() / gl), 2) if gl > 0 else '',
-             'net': round(float(p.sum()), 2),
-             'daily_wd': round(float(_byday.min()), 2),
-             'daily_mDD': round(float((_eq - _eq.cummax()).min()), 2),
-             'worst_bar': round(float(td.groupby('entry_bar')['pnl']
-                                                        .sum().min()), 2),
-             'losing_weeks': int((pd.Series(p).groupby(
-                 pd.Series(td['exit_time'].astype(str).values).str[:8].values)
-                 .sum() < 0).sum()),
-             'days_pos': int((_byday > 0).sum()), 'days_total': int(len(_byday))}), td)
+    r = _metrics_from_trades(df, td, w)
+    _byday = pd.Series(td['pnl'].values.astype(float)).groupby(
+        pd.Series(td['exit_time'].astype(str).values).str[:10].values).sum()
+    # ISO WEEK KEY. exit_time[:8] is a DAY-level slice, not a week - it reported 7 weeks
+    # where the spec has 26, so the direction was right and the denominator meaningless.
+    _iso = pd.to_datetime(pd.Series(td['exit_time'].astype(str).values).str[:10],
+                          format='%Y.%m.%d', errors='coerce')
+    _wk = _iso.dt.isocalendar().set_index(_iso.index)[['year', 'week']].astype(str).agg(
+        '-W'.join, axis=1).values
+    _byweek = pd.Series(td['pnl'].values.astype(float)).groupby(_wk).sum()
+    _allday = pd.Series(df['Time'].astype(str).values).str[:10]
+    r.update({'worst_bar': round(float(td.groupby('entry_bar')['pnl'].sum().min()), 2),
+              'losing_weeks': int((_byweek < 0).sum()), 'weeks_total': int(len(_byweek)),
+              'days_pos': int((_byday > 0).sum()), 'days_traded': int(len(_byday)),
+              'days_in_frame': int(_allday.nunique())})
+    return r, td
 
 
 def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
@@ -1190,6 +1226,7 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
     else:
         conv = C.build_conviction(df, True, True, True, d2d_conviction=True, d2d_gap=True)
     if _cfg:
+        _assert_book_grammar(book)
         _assert_fork_parity(df, sigs, ad, st, w, conv)
         r, executed = _score_configured(df, sigs, ad, st, w, conv, _cfg)
     else:
@@ -1206,6 +1243,12 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
     lines.append(f'  LOSS EVENTS         : {_ev}   (distinct entry BARS - the bar is the risk '
                  f'unit, not the trade)')
     lines.append(f'  distinct loss days  : {_dy}')
+    if 'worst_bar' in r:
+        lines.append(f'  worst bar $         : {r["worst_bar"]}   (the bar is the risk unit)')
+        lines.append(f'  losing weeks        : {r["losing_weeks"]} of {r["weeks_total"]}   '
+                     f'(ISO week keys)')
+        lines.append(f'  days positive       : {r["days_pos"]} of {r["days_traded"]} DAYS WITH '
+                     f'A BOOK TRADE  ({r["days_in_frame"]} trading days exist in the frame)')
     lines.append(f'  daily worst-day $   : {r["daily_wd"]}')
     lines.append(f'  daily max-drawdown $: {r["daily_mDD"]}')
     if r['folds_evaluable']:

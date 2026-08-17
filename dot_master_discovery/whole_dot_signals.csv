@@ -1,5 +1,4 @@
 trigger,direction,signal_def
-F1,LONG,ADX_Rising:==0 ->8-> D2D_DirStep:==-1
 F0,LONG,AT_Lookback_LT:hi + Micro_MomoTransfer:lo + Micro_RangeVelocity:lo
 F0,LONG,AT_Lookback_LT:hi + VAH_Dist_ATR:hi + WeeklyOpen_Dist_ATR:lo
 F0,LONG,AT_Lookback_ST:hi + AT_Slope_ST:lo + Micro_RollProxy:hi
@@ -180,7 +179,6 @@ F0,LONG,Slope_EMA_ST:lo + Micro_VolOfVol:hi + AT_Regime_ST:==1
 F0,LONG,Slope_EMA_ST:lo + Momentum_Value:hi + Micro_RangeVelocity:hi
 F0,LONG,Slope_EMA_ST:lo + Session_High_Dist_ATR:lo + ADX_Rising:==0
 F0,LONG,Sqz_Val:hi + Sqz_State:==1 + RangeOsc_State:==-2
-F1,LONG,Sqz_Val:hi ->13-> Micro_OrderFlowDelta:lo
 F0,LONG,Upper_Wick:hi + D2D_Signal:==1 + PoC_Side:==1
 F0,LONG,VWAP_Dist_ATR:lo + D2D_Signal:==1 + VWAP_Side:==1
 F0,LONG,Volume_Avg_10:hi + Micro_FailedBreak:hi + Micro_Rejection:lo
