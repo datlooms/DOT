@@ -900,6 +900,134 @@ def _score(df, sigs, ad, st, w, conv, want_trades=False):
     return _metrics_from_trades(df, td, w, want_trades=want_trades)
 
 
+def _pf_of(p):
+    import numpy as _np
+    p = _np.asarray(p, dtype=float)
+    if not p.size:
+        return ''
+    gl = -p[p < 0].sum()
+    if gl <= 0:
+        return 'inf'
+    return round(float(p[p > 0].sum() / gl), 2)
+
+
+def _ev_of(td):
+    los = td[td['pnl'] < 0]
+    return int(len(set(int(b) for b in los['entry_bar'].values))) if len(los) else 0
+
+
+def breakdown_report(df, td, book, gates=None, cfg=None):
+    """THE FULL SPREAD, NOT THE AGGREGATE.
+
+    A book that nets $284,974 could be one great month and six flat ones and the
+    consolidated block cannot tell those apart. And FOLDS DO NOT COVER THE FRAME:
+    6 x 14 = 84 of 119 traded days, and they are not calendar months - so monthly and
+    weekly WR and PF for this configuration had never been measured.
+
+    LOSS EVENTS SIT BESIDE TRADE LOSSES ON EVERY ROW. The bar is the risk unit; a
+    monthly table showing only trade-losses repeats the error that stood for the life
+    of this project. Negative periods are flagged with <<< NEGATIVE so a red row
+    cannot be missed under a zero-losing-weeks headline.
+
+    Lives in the shared block so BOOK-50 and a configured book cannot diverge.
+    """
+    import numpy as _np
+    out = []
+    p = _np.asarray(td['pnl'].values, dtype=float)
+    day = pd.Series(td['exit_time'].astype(str).values).str[:10]
+    iso = pd.to_datetime(day, format='%Y.%m.%d', errors='coerce')
+    wk = iso.dt.isocalendar()
+    wkey = (wk['year'].astype(str) + '-W' + wk['week'].astype(str).str.zfill(2)).values
+    mkey = day.str[:7].values
+    # direction arrives as +1/-1 from the engine and as 'LONG'/'SHORT' from the trade
+    # table depending on the path, so normalise once rather than assuming either.
+    if 'direction' in td.columns:
+        _dv = td['direction'].values
+        dirn = _np.array([1 if (x == 1 or str(x).upper() == 'LONG') else -1 for x in _dv])
+    else:
+        dirn = _np.zeros(len(td), dtype=int)
+
+    def table(keys, label, n_expected):
+        out.append('')
+        out.append(f'  {label} BREAKDOWN  ({len(set(keys))} periods'
+                   + (f', {n_expected} expected' if n_expected else '') + ')')
+        out.append(f'    {"period":10}{"trades":>7}{"wins":>6}{"loss":>6}{"EVENTS":>7}'
+                   f'{"W/L":>7}{"WR%":>7}{"PF":>8}{"net $":>12}{"LONG":>6}{"SHORT":>6}'
+                   f'{"worstDay":>10}')
+        for k in sorted(set(keys)):
+            m = keys == k
+            sub = td[m]
+            pp = p[m]
+            wins = int((pp > 0).sum())
+            loss = int((pp < 0).sum())
+            aw = float(pp[pp > 0].mean()) if wins else 0.0
+            al = float(-pp[pp < 0].mean()) if loss else 0.0
+            wl = round(aw / al, 3) if al > 0 else ''
+            _sd = dirn[m]
+            nl = int((_sd == 1).sum())
+            ns = int((_sd == -1).sum())
+            wd = float(pd.Series(pp).groupby(day[m].values).sum().min()) if len(pp) else 0.0
+            flag = '  <<< NEGATIVE' if pp.sum() < 0 else ''
+            out.append(f'    {str(k):10}{len(pp):>7}{wins:>6}{loss:>6}{_ev_of(sub):>7}'
+                       f'{str(wl):>7}{100 * (pp > 0).mean():>7.2f}{str(_pf_of(pp)):>8}'
+                       f'{pp.sum():>12,.2f}{nl:>6}{ns:>6}{wd:>10,.2f}{flag}')
+
+    out.append('')
+    out.append('  ' + '=' * 104)
+    out.append('  FULL BREAKDOWN REPORT')
+    out.append('  ' + '=' * 104)
+    out.append(f'    POPULATION      : {len(td)} BOOK-only trades scored')
+    out.append(f'    DAYS            : {int(day.nunique())} days with a book trade of '
+               f'{int(pd.Series(df["Time"].astype(str).values).str[:10].nunique())} trading '
+               f'days in the frame')
+    out.append(f'    WEEK BASIS      : ISO week keys (year-Www), not a date slice')
+    out.append(f'    FOLD COVERAGE   : folds are 6 x 14 = 84 trading days of '
+               f'{int(day.nunique())} traded - THEY DO NOT COVER THE FRAME and are not '
+               f'calendar months')
+    out.append('')
+    out.append('  TOP 5 SIGNALS BY CONTRIBUTION   RANKING KEY: net $ descending')
+    out.append('    (net and net-per-trade rank differently; both are legitimate, this is net)')
+    out.append(f'    {"net $":>12}{"trades":>8}{"EVENTS":>7}  {"dir":5} signal')
+    g = td.groupby('signal_name')
+    agg = sorted(((float(x['pnl'].sum()), nm, x) for nm, x in g), reverse=True)[:5]
+    for net, nm, x in agg:
+        _x0 = x['direction'].iloc[0]
+        dd = 'LONG' if (_x0 == 1 or str(_x0).upper() == 'LONG') else 'SHORT'
+        out.append(f'    {net:>12,.2f}{len(x):>8}{_ev_of(x):>7}  {dd:5} {str(nm)[:62]}')
+    if gates:
+        out.append('')
+        out.append('  GATE MECHANISM PERFORMANCE   bars admitted / refused across the frame')
+        out.append(f'    {"gate":34}{"admits":>10}{"refuses":>10}{"admit%":>9}')
+        n = len(df)
+        for nm, mask in gates.items():
+            a_ = int(_np.asarray(mask).sum())
+            out.append(f'    {nm:34}{a_:>10,}{n - a_:>10,}{100 * a_ / n:>8.2f}%')
+    out.append('')
+    out.append('  DEPTH LADDER PER DIRECTION   depth = distinct signals admitted on the bar')
+    out.append(f'    {"dir":6}{"depth":>7}{"trades":>8}{"wins":>6}{"loss":>6}{"EVENTS":>7}'
+               f'{"WR%":>8}{"PF":>8}{"net $":>12}')
+    bar_dir = {}
+    for b_, d_ in zip(td['entry_bar'].values, dirn):
+        bar_dir.setdefault((int(d_), int(b_)), 0)
+        bar_dir[(int(d_), int(b_))] += 1
+    depth_of = _np.array([bar_dir[(int(d_), int(b_))]
+                          for b_, d_ in zip(td['entry_bar'].values, dirn)])
+    for dv, dl in ((1, 'LONG'), (-1, 'SHORT')):
+        for k in range(3, 12):
+            m = (dirn == dv) & ((depth_of == k) if k < 11 else (depth_of >= 11))
+            if not m.any():
+                continue
+            pp = p[m]
+            lbl = f'{k}' if k < 11 else '11+'
+            out.append(f'    {dl:6}{lbl:>7}{len(pp):>8}{int((pp > 0).sum()):>6}'
+                       f'{int((pp < 0).sum()):>6}{_ev_of(td[m]):>7}'
+                       f'{100 * (pp > 0).mean():>8.2f}{str(_pf_of(pp)):>8}{pp.sum():>12,.2f}')
+    table(wkey, 'WEEKLY', 26)
+    table(mkey, 'MONTHLY', 7)
+    out.append('  ' + '=' * 104)
+    return out
+
+
 def _metrics_from_trades(df, td, w, want_trades=False):
     """THE ONE metric block, taking a trade table. Folds and OOS were STUBBED on the
     configured path and printed 'NOT COMPUTED'; reusing this instead of writing a second
@@ -1038,6 +1166,7 @@ def loss_events(trades):
 
 
 SACRED_PATH_BOOKS = ('book50_signals.csv',)
+_LAST_GATES = None
 
 
 TRIPLE_RE = re.compile(r'^[A-Za-z_0-9]+:(hi|lo|==-?\d+)$')
@@ -1072,6 +1201,41 @@ def _assert_book_grammar(book):
           f'members, so build_book writes nothing back into the frame.', flush=True)
 
 
+PARITY_COLS = ('signal_name', 'direction', 'entry_bar', 'exit_bar', 'entry_price',
+               'exit_price', 'pnl', 'lots', 'exit_type', 'tiers')
+
+
+def _canon_trade_sha(td):
+    """A CANONICAL, CROSS-MACHINE-STABLE fingerprint of a trade table.
+
+    The previous form hashed td[cols].to_csv(), which is NOT a fingerprint even though
+    it reads like one:
+        this box, 297 book   dee7987f2bff2055
+        operator, 297 book   6a356e7e8695ffa2
+    Same book, same frame, same command. The guard still worked - it compares sacred
+    against fork WITHIN one run and both sides matched on his machine - but anyone
+    comparing two runs would conclude something had drifted.
+
+    THE VARYING CONTENT IS FLOAT TEXT. to_csv renders floats via the installed
+    library's repr, so a different pandas or numpy build writes a different number of
+    digits for the same value, and the column ORDER came from whatever order the frame
+    happened to return. Neither is part of the result.
+
+    So: an EXPLICIT column list, an EXPLICIT row order, and floats formatted to a fixed
+    2dp - which is cent precision and the precision every figure is quoted at. Stable
+    is better than labelled, because a stable number is a genuine cross-machine check.
+    """
+    import hashlib as _h
+    cols = [c for c in PARITY_COLS if c in td.columns]
+    d = td[cols].copy()
+    for c in cols:
+        if d[c].dtype.kind == 'f':
+            d[c] = d[c].map(lambda v: f'{v:.2f}')
+    key = [c for c in ('entry_bar', 'signal_name', 'exit_bar') if c in cols]
+    d = d.sort_values(key, kind='mergesort').reset_index(drop=True)
+    return _h.sha256(d.to_csv(index=False).encode()).hexdigest()[:16]
+
+
 def _assert_fork_parity(df, sigs, ad, st, w, conv, window=None):
     """GUARD (b). adm_engine is a FORK with the sacred admission path duplicated
     verbatim in its elif branch. If the sacred entry block ever changes, the fork
@@ -1096,9 +1260,7 @@ def _assert_fork_parity(df, sigs, ad, st, w, conv, window=None):
     finally:
         _adm.ADMISSION_RULE, _adm.MAX_POSITIONS = _keep['rule'], _keep['mx']
         _adm.ADM_TIERGATES, _adm.ADM_GATES = _keep['tg'], _keep['gt']
-    cols = [c for c in a.columns if c in b.columns]
-    ha = _h.sha256(a[cols].to_csv(index=False).encode()).hexdigest()[:16]
-    hb = _h.sha256(b[cols].to_csv(index=False).encode()).hexdigest()[:16]
+    ha, hb = _canon_trade_sha(a), _canon_trade_sha(b)
     print(f'  FORK PARITY ({len(d):,} bars, full frame): sacred {ha} | adm_engine(CURRENT) {hb} '
           f'-> {"IDENTICAL" if ha == hb else "MISMATCH"}', flush=True)
     if ha != hb:
@@ -1140,6 +1302,13 @@ def _score_configured(df, sigs, ad, st, w, conv, cfg):
                 ms.append(G[key])
             tg[(dv, t)] = ms
     _adm.ADM_TIERGATES = tg
+    global _LAST_GATES
+    _LAST_GATES = {'Micro_Hurst > p90  (LONG d3 / SHORT d3)': G['HU90'],
+                   'Micro_FailedBreak > p20  (LONG d4, d5+)': G['FB20'],
+                   'AT_Slope_ST > p90  (LONG d4)': G['ATS90'],
+                   'HU90 AND ATS90  (the LONG d4 stack)': G['HU90'] & G['ATS90'],
+                   'ATR_1M >= 20  (global)': df['ATR_1M'].values.astype(float) >= float(
+                       cfg['global_gate']['value'])}
     td_full = _adm.run_portfolio(df, sigs, adaptive=ad, structural=st, warmup=w, verbose=False,
                                  conviction=conv)
     # THE SPEC QUOTES THE BOOK-ONLY POPULATION. GAP FILLERS ARE A SEPARATE POPULATION
@@ -1267,6 +1436,8 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
     if canary:
         lines.append('')
         lines.append('  US30 baseline canary: $92,347 / 2,698 tr — engine intact')
+    for _bl in breakdown_report(df, executed, book, gates=_LAST_GATES, cfg=_cfg):
+        lines.append(_bl)
     tr = executed.copy()
     keep = [c for c in ['signal_idx', 'signal_name', 'direction', 'lots', 'entry_bar', 'exit_bar',
                         'entry_time', 'exit_time', 'entry_price', 'exit_price', 'pnl', 'pnl_per_lot',
