@@ -177,9 +177,15 @@ R4. Micro_FailedBreak > p20 AT LONG d5+ HAS NO NULL. It carries the largest
     the LONG d5+ entry bars. Above p ~ 0.15 it is in the class it replaced.
 
 R5. THE CAP MARGIN IS ONE SLOT WIDE. 21 is safe; 22 produces a losing week and
-    a 2.7x worse day. Nothing else in this system has a boundary that narrow.
+    a 2.67x worse day. Nothing else in this system has a boundary that narrow.
+    RE-MEASURED ON THE 297 BOOK AT 1.0 LOT AND THE BOUNDARY DID NOT MOVE —
+    both boundaries remain at cap 22, and the 299-book figures scale across to
+    within ten cents. That is verification, not removal: a one-slot margin
+    measured twice on two books is still a one-slot margin.
     CHECK: 8.1. If live depth distribution differs from backtest even
-    slightly, the safe value may not be 21.
+    slightly, the safe value may not be 21. AND WATCH OOS SPLIT 1 — it turns at
+    the same cap as the losing week but is a rate over a hundred bar-events
+    rather than one week flipping sign, so it moves first.
 
 R6. THE COMPOSITION LAYER WAS CHOSEN ON THE FULL FRAME. The walk-forward tests
     the SELECTION PROCEDURE, not this configuration.
@@ -1240,40 +1246,61 @@ Day key is the EXIT date. Week key is ISO %G-W%V. Gap fillers excluded
 ================================================================================
 
 8.1  THE CAP — FULL CURVE, AND THE MARGIN IS ONE SLOT WIDE
-  Improved stack, 0.30 lot, 299 book (the curve's SHAPE is the finding; the
-  adopted 297 levels are in section 6).
+  RE-MEASURED ON THE ADOPTED 297 BOOK AT 1.0 LOT. Caps 18-24 below are the
+  deployed book; the 48/64/96 tail is retained from the 299 measurement because
+  the "inert above 57 at-risk positions" finding does not depend on the book.
 
-   cap  events  lossbar%  worst bar  worst day  lw  worst week  PF     net
-    18      43     4.47%    -367.2     -101.8    0     +16.6  13.95  83,015
-    20      43     4.44%    -367.2     -104.0    0     +16.6  14.15  84,559
-    21      43     4.40%    -367.2     -104.0    0     +16.6  14.31  85,607
-    22      44     4.49%    -367.2     -277.5    1    -110.9  14.06  86,263
-    24      43     4.36%    -367.2     -277.5    1    -110.9  14.46  87,778
-    26      43     4.35%    -367.2     -277.5    1    -110.9  14.68  89,214
-    28      45     4.55%    -367.2     -362.7    1    -196.1  14.45  90,027
-    30      45     4.53%    -367.2     -362.7    1    -196.1  14.67  91,240
-    32      46     4.59%    -367.2     -448.6    1    -282.0  14.72  92,517
-    36      46     4.58%    -367.2     -465.8    1    -299.2  14.97  94,449
-    48      47     4.65%    -367.2     -465.8    1    -299.2  15.30  97,628
-    64      47     4.65%    -367.2     -465.8    1    -299.2  15.32  97,809
-    96      47     4.65%    -367.2     -465.8    1    -299.2  15.32  97,809
+  cap  trades  ev  evd  lossbar%  worst bar  worst day  %daily   PF      net
+   18   5,617  42   35     4.39%   -1,224.0     -339.4    6.8%  14.16  283,067
+   20   5,730  42   35     4.35%   -1,224.0     -346.6    6.9%  14.36  284,196
+   21   5,776  42   35     4.32%   -1,224.0     -346.6    6.9%  14.53  284,974  <- ADOPTED
+   22   5,850  43   35     4.41%   -1,224.0     -925.0   18.5%  14.26  286,110
+   24   5,974  42   35     4.28%   -1,224.0     -925.0   18.5%  14.68  288,432
 
-  FIRST LOSING WEEK: CAP 22.  WORST DAY FIRST PAST -$150: CAP 22.
+  worst intraday -$2,819.70, event-days 35, losing days 7 and days traded 119
+  are IDENTICAL at all five caps. At-risk positions track the cap exactly
+  (18/20/21/22/24) and lots are twice that (36.0/40.0/42.0/44.0/48.0).
+
+  FIRST LOSING WEEK: CAP 22.  WORST DAY FIRST PAST THE THRESHOLD: CAP 22.
   BOTH BOUNDARIES ARE THE SAME VALUE, AND IT IS A CLIFF, NOT A DRIFT. Worst day
-  goes -$104.0 at cap 21 to -$277.5 at cap 22 — 2.7x FOR ONE SLOT — and 26
-  positive weeks becomes 25. 21 IS THE LAST SAFE VALUE AND THE MARGIN IS ONE
-  SLOT WIDE. Nothing else in this system has a boundary that narrow (0.3 R5).
+  goes -$346.6 at cap 21 to -$925.0 at cap 22 — 2.67x FOR ONE SLOT — and 26
+  positive weeks becomes 25, worst week +$55.20 to -$369.60. 21 IS THE LAST SAFE
+  VALUE AND THE MARGIN IS ONE SLOT WIDE. Nothing else in this system has a
+  boundary that narrow (0.3 R5).
 
-  THE CAP NEVER TOUCHES THE TAIL. Worst bar and worst intraday are IDENTICAL AT
-  ALL THIRTEEN CAP VALUES, as are days traded, losing days and event-days.
-  THE CAP CONTROLS ACCUMULATION, NOT DEPTH.
+  THE BOUNDARY DID NOT MOVE WHEN THE BOOK WENT 299 -> 297. The 299 figures at
+  0.30 lot were -$104.0 at cap 21 and -$277.5 at cap 22, which scale to -$346.7
+  and -$925.0 at 1.0 lot. The 297 book measures -$346.6 and -$925.0 — TEN CENTS
+  ON THE SAFE SIDE, IDENTICAL ON THE UNSAFE SIDE. Loss events are 42 at every
+  cap except 22, where one extra appears; on the 299 book the pattern was
+  43/43/43/44/43 — the same shape, one lower throughout.
+
+  THE CAP NEVER TOUCHES THE TAIL. Worst bar and worst intraday are identical at
+  every cap value measured, on both books, as are days traded, losing days and
+  event-days. THE CAP CONTROLS ACCUMULATION, NOT DEPTH.
 
   WHERE THE CAP STOPS BINDING: peak at-risk tracks the cap exactly from 18 to
   36; at 48 it reaches 46; at 64 and 96 it plateaus at 57 with byte-identical
-  results. The cap is inert only above 57 at-risk positions.
+  results. The cap is inert only above 57 at-risk positions. (299 book, 0.30
+  lot — book-independent.)
 
-  OOS split 1 degrades monotonically with the cap: 9.23% at 20-21, 11.19% at
-  32+. The weak window gives the same warning the losing week does, earlier.
+  OOS SPLIT 1 IS THE EARLIER AND MORE SENSITIVE WARNING, AND IT TURNS AT THE
+  SAME CAP.
+
+    cap    18      20      21      22      24
+    sp1  9.38%   9.30%   9.30%  10.00%   9.92%
+                          ^min    ^turns here, with the losing week
+
+  It bottoms at cap 20-21 and turns at 22 — the same boundary the losing week
+  appears at — but it is a RATE ON OVER A HUNDRED BAR-EVENTS rather than a
+  single week flipping sign, so it moves before the week does. IF LIVE SPLIT-1
+  BEHAVIOUR DRIFTS UP BEFORE A WEEK GOES RED, THAT IS THE SIGNAL. On the 299
+  book the same ordering held, running 9.23% at 20-21 up to 11.19% at 32+.
+
+  AT 1.0 LOT EVERY CAP IN THIS TABLE EXCEEDS THE FTMO DAILY LIMIT — cap 21's
+  ceiling of $6,300 is 126.0% of $5,000. That is expected; 1 and 6.6 state that
+  1.0 lot is not deployable. Divide by the deployment lot: at 0.30 the adopted
+  ceiling is $1,890 = 37.8% of the daily and the worst day is -$103.98 = 2.1%.
 
 8.2  v1's CAP-8 WARNING DOES NOT HOLD
   Net is strictly monotone in the cap from 6 to 24 on this frame and cap 6 is
