@@ -337,3 +337,167 @@ def baseline_table():
     out.append('    so. Its edge lives in the specific combination, and no reproducible')
     out.append('    procedure can currently regenerate it.')
     return out
+
+
+def run_select(df, ad, st, w, pool, anchor, cfg, cfg_path, out, input_sha, workers,
+               scan_path, score_fn, metrics_fn, grammar_fn, breakdown_fn, loss_events_fn,
+               arm_sizes=ARM_SIZES, seed=SEED, book_size=None, frame_path=None):
+    """SCREEN -> NESTED ARMS -> SCORE ALL SIX -> EMIT. Data in, signals and score out.
+
+    The adopted 297 exists as an artefact of several days of conversation and cannot be
+    regenerated from data. This closes that gap - and section 7 says the honest expected
+    outcome is that every arm lands inside its own random band, because the incumbent
+    sits at roughly the 4th percentile and NOTHING IN ITS MEMBERS EXPLAINS WHY.
+    """
+    import time as _t
+    scan = pd.read_csv(scan_path)
+    train_months, held = train_window(df)
+    print(f'  TRAIN RULE: all but the final {TRAIN_EXCLUDE_MONTHS} month(s) - a RULE, not a '
+          f'date, so the screen keeps its meaning every month the stage runs', flush=True)
+    print(f'  TRAIN WINDOW: {train_months[0]} -> {train_months[-1]} ({len(train_months)} '
+          f'months) | HELD OUT: {held}', flush=True)
+    print(f'  SCREEN: {len(scan):,} RAW F0 rows. THE 6,488/6,034 PRE-FILTER IS NOT APPLIED - '
+          f'it uses full-sample agg_pf, folds_plus and trades computed over the months the '
+          f'screen is meant to validate against.', flush=True)
+    items = [(scan['signal_def'].iloc[i], scan['direction'].iloc[i]) for i in range(len(scan))]
+    fp = frame_path
+    if fp is None:
+        fp = os.path.join(out, '_frame_select.csv')
+        if not os.path.exists(fp):
+            df.to_csv(fp, index=False, lineterminator='\n', encoding='utf-8')
+    t0 = _t.time()
+    surv, rej = screen_all(items, fp, workers, train_months)
+    el = _t.time() - t0
+    from collections import Counter
+    why_c = Counter(r['reject_criterion'].split()[0] for r in rej)
+    print(f'  SURVIVORS: {len(surv):,} of {len(scan):,} '
+          f'({100.0 * len(surv) / max(len(scan), 1):.1f}%) in {el / 60:.1f} min', flush=True)
+    print(f'    spec band 5,800-6,800 | 200-row sample projected 6,914 +/-670', flush=True)
+    if len(scan) > 5000 and not (5800 <= len(surv) <= 6800):
+        print(f'    *** {len(surv):,} IS OUTSIDE THE SPEC BAND. Near 4,575 means the '
+              f'pre-filter is back. THE TWO BANDS COME FROM DIFFERENT SAMPLES AND ARE NOT '
+              f'RECONCILED HERE - if it also sits outside 6,244-7,584, both are wrong.',
+              flush=True)
+    print(f'  REJECTIONS ({len(rej):,}): {dict(why_c)}', flush=True)
+    print(f'    200-row sample gave trades 100 / train_PF 21 / bucket_profit_frac 9 of 130 - '
+          f'A MATERIAL SHIFT IN THIS COMPOSITION MATTERS MORE THAN THE COUNT.', flush=True)
+    fpr = survivor_fingerprint(surv)
+    print(f'  SURVIVOR FINGERPRINT {fpr} - sorted on (signal_def, direction), NEVER a float, '
+          f'so the seed is not cosmetic', flush=True)
+    sizes = tuple(n for n in arm_sizes if n <= len(surv))
+    arms, order = nested_arms(len(surv), sizes, seed=seed)
+    bs = book_size if book_size is not None else (297 if 297 in arms else max(arms))
+    if bs not in arms:
+        raise SystemExit(
+            f'ABORT [SELECT] book_size {bs} is not one of the emitted arms {sorted(arms)}. '
+            f'A seventh arm is not drawn silently and the size is not rounded to the nearest: '
+            f'the emitted book must be one of the arms the six-arm table reports, or the '
+            f'scorecard describes a book nobody scored.')
+    arm_books = {n: [surv[i] for i in idxs] for n, idxs in arms.items()}
+    print(f'  ARMS: {sorted(arms)} drawn as PREFIXES OF ONE SEEDED PERMUTATION (seed={seed}) - '
+          f'independent draws would confound size with draw luck, and draw-to-draw variation '
+          f'is larger than the size effect at small N', flush=True)
+    for a_, b_ in zip(sorted(arms)[:-1], sorted(arms)[1:]):
+        sa = {(r['signal_def'], r['direction']) for r in arm_books[a_]}
+        sb = {(r['signal_def'], r['direction']) for r in arm_books[b_]}
+        if not sa <= sb:
+            raise SystemExit(f'ABORT [SELECT] arm {a_} is not a subset of arm {b_} - the arms '
+                             f'are not nested and the size sweep is unreadable.')
+    print(f'  NESTING VERIFIED: every arm is a strict prefix of the next.', flush=True)
+    scores = {}
+    for n in sorted(arms):
+        bk = pd.DataFrame([{'trigger': 'F0', 'direction': r['direction'],
+                            'signal_def': r['signal_def']} for r in arm_books[n]])
+        grammar_fn(bk)
+        t1 = _t.time()
+        import score_g as _sg
+        sigs = _sg.build_book(df, pool, anchor, bk, adaptive=ad, structural=st)
+        r, td = score_fn(df, sigs, ad, st, w, _conv_for(df, cfg), cfg)
+        tl, ev, dy = loss_events_fn(td)
+        r.update({'signals': n, 'events': ev, 'event_days': dy, 'trade_losses': tl,
+                  'secs': round(_t.time() - t1, 1)})
+        scores[n] = (r, td)
+        print(f'    arm {n:>6}: {r["trades"]:>6} trades  WR {r["WR"]:>6}  PF {str(r["PF"]):>7}  '
+              f'net {r["net"]:>12,.2f}  events {ev:>4}  days {dy:>3}  ({r["secs"]}s)', flush=True)
+    return {'survivors': surv, 'rejected': rej, 'arms': arms, 'arm_books': arm_books,
+            'scores': scores, 'seed': seed, 'book_size': bs, 'fingerprint': fpr,
+            'train_months': train_months, 'held': held, 'screen_secs': el,
+            'scan_rows': len(scan)}
+
+
+def _conv_for(df, cfg):
+    import conviction as _C
+    cv = cfg['conviction']
+    return _C.build_conviction(df, bool(cv['hurst']), bool(cv['recentfb']), bool(cv['d2d']),
+                               d2d_conviction=bool(cv['d2d_conviction']),
+                               d2d_gap=bool(cv['d2d_gap']))
+
+
+def side_by_side(res, incumbent_book):
+    """THE ARM AGAINST THE INCUMBENT 297, AND THE OVERLAP.
+
+    The overlap is the part that decides whether a near-miss is a near-miss: an arm
+    scoring 80% of the incumbent while sharing 3% of its members has not nearly found
+    the book, it has found a different book of similar size.
+    """
+    bs = res['book_size']
+    r, td = res['scores'][bs]
+    out = ['', '  SIDE BY SIDE - selected arm against the INCUMBENT 297',
+           f'    {"metric":22}{"SELECTED":>16}{"INCUMBENT":>16}{"delta":>14}']
+
+    def row(lbl, a, b, fmt='{:,.2f}'):
+        try:
+            d = float(a) - float(b)
+            ds = fmt.format(d)
+        except (TypeError, ValueError):
+            ds = '-'
+        av = fmt.format(a) if isinstance(a, (int, float)) else str(a)
+        bv = fmt.format(b) if isinstance(b, (int, float)) else str(b)
+        out.append(f'    {lbl:22}{av:>16}{bv:>16}{ds:>14}')
+
+    row('signals', bs, INCUMBENT['signals'], '{:,.0f}')
+    row('trades', r['trades'], INCUMBENT['trades'], '{:,.0f}')
+    row('WR %', r['WR'], INCUMBENT['WR'])
+    row('PF', r['PF'], INCUMBENT['PF'])
+    row('net $', r['net'], INCUMBENT['net'])
+    row('LOSS EVENTS', r['events'], INCUMBENT['events'], '{:,.0f}')
+    row('event-days', r['event_days'], INCUMBENT['event_days'], '{:,.0f}')
+    row('worst bar $', r.get('worst_bar', ''), -1224.00)
+    row('worst day $', r.get('daily_wd', ''), INCUMBENT['worst_day'])
+    row('losing weeks', r.get('losing_weeks', ''), INCUMBENT['losing_weeks'], '{:,.0f}')
+    row('days traded', r.get('days_traded', ''), INCUMBENT['days'], '{:,.0f}')
+    row('folds positive', r.get('folds_plus', ''), 6, '{:,.0f}')
+    row('OOS PF', r.get('oos_prop_pf', r.get('oos_pf', '')), 9.78)
+    inc = {(str(a), str(b)) for a, b in zip(incumbent_book['signal_def'],
+                                            incumbent_book['direction'])}
+    sel = {(str(x['signal_def']), str(x['direction'])) for x in res['arm_books'][bs]}
+    surv = {(str(x['signal_def']), str(x['direction'])) for x in res['survivors']}
+    rejm = {(str(x['signal_def']), str(x['direction'])): x['reject_criterion']
+            for x in res['rejected']}
+    shared = sel & inc
+    inc_rej = [k for k in inc if k in rejm]
+    from collections import Counter
+    rc = Counter(rejm[k].split()[0] for k in inc_rej)
+    out += ['', '  OVERLAP WITH THE INCUMBENT 297',
+            f'    selected signals in the 297      : {len(shared)} of {len(sel)} '
+            f'({100.0 * len(shared) / max(len(sel), 1):.1f}%)',
+            f'    selected signals NOT in the 297  : {len(sel - inc)}',
+            f'    297 members that SURVIVED screen : {len(inc & surv)} of {len(inc)}',
+            f'    297 members the screen REJECTED  : {len(inc_rej)}  {dict(rc)}',
+            '    An arm scoring near the incumbent while sharing few of its members has not',
+            '    nearly found the book - it has found a different book of the same size.']
+    return out
+
+
+def arm_table(res):
+    out = ['', '  SIX-ARM TABLE',
+           f'    {"signals":>9}{"trades":>9}{"WR%":>8}{"PF":>9}{"net $":>14}'
+           f'{"EVENTS":>8}{"days":>7}{"worstDay":>11}{"secs":>7}']
+    for n in sorted(res['scores']):
+        r, _ = res['scores'][n]
+        out.append(f'    {n:>9}{r["trades"]:>9,}{r["WR"]:>8}{str(r["PF"]):>9}'
+                   f'{r["net"]:>14,.2f}{r["events"]:>8}{r["event_days"]:>7}'
+                   f'{r.get("daily_wd", 0):>11,.2f}{r["secs"]:>7}')
+    out.append(f'    emitted book_size = {res["book_size"]}  (SEED={res["seed"]}, '
+               f'fingerprint {res["fingerprint"]})')
+    return out

@@ -1346,7 +1346,8 @@ def _score_configured(df, sigs, ad, st, w, conv, cfg):
     return r, td
 
 
-def s_select(df, ad, st, w, pool, anchor, book_file, out, input_sha, workers):
+def s_select(df, ad, st, w, pool, anchor, book_file, out, input_sha, workers,
+             arm_sizes=None, book_size=None):
     """SELECT - data in, signals and score out.
 
     SECTION 4: THE SCAN DEPENDENCY IS DECLARED BY ASSERTION, NOT BY INVOKING S3.
@@ -1363,6 +1364,7 @@ def s_select(df, ad, st, w, pool, anchor, book_file, out, input_sha, workers):
     """
     import select_stage as sel
     import discovery_orchestrator as orch
+    arm_sizes = arm_sizes or sel.ARM_SIZES
     results = os.path.join(out, 'results')
     scan = os.path.join(results, 'results_F0_triple_convergence_and_d2ddir.csv')
     if not os.path.exists(scan):
@@ -1388,10 +1390,30 @@ def s_select(df, ad, st, w, pool, anchor, book_file, out, input_sha, workers):
           f'{cfg["short_depth_floor"]}, cap {cfg["max_positions"]}, '
           f'{cfg["global_gate"]["variable"]} >= {cfg["global_gate"]["value"]}, '
           f'{cfg["admission"]} admission, recentfb {cfg["conviction"]["recentfb"]}', flush=True)
-    return sel.run_select(df, ad, st, w, pool, anchor, cfg, cfg_path, out, input_sha, workers,
-                          scan_path=scan, score_fn=_score_configured,
-                          metrics_fn=_metrics_from_trades, grammar_fn=_assert_book_grammar,
-                          breakdown_fn=breakdown_report, loss_events_fn=loss_events)
+    res = sel.run_select(df, ad, st, w, pool, anchor, cfg, cfg_path, out, input_sha, workers,
+                         scan_path=scan, score_fn=_score_configured,
+                         metrics_fn=_metrics_from_trades, grammar_fn=_assert_book_grammar,
+                         breakdown_fn=breakdown_report, loss_events_fn=loss_events,
+                         arm_sizes=arm_sizes, book_size=book_size)
+    inc = pd.read_csv(os.path.join(_HERE, 'engine', 'whole_dot_signals.csv'))
+    paths = sel.emit_artifacts(out, res, res['arm_books'], res['scores'], cfg_path,
+                               _sha12_of(cfg_path))
+    lines = []
+    lines += sel.arm_table(res)
+    lines += sel.baseline_table()
+    lines += sel.side_by_side(res, inc)
+    bs = res['book_size']
+    _r, _td = res['scores'][bs]
+    lines += breakdown_report(df, _td, None, gates=_LAST_GATES, cfg=cfg)
+    for ln in lines:
+        print(ln, flush=True)
+    print('', flush=True)
+    print('  ARTIFACTS WRITTEN:', flush=True)
+    for k, v in paths.items():
+        print(f'    {k:10} {v}  sha {_sha12_of(v)}', flush=True)
+    print(f'  SCREEN {res["screen_secs"] / 60:.1f} min over {res["scan_rows"]:,} raw rows',
+          flush=True)
+    return res
 
 
 def _sha12_of(path):
