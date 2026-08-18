@@ -501,3 +501,276 @@ def arm_table(res):
     out.append(f'    emitted book_size = {res["book_size"]}  (SEED={res["seed"]}, '
                f'fingerprint {res["fingerprint"]})')
     return out
+
+
+REQUIRED_KEYS = ('screen.min_trades', 'screen.min_train_pf', 'screen.min_buckets_present',
+                 'screen.min_bucket_profit_frac', 'screen.holdout_months_N',
+                 'draw.seed', 'draw.book_size', 'draw.arm_sizes',
+                 'arch.floor_long', 'arch.floor_short', 'arch.max_positions',
+                 'arch.atr_min', 'arch.recentfb_sizing', 'gates.min_cell_events')
+
+
+def cfg_get(cfg, key, default='__ABORT__'):
+    """CONFIG OR ABORT (SPEC §1). A missing key aborts WITH THE KEY NAME rather than
+    falling back to a value fitted to this frame."""
+    cur = cfg
+    for part in key.split('.'):
+        if not isinstance(cur, dict) or part not in cur:
+            if default != '__ABORT__':
+                return default
+            raise SystemExit(f'ABORT [SELECT config] required key "{key}" is absent. SPEC §1: '
+                             f'every threshold, window rule, band and size comes from config.')
+        cur = cur[part]
+    return cur
+
+
+def assert_config(cfg, cfg_path):
+    missing = [k for k in REQUIRED_KEYS
+               if cfg_get(cfg, k, default='__MISS__') == '__MISS__']
+    if missing:
+        raise SystemExit(f'ABORT [SELECT config] {os.path.basename(cfg_path)} is missing '
+                         f'{len(missing)} required key(s): {missing}')
+    return True
+
+
+def resolved_window(df, N):
+    """SPEC §2. N, the window and the bucket count print on EVERY run."""
+    mo = pd.Series(df['Time'].astype(str).values).str[:7]
+    months = sorted(mo.unique())
+    if len(months) <= N:
+        raise SystemExit(f'ABORT [SELECT] frame spans {len(months)} months; holdout N={N} '
+                         f'leaves no train window.')
+    train = months[:-N] if N else months
+    tmask = mo.isin(train).values
+    ts = df['Time'].astype(str).values
+    return {'N': N, 'train_months': train, 'held': months[-N:] if N else [],
+            'buckets': len(train), 'first_bar': str(ts[tmask][0]),
+            'last_bar': str(ts[tmask][-1])}
+
+
+def band_for(cfg, N, size):
+    b = cfg.get('bands', {}).get(str(N), {})
+    row = b.get(str(size))
+    if not row:
+        return None, None
+    return row, {'N': b.get('_N', N), 'window': b.get('_window', '?'),
+                 'pool': b.get('_pool', '?'), 'seeds': row.get('seeds', '?')}
+
+
+def band_verdict(value, rng):
+    if rng is None or value in (None, ''):
+        return '-'
+    lo, hi = min(rng), max(rng)
+    return 'BELOW' if float(value) < lo else ('ABOVE' if float(value) > hi else 'INSIDE')
+
+
+def gate_candidates(pool):
+    """THE S2 CONDITION POOL IS THE CANDIDATE SPACE (249). DO NOT DETECT VARIABLES.
+
+    A previous pass inferred it from column dtypes and found 151. The true space is
+    249 x 6 cells = 1,494 single-gate trials, which corrects §5.2's estimate from 117
+    variables - same order, same design problem.
+    """
+    return list(pool.keys()) if isinstance(pool, dict) else list(pool)
+
+
+def ungated_trades(df, sigs, ad, st, w, conv, cfg, adm_mod, gap_names):
+    """THE §5.1 BASIS: ADM_TIERGATES EMPTY, floors and the global ATR gate applied.
+
+    A GATE IS DERIVED FROM THE POPULATION IT WILL FILTER, NEVER FROM THE POPULATION IT
+    HAS ALREADY FILTERED. On the gated incumbent LONG d3 reads 3/59 and SHORT d3 2/62
+    and neither can separate - Micro_Hurst > p90 has already removed what it was derived
+    to remove.
+    """
+    keep = dict(tg=adm_mod.ADM_TIERGATES, mx=adm_mod.MAX_POSITIONS, fl=adm_mod.ADM_FLOOR,
+                gt=adm_mod.ADM_GATES, rule=adm_mod.ADMISSION_RULE)
+    adm_mod.ADM_TIERGATES = None
+    adm_mod.ADMISSION_RULE = cfg_get(cfg, 'admission')
+    adm_mod.MAX_POSITIONS = int(cfg_get(cfg, 'arch.max_positions'))
+    adm_mod.ADM_FLOOR = {1: int(cfg_get(cfg, 'arch.floor_long')),
+                         -1: int(cfg_get(cfg, 'arch.floor_short'))}
+    adm_mod.ADM_GATES = {'ATR': df['ATR_1M'].values.astype(float),
+                         'atr_min': float(cfg_get(cfg, 'arch.atr_min'))}
+    try:
+        td = adm_mod.run_portfolio(df, sigs, adaptive=ad, structural=st, warmup=w,
+                                   verbose=False, conviction=conv)
+    finally:
+        for k, v in (('ADM_TIERGATES', keep['tg']), ('MAX_POSITIONS', keep['mx']),
+                     ('ADM_FLOOR', keep['fl']), ('ADM_GATES', keep['gt']),
+                     ('ADMISSION_RULE', keep['rule'])):
+            setattr(adm_mod, k, v)
+    return td[~td['signal_name'].isin(gap_names)]
+
+
+def cells_of(td, tiers):
+    """(direction, tier) -> bars/trades/events. tier = min(depth, max_tier), INHERITED.
+    Tiers below the depth floor are unreachable and are not built."""
+    bar = td['entry_bar'].values.astype(np.int64)
+    dirn = np.array([1 if (x == 1 or str(x).upper() == 'LONG') else -1
+                     for x in td['direction'].values])
+    cnt = {}
+    for b_, d_ in zip(bar, dirn):
+        cnt[(int(d_), int(b_))] = cnt.get((int(d_), int(b_)), 0) + 1
+    depth = np.array([cnt[(int(d_), int(b_))] for b_, d_ in zip(bar, dirn)])
+    tier = np.minimum(depth, max(tiers))
+    out = {}
+    for dv, dl in ((1, 'LONG'), (-1, 'SHORT')):
+        for t in tiers:
+            sel = (dirn == dv) & (tier == t)
+            ids = sorted(set(int(b) for b in bar[sel]))
+            sub = td[sel]
+            ev = int((sub.groupby('entry_bar')['pnl'].sum() < 0).sum()) if len(sub) else 0
+            out[(dl, t)] = {'bars': ids, 'trades': int(sel.sum()), 'events': ev,
+                            'losses': int((sub['pnl'].values < 0).sum()) if len(sub) else 0}
+    return out
+
+
+def stage_a_power(cells, min_events):
+    """STAGE A - POWER FLOOR. "CAN THIS CELL SUPPORT A TEST?", not "is this cell bad?".
+
+    The original asked whether the cell was WORSE than the book. SHORT d3 is BETTER
+    (5.21% vs 7.29%), so it was closed before any candidate could be tested - while
+    Micro_Hurst > p90 demonstrably works there at p = 0.000. The acceptance test could
+    never have passed.
+
+    This closes SHORT d4 (4 events) and SHORT d5+ (2) ON A STATED BASIS, which is the
+    same verdict 20 hand-relocations reached independently.
+    """
+    out = {}
+    for k, m in cells.items():
+        out[k] = {'events': m['events'], 'trades': m['trades'], 'bars': len(m['bars']),
+                  'verdict': 'TESTABLE' if m['events'] >= min_events else 'BELOW POWER FLOOR'}
+    return out
+
+
+def pool_masks(df, pool, keys):
+    """Masks come from the S2 pool itself - built through the sacred dots_thresholds
+    path - so nothing here re-derives a threshold and the p80/p20-for-p90 defect
+    cannot recur."""
+    out = {}
+    for k in keys:
+        a = np.asarray(pool[k])
+        if a.dtype != bool:
+            a = a.astype(bool)
+        if a.shape[0] == len(df):
+            out[k] = a
+    return out
+
+
+def stage_b_rarity(masks, bar_ids, lo, hi, ref=None):
+    """STAGE B - RARITY SHORTLIST, BEFORE ANY OUTCOME IS READ.
+
+    Pass rate on THAT CELL'S ENTRY BARS ONLY, retained within [lo x ref, hi x ref].
+    A RARITY FILTER, NOT A PERFORMANCE FILTER - it is what makes the Stage D null
+    rarity-matched. Expect ~25% of the pool; Micro_Hurst > p90 passes 14.84% of
+    SHORT d3's bars and a +/-50% band retains 66 of 249.
+    """
+    ids = np.asarray(sorted(set(int(b) for b in bar_ids)), dtype=np.int64)
+    if not ids.size:
+        return [], {}, None
+    rates = {k: float(m[ids].mean()) for k, m in masks.items()}
+    pos = [r for r in rates.values() if r > 0]
+    if not pos:
+        return [], rates, None
+    r0 = float(ref) if ref else float(np.median(pos))
+    band = (r0 * lo, r0 * hi)
+    return sorted([k for k, r in rates.items() if r > 0 and band[0] <= r <= band[1]],
+                  key=str), rates, (r0, band)
+
+
+def _events_of(td, sel):
+    b = td[sel].groupby('entry_bar')['pnl'].sum()
+    return int((b < 0).sum())
+
+
+def half_bases(td, train_months, cell_bars):
+    """CONSTRAINT 2, PRINTED: the per-half event base. SHORT d3's 20 events split 7/13,
+    so a both-halves result rests on 7 events. Split-half REMOVES NOISE; IT ESTABLISHES
+    NOTHING, and must not be reported as if it does."""
+    half = max(1, len(train_months) // 2)
+    h1, h2 = set(train_months[:half]), set(train_months[half:])
+    mo = pd.Series(td['exit_time'].astype(str).values).str[:7].values
+    bar = td['entry_bar'].values.astype(np.int64)
+    cell = np.isin(bar, np.asarray(sorted(set(int(b) for b in cell_bars)), dtype=np.int64))
+    return (h1, h2, _events_of(td, cell & np.isin(mo, list(h1))),
+            _events_of(td, cell & np.isin(mo, list(h2))))
+
+
+def stage_cd(masks, cell_bars, td, train_months, shortlist, draws, seed, ckpt_path=None,
+             ckpt_every=5, progress=None):
+    """STAGES C AND D IN ONE PASS, WITH A CHECKPOINT.
+
+    The previous attempt reached 20 of 66 and died with no resume - the third run this
+    week lost to a wall without one. State is flushed every `ckpt_every` candidates and
+    reloaded on entry, so a killed run resumes rather than restarts.
+    """
+    half = max(1, len(train_months) // 2)
+    h1, h2 = set(train_months[:half]), set(train_months[half:])
+    mo = pd.Series(td['exit_time'].astype(str).values).str[:7].values
+    bar = td['entry_bar'].values.astype(np.int64)
+    cell = np.isin(bar, np.asarray(sorted(set(int(b) for b in cell_bars)), dtype=np.int64))
+    m1, m2 = np.isin(mo, list(h1)), np.isin(mo, list(h2))
+    base1, base2 = _events_of(td, m1), _events_of(td, m2)
+    done = {}
+    if ckpt_path and os.path.exists(ckpt_path):
+        try:
+            done = json.load(open(ckpt_path, encoding='utf-8'))
+        except Exception:
+            done = {}
+    cache = {}
+
+    def ev(k):
+        if k not in cache:
+            cache[k] = _events_of(td, ~cell | masks[k][bar])
+        return cache[k]
+
+    passed = []
+    for i, k in enumerate(shortlist, 1):
+        sk = str(k)
+        if sk in done:
+            if done[sk].get('both'):
+                passed.append(k)
+            continue
+        keep = ~cell | masks[k][bar]
+        b1 = _events_of(td, m1 & keep) < base1
+        b2 = _events_of(td, m2 & keep) < base2
+        done[sk] = {'both': bool(b1 and b2), 'h1': bool(b1), 'h2': bool(b2)}
+        if b1 and b2:
+            passed.append(k)
+        if ckpt_path and (i % ckpt_every == 0 or i == len(shortlist)):
+            with open(ckpt_path, 'w', encoding='utf-8') as f:
+                json.dump(done, f)
+            if progress:
+                progress(i, len(shortlist), len(passed))
+    rng = np.random.default_rng(seed)
+    D = {}
+    for k in passed:
+        obs = ev(k)
+        if not shortlist:
+            continue
+        idx = rng.integers(0, len(shortlist), size=int(draws))
+        better = sum(1 for j in idx if ev(shortlist[int(j)]) <= obs)
+        D[str(k)] = {'p': round(better / float(draws), 4), 'obs': obs, 'draws': int(draws),
+                     'better': int(better)}
+    return {'half_base': (base1, base2), 'both': [str(k) for k in passed], 'null': D,
+            'checked': len(done)}
+
+
+def tier_split(D, shortlist_n, cells_admitted, alpha):
+    """TWO TIERS, NEVER CONFLATED.
+
+    CONFIRMED needs p < alpha/(shortlist x cells) - 0.05/264 = 0.00019 on this frame,
+    which 200 draws CANNOT RESOLVE (floor 0.005). AN EMPTY CONFIRMED TIER IS THE CORRECT
+    RESULT, NOT A FAILURE, and no threshold is lowered to populate it.
+    """
+    trials = max(shortlist_n * max(cells_admitted, 1), 1)
+    corrected = alpha / trials
+    conf, cand = [], []
+    for k, v in sorted(D.items(), key=lambda x: (x[1]['p'], x[0])):
+        row = dict(v, condition=k, trials=trials, corrected_threshold=round(corrected, 8))
+        (conf if v['p'] < corrected else (cand if v['p'] < alpha else []))
+        if v['p'] < corrected:
+            conf.append(row)
+        elif v['p'] < alpha:
+            cand.append(row)
+    return conf, cand, corrected, trials

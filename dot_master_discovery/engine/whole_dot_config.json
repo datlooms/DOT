@@ -69,5 +69,232 @@
   },
   "_conviction_note": "recentfb FALSE is DERIVED - DISABLED ON MEASUREMENT. It sized losers up more than winners (winners 1.256->1.183, losers 1.186->1.094) and removing it takes 20% off the worst bar. master.py L1005 hardcoded it TRUE.",
   "base_lot": 1.0,
-  "_base_lot_note": "\u00a76 is quoted at 1.0 lot base. The adopted live figure is 0.30; scaling is exact because the engine fills at the same price regardless of lot size."
+  "_base_lot_note": "\u00a76 is quoted at 1.0 lot base. The adopted live figure is 0.30; scaling is exact because the engine fills at the same price regardless of lot size.",
+  "screen": {
+    "min_trades": 12,
+    "min_train_pf": 2.0,
+    "min_buckets_present": 3,
+    "min_bucket_profit_frac": 0.6667,
+    "holdout_months_N": 1,
+    "min_train_pf_pctile": null,
+    "min_train_trades_pctile": null,
+    "sensitivity_min_trades": [
+      8,
+      10,
+      12
+    ],
+    "sensitivity_min_train_pf": [
+      1.5,
+      2.0
+    ],
+    "quality_pctile_arms": [
+      null,
+      0.25,
+      0.5
+    ],
+    "_holdout_note": "SPEC \u00a72. N was never pinned; one extra training month moves the survivor count 28% (6,267 -> 8,016). Required key.",
+    "_pctile_note": "SPEC \u00a74.5. Percentile of the SURVIVING pool, per direction, AFTER the four absolute criteria. null DISABLES. NEVER set from the incumbent medians - measured on FULL-SAMPLE statistics, one step from the look-ahead the pre-filter had."
+  },
+  "draw": {
+    "seed": 0,
+    "book_size": 297,
+    "arm_sizes": [
+      150,
+      200,
+      297,
+      500,
+      1000
+    ]
+  },
+  "arch": {
+    "floor_long": 3,
+    "floor_short": 3,
+    "max_positions": 21,
+    "atr_min": 20.0,
+    "recentfb_sizing": false
+  },
+  "gates": {
+    "min_cell_events": 10,
+    "_stage_a_note": "REV5 \u00a75.3 STAGE A IS A POWER FLOOR, NOT A QUALITY GATE. The original asked \"is this cell worse than the book?\" and SHORT d3 is BETTER (5.21% vs 7.29%), so it closed before any candidate could be tested while Micro_Hurst > p90 demonstrably works there at p=0.000. \"Worth gating\" is not \"worse than average\".",
+    "rarity_lo": 0.5,
+    "rarity_hi": 1.5,
+    "rarity_ref": null,
+    "null_draws": 200,
+    "confirm_alpha": 0.05,
+    "_stage_d_note": "TWO TIERS, NEVER CONFLATED. CONFIRMED needs p < alpha/(shortlist x cells) = 0.05/264 = 0.00019, which 200 draws CANNOT RESOLVE. AN EMPTY CONFIRMED TIER IS THE CORRECT RESULT, NOT A FAILURE. Do not lower a threshold to populate it. THE STAGE ADOPTS NOTHING AUTOMATICALLY.",
+    "checkpoint_every": 5,
+    "preregistered": [
+      {
+        "cell": [
+          "LONG",
+          3
+        ],
+        "condition": "Micro_Hurst:hi",
+        "mechanism": "persistence, for an entry standing on fewer confirmations"
+      },
+      {
+        "cell": [
+          "SHORT",
+          3
+        ],
+        "condition": "Micro_Hurst:hi",
+        "mechanism": "persistence, for an entry standing on fewer confirmations"
+      }
+    ],
+    "_prereg_note": "REV5 \u00a75.4. THE MISSING INFORMATION IS A PRIOR. Hand-derivation cleared p=0.022 and p=0.000 as ONE candidate at ONE cell on a mechanism argument - trial count 1. The same p as best-of-66 is expected ~1.5 times by chance. Declared BEFORE the run, printed in the banner, tested at its own trial count. THE ARTIFACT RECORDS THE CONFIG SHA so a candidate cannot be added after seeing the scan output - without that, pre-registration is just a way to declare a winner.",
+    "tiers": [
+      3,
+      4,
+      5
+    ]
+  },
+  "incumbent": {
+    "signals": 297,
+    "trades": 5776,
+    "WR": 96.12,
+    "PF": 14.53,
+    "net": 284974.0,
+    "events": 42,
+    "event_days": 35,
+    "worst_day": -346.6,
+    "losing_weeks": 0,
+    "weeks": 26,
+    "days": 119,
+    "days_frame": 132,
+    "margin": 33.07
+  },
+  "bands": {
+    "1": {
+      "_window": "2026.01-06",
+      "_N": 1,
+      "_pool": 8016,
+      "_trials": 14,
+      "_seeds": "1000-1004 (297), 1000-1002 (others)",
+      "150": {
+        "events": [
+          13,
+          22
+        ],
+        "PF": [
+          7.95,
+          12.17
+        ],
+        "worst_day": [
+          -2087,
+          -880
+        ],
+        "losing_weeks": [
+          1,
+          3
+        ],
+        "days": [
+          76,
+          85
+        ],
+        "margin": [
+          31.2,
+          33.7
+        ],
+        "net": [
+          68400,
+          85800
+        ],
+        "seeds": 3
+      },
+      "200": {
+        "events": [
+          22,
+          41
+        ],
+        "PF": [
+          5.9,
+          9.69
+        ],
+        "worst_day": [
+          -1115,
+          -880
+        ],
+        "losing_weeks": [
+          2,
+          4
+        ],
+        "days": [
+          89,
+          107
+        ],
+        "margin": [
+          26.9,
+          29.0
+        ],
+        "net": [
+          104000,
+          121000
+        ],
+        "seeds": 3
+      },
+      "297": {
+        "events": [
+          51,
+          61
+        ],
+        "PF": [
+          5.87,
+          7.75
+        ],
+        "worst_day": [
+          -2703,
+          -1110
+        ],
+        "losing_weeks": [
+          1,
+          2
+        ],
+        "days": [
+          109,
+          118
+        ],
+        "margin": [
+          24.4,
+          30.2
+        ],
+        "net": [
+          164000,
+          184000
+        ],
+        "seeds": 5
+      },
+      "500": {
+        "events": [
+          144,
+          168
+        ],
+        "PF": [
+          4.16,
+          4.34
+        ],
+        "worst_day": [
+          -2795,
+          -2133
+        ],
+        "losing_weeks": [
+          1,
+          2
+        ],
+        "days": [
+          120,
+          122
+        ],
+        "margin": [
+          20.3,
+          20.8
+        ],
+        "net": [
+          314000,
+          339000
+        ],
+        "seeds": 3
+      }
+    },
+    "_superseded_note": "THE 4,575-POOL / N=2 BANDS ARE SUPERSEDED. Reading an N=1 draw against them produced the WITHDRAWN \"four of five arms sit below their band\". Re-measured, nothing is below and 297 sits ABOVE."
+  }
 }
