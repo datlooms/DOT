@@ -41,7 +41,7 @@ FOLD_BASIS_NOTE = ('folds and OOS are PROPORTIONAL, never calendar. The loaded p
 OOS_MONTHS = ['2026.05', '2026.06']
 OOS_LEGACY_NOTE = 'LEGACY DIAGNOSTIC, STALE: fixed calendar months, neither out-of-sample nor segment-relative on a stitched series; not a selection input (spec B.1). oos_rel_* are the data-relative counterpart.'
 OOS_REL_N_MONTHS = 2
-STAGES = ['S0', 'S1', 'S2', 'S2B', 'S3', 'S3B', 'S4', 'S5', 'S5D', 'S6', 'S5B', 'S5C', 'S7', 'S8', 'S8B', 'S9', 'S10']
+STAGES = ['S0', 'S1', 'S2', 'S2B', 'S3', 'S3B', 'S4', 'S5', 'S5D', 'S6', 'S5B', 'S5C', 'S7', 'S8', 'S8B', 'S9', 'S10', 'SELECT']
 FAMILIES = [
     ('F0', 'triple_convergence_and_d2ddir', 'committed'),
     ('F1', 'sequential_temporal', 'committed'),
@@ -1344,6 +1344,63 @@ def _score_configured(df, sigs, ad, st, w, conv, cfg):
               'days_pos': int((_byday > 0).sum()), 'days_traded': int(len(_byday)),
               'days_in_frame': int(_allday.nunique())})
     return r, td
+
+
+def s_select(df, ad, st, w, pool, anchor, book_file, out, input_sha, workers):
+    """SELECT - data in, signals and score out.
+
+    SECTION 4: THE SCAN DEPENDENCY IS DECLARED BY ASSERTION, NOT BY INVOKING S3.
+    The screen operates on results_F0_*.csv. Running SELECT on a new month would
+    otherwise screen LAST MONTH'S candidate rows against NEW data, and nothing
+    downstream would say so. Aborting rather than warning is the point: a warning on
+    a monthly stage is read once and then not.
+
+    That choice is also why the train-window statistics take ROUTE A (solo re-run)
+    rather than ROUTE B (emit the partition at scan time): route B's precondition was
+    'prefer if S3 is being touched anyway', and it is not. Measured at 0.157 s/signal,
+    19,754 rows is ~4 minutes at 14 workers - not the 62-minute serial tax route B
+    was avoiding.
+    """
+    import select_stage as sel
+    import discovery_orchestrator as orch
+    results = os.path.join(out, 'results')
+    scan = os.path.join(results, 'results_F0_triple_convergence_and_d2ddir.csv')
+    if not os.path.exists(scan):
+        raise SystemExit(f'ABORT [SELECT] the F0 scan is absent: {scan}. SELECT screens the raw '
+                         f'scan; run --stage S3 first.')
+    ok, why = orch.provenance_is_current(scan, input_sha)
+    if not ok:
+        raise SystemExit(
+            f'ABORT [SELECT] SCAN/FRAME MISMATCH: {why}. The scan was produced from a different '
+            f'frame than the one loaded, so the screen would validate LAST MONTH\'S candidate '
+            f'rows against NEW data - the train-only claim would be false in the first place a '
+            f'reviewer looks. Re-run --stage S3 against this frame.')
+    print(f'  SCAN DEPENDENCY: {os.path.basename(scan)} provenance matches the frame '
+          f'({input_sha}) - {why}', flush=True)
+    cfg, cfg_path = book_config_for(book_file)
+    if cfg is None:
+        raise SystemExit(f'ABORT [SELECT] no book config. SELECT selects signals but does NOT '
+                         f'derive constants - floors, gate stack, MAX_POSITIONS, ATR floor and '
+                         f'admission all come from the config. Pass --book with a configured '
+                         f'book (its signal list is not used; only its rules).')
+    print(f'  ARCHITECTURE: {os.path.basename(cfg_path)} sha '
+          f'{_sha12_of(cfg_path)} - floors L{cfg["long_depth_floor"]}/S'
+          f'{cfg["short_depth_floor"]}, cap {cfg["max_positions"]}, '
+          f'{cfg["global_gate"]["variable"]} >= {cfg["global_gate"]["value"]}, '
+          f'{cfg["admission"]} admission, recentfb {cfg["conviction"]["recentfb"]}', flush=True)
+    return sel.run_select(df, ad, st, w, pool, anchor, cfg, cfg_path, out, input_sha, workers,
+                          scan_path=scan, score_fn=_score_configured,
+                          metrics_fn=_metrics_from_trades, grammar_fn=_assert_book_grammar,
+                          breakdown_fn=breakdown_report, loss_events_fn=loss_events)
+
+
+def _sha12_of(path):
+    import hashlib as _h
+    h = _h.sha256()
+    with open(path, 'rb') as f:
+        for blk in iter(lambda: f.read(1 << 20), b''):
+            h.update(blk)
+    return h.hexdigest()[:12]
 
 
 def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
@@ -4001,6 +4058,10 @@ def main():
         with rl.Heartbeat('S7 six portfolio scores'):
             with rl.Stage('S7', 'contenders'):
                 contenders = s7_contenders(df, ad, st, w, sigs, out, input_sha)
+    if only == 'SELECT':
+        print('\n[SELECT] SELECTION - screen the raw F0 scan, draw nested arms, score all six')
+        with rl.Stage('SELECT', 'select & score'):
+            s_select(df, ad, st, w, pool, anchor, book_file, out, input_sha, args.workers)
     if run_all or only == 'S8':
         print('\n[S8] COMMITTED-SYSTEM SCORE')
         with rl.Heartbeat('S8 committed-book scoring'):

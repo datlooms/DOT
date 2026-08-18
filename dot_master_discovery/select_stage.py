@@ -216,3 +216,124 @@ def _scr_chunk(payload):
                        'gross_loss': float(-pp[pp < 0].sum())}
         out.append((sd, dr, per))
     return idx, out
+
+
+def screen_all(items, frame_path, workers, train_months):
+    """Solo-run every candidate and screen on TRAIN-WINDOW statistics.
+
+    Falls back to serial on a pool failure: on a small-RAM box, 14 workers each
+    holding a 177,251 x 172 frame is spawn thrash rather than parallelism, and a
+    stage that silently stalls is worse than one that runs slowly and says so.
+    """
+    import multiprocessing as _mp
+    from concurrent.futures import ProcessPoolExecutor
+    from concurrent.futures.process import BrokenProcessPool
+    n = len(items)
+    res = []
+    if workers and workers > 1 and n >= 64:
+        size = max(1, -(-n // (int(workers) * 4)))
+        chunks = [(k, items[i:i + size]) for k, i in enumerate(range(0, n, size))]
+        try:
+            with ProcessPoolExecutor(max_workers=min(int(workers), len(chunks)),
+                                     mp_context=_mp.get_context('spawn'),
+                                     initializer=_scr_init,
+                                     initargs=(frame_path,)) as ex:
+                done = 0
+                for _i, out in ex.map(_scr_chunk, chunks):
+                    res.extend(out)
+                    done += 1
+                    print(f'    screen chunk {done}/{len(chunks)} - {len(res):,}/{n:,}',
+                          flush=True)
+        except (BrokenProcessPool, OSError, MemoryError, Exception) as exc:
+            print(f'    screen pool failed ({type(exc).__name__}: {str(exc)[:70]}) - SERIAL',
+                  flush=True)
+            res = []
+    if not res:
+        _scr_init(frame_path)
+        step = max(1, n // 20)
+        for i in range(0, n, step):
+            _j, out = _scr_chunk((0, items[i:i + step]))
+            res.extend(out)
+            print(f'    screen serial {len(res):,}/{n:,}', flush=True)
+    surv, rej = [], []
+    for sd, dr, per in res:
+        ok, why, stats = screen_row(per, train_months)
+        row = dict(signal_def=sd, direction=dr, **stats)
+        if ok:
+            surv.append(row)
+        else:
+            rej.append(dict(row, reject_criterion=why))
+    return stable_survivors(surv), rej
+
+
+def emit_artifacts(out, res, arm_books, scores, cfg_path, cfg_sha):
+    """FOUR OUTPUTS. The selection file says PROVENANCE, NOT A SCORE - a column that
+    looks like a ranking will be read as one within a week, and facts F1-F3 say there
+    is nothing here to rank."""
+    bs = res['book_size']
+    seed = res['seed']
+    d = os.path.join(out, 'select')
+    os.makedirs(d, exist_ok=True)
+    paths = {}
+    bk = pd.DataFrame([{'trigger': 'F0', 'direction': r['direction'],
+                        'signal_def': r['signal_def']} for r in arm_books[bs]])
+    p1 = os.path.join(d, f'{bs}_signals.csv')
+    bk.to_csv(p1, index=False, lineterminator='\n')
+    paths['signals'] = p1
+    chosen = {(r['signal_def'], r['direction']) for r in arm_books[bs]}
+    sel = []
+    for r in res['survivors']:
+        if (r['signal_def'], r['direction']) not in chosen:
+            continue
+        sel.append(dict(r, SEED=seed, book_size=bs,
+                        PASS_trades='PASS', PASS_train_PF='PASS',
+                        PASS_buckets='PASS', PASS_bucket_frac='PASS'))
+    p2 = os.path.join(d, f'{bs}_selection.csv')
+    _write_hdr(p2, pd.DataFrame(sel), [
+        'DOT SELECT - PROVENANCE OF THE ADMITTED SIGNALS. NOT A SCORE AND NOT A RANKING.',
+        f'SEED={seed} book_size={bs} config={os.path.basename(cfg_path)} sha={cfg_sha}',
+        'Every column here records WHY a signal was ADMITTED by the train-window screen. '
+        'NOTHING IN THIS FILE ORDERS SIGNALS BY QUALITY: a rebuilt ranking selector lost to '
+        '12 of 12 random draws on a holdout, 297 leave-one-out runs gave split-half rho '
+        '-0.060 at p=0.305, and d_events moved by zero for 212 of 297. The book is '
+        'homogeneous - there is nothing to prune and nothing to rank.',
+        'Membership is a SEEDED DRAW at a config size, which is a SIZE PARAMETER, not a '
+        'ranking. The arm is reproducible from SEED and book_size alone.'])
+    paths['selection'] = p2
+    p3 = os.path.join(d, f'{bs}_rejected.csv')
+    _write_hdr(p3, pd.DataFrame(res['rejected']), [
+        'DOT SELECT - EVERYTHING THE TRAIN-WINDOW SCREEN CUT, WITH THE CRITERION THAT CUT IT.',
+        f'SEED={seed} book_size={bs}',
+        'Screened on the RAW F0 scan. The 6,488/6,034 pre-filter is deliberately NOT applied: '
+        'it uses full-sample agg_pf, folds_plus and trades computed over the months the screen '
+        'is meant to validate against, so layering a train-only screen on it means the '
+        'population was already selected with the answer.'])
+    paths['rejected'] = p3
+    return paths
+
+
+def _write_hdr(path, frame, header):
+    with open(path, 'w', encoding='utf-8', newline='') as f:
+        for h in header:
+            f.write(f'# {h}\n')
+        frame.to_csv(f, index=False, lineterminator='\n')
+
+
+def baseline_table():
+    """SECTION 7. Size-relative, and every range is a FLOOR."""
+    out = ['', '  RANDOM BASELINE - COMPARE EACH ARM TO ITS OWN ROW, NOT TO THE INCUMBENT',
+           f'    {"signals":>9}{"events":>12}{"PF":>12}{"margin":>14}{"days":>12}{"seeds":>7}']
+    for n, ev, pf, mg, dy, sd in RANDOM_BASELINE:
+        out.append(f'    {n:>9}{ev:>12}{pf:>12}{mg:>14}{dy:>12}{sd:>7}')
+    out.append(f'    {"INCUMBENT":>9}{"42":>12}{"14.53":>12}{"33.07":>14}{"119":>12}{"-":>7}')
+    out.append('    All ranges are FLOORS: measured on the 4,575 PRE-CORRECTION pool, and the')
+    out.append('    corrected screen admits signals that failed the full-sample filter.')
+    out.append('    AN ARM INSIDE ITS OWN RANGE HAS REPRODUCED THE RANDOM BASELINE, NOT THE BOOK.')
+    out.append('    THE ONLY RESULT THAT MEANS SOMETHING IS AN ARM BELOW ITS RANGE.')
+    out.append('    AND IF EVERY ARM LANDS INSIDE ITS BAND, THAT IS THE FINDING, NOT A DEFECT:')
+    out.append('    the incumbent sits at the 4th percentile of this distribution and NOTHING IN')
+    out.append('    ITS MEMBERS EXPLAINS WHY - 297 leave-one-out runs, a 50-draw ablation,')
+    out.append('    split-half rho -0.060 and four indistinguishable source objectives all say')
+    out.append('    so. Its edge lives in the specific combination, and no reproducible')
+    out.append('    procedure can currently regenerate it.')
+    return out
