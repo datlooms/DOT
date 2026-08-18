@@ -129,7 +129,9 @@
           "LONG",
           3
         ],
-        "condition": "Micro_Hurst:hi",
+        "variable": "Micro_Hurst",
+        "side": "hi",
+        "pct": 90,
         "mechanism": "persistence, for an entry standing on fewer confirmations"
       },
       {
@@ -137,7 +139,9 @@
           "SHORT",
           3
         ],
-        "condition": "Micro_Hurst:hi",
+        "variable": "Micro_Hurst",
+        "side": "hi",
+        "pct": 90,
         "mechanism": "persistence, for an entry standing on fewer confirmations"
       }
     ],
@@ -146,7 +150,17 @@
       3,
       4,
       5
-    ]
+    ],
+    "min_cell_support": 20,
+    "half_split": "cell_bar_median",
+    "prereg_checksums": {
+      "Micro_Hurst|hi|90": 9.7478,
+      "AT_Slope_ST|hi|90": 6.2217,
+      "Micro_FailedBreak|hi|20": 80.1874
+    },
+    "_arch_note": "THE S2 POOL CANNOT EXPRESS > p90. dt._D_SPEC is exactly [0.2, 0.8], so pool hi/lo conditions are p80/p20. The 297 signals are built from that vocabulary while the adopted gate stack uses percentiles it cannot express - the gates entered through hand-derivation with swept_thresholds, never through the scan grammar. ARCHITECTURE, not an error. A Micro_Hurst:hi drawn from the pool is > p80, a LOOSER condition, and ranking it is ranking the wrong candidate.",
+    "_prereg_route_note": "REV7: THE PREREG PATH DOES NOT PASS THROUGH STAGE C. It goes straight to the Stage D null ON THE FULL CELL - 20 loss events at SHORT d3 rather than 4 - which is how the gate was derived. Micro_Hurst > p90 FAILS Stage C at SHORT d3 because half A retains 1 loss bar of 35 against a base of 0.0208 ON FOUR LOSS BARS, and the verdict flips on the split definition alone. THAT IS A PROPERTY OF THE HALF, NOT THE GATE.",
+    "max_min_rate_ties": 1
   },
   "incumbent": {
     "signals": 297,

@@ -774,3 +774,75 @@ def tier_split(D, shortlist_n, cells_admitted, alpha):
         elif v['p'] < alpha:
             cand.append(row)
     return conf, cand, corrected, trials
+
+
+def prereg_mask(df, variable, side, pct, sw_mod):
+    """THE BRIDGE (REV7 §7.4). STRICT BOTH WAYS.
+
+    sw.swept substitutes dt._D_SPEC, calls the sacred compute_adaptive_thresholds and
+    restores in a finally - ring 2500, day-refreshed on the day-of-month field, floor-
+    index percentile, no warm-up special case, identical to production by construction.
+
+    THIS EXISTS BECAUSE dt._D_SPEC IS EXACTLY [0.2, 0.8]: the S2 pool cannot express
+    > p90, so a Micro_Hurst:hi drawn from the pool is > p80 - a LOOSER condition. Ranking
+    it is ranking the wrong candidate, and that already shipped once.
+    """
+    # _D_SPEC IS EXPRESSED AS FRACTIONS (0.8 / 0.2), NOT PERCENTAGES. Passing 90 where
+    # 0.90 belongs made Micro_Hurst > p90 pass 0.2104% of bars instead of 9.7478% - the
+    # checksum caught it on its first run, which is exactly what it is for.
+    q = float(pct) / 100.0 if float(pct) > 1.0 else float(pct)
+    t = sw_mod.swept(df, {(variable, side): (variable, q)})[(variable, side)]
+    v = df[variable].values
+    return (v > t) if side == 'hi' else (v < t)
+
+
+def assert_prereg_checksums(df, cfg, sw_mod):
+    """HARD ABORT, EXACT TO 4 DP. A mask near 20% where Micro_Hurst > p90 belongs means
+    the p80 series is live - the defect swept_thresholds exists to prevent."""
+    want = cfg_get(cfg, 'gates.prereg_checksums')
+    lines, bad = [], []
+    for key, exp in sorted(want.items()):
+        var, side, pct = key.split('|')
+        got = round(100.0 * float(prereg_mask(df, var, side, float(pct), sw_mod).mean()), 4)
+        ok = abs(got - float(exp)) < 1e-4
+        lines.append(f'    {var} {side} p{pct:<4} expected {float(exp):8.4f}%  got '
+                     f'{got:8.4f}%  {"OK" if ok else "MISMATCH"}')
+        if not ok:
+            bad.append((key, exp, got))
+    if bad:
+        raise SystemExit('ABORT [prereg checksum] ' + '; '.join(
+            f'{k}: expected {e}% got {g}%' for k, e, g in bad) +
+            '. A mask near 20% where a p90 condition belongs means ad[(var,"hi")] - the p80 '
+            'series - is being used. swept_thresholds exists to prevent exactly this and the '
+            'defect has already shipped once.')
+    return lines
+
+
+def support_filter(masks, cell_bars, min_support):
+    """gates.min_cell_support - AN UNSTATED RULE, NOW NAMED WITH ITS EFFECT.
+
+    A condition admitting fewer than min_support of the cell's entry bars cannot be
+    tested there. Measured: excludes 41 of 249 at LONG d3 (208 supported) and 39 at
+    SHORT d3 (210) - THE ENTIRE 39-of-208 vs 112-of-249 divergence.
+    """
+    ids = np.asarray(sorted(set(int(b) for b in cell_bars)), dtype=np.int64)
+    kept, dropped = [], 0
+    for k, m in masks.items():
+        if int(m[ids].sum()) >= int(min_support):
+            kept.append(k)
+        else:
+            dropped += 1
+    return sorted(kept, key=str), dropped
+
+
+def cell_halves(cell_bars, mode):
+    """gates.half_split - THE OTHER UNSTATED RULE. 'cell_bar_median' splits on the median
+    of THAT CELL'S OWN entry bars, giving exactly 269/269 and 192/192. A frame-midpoint
+    split gives 251/252 and 170/183 and FLIPS THE SHORT d3 VERDICT on its own."""
+    ids = sorted(set(int(b) for b in cell_bars))
+    if mode != 'cell_bar_median':
+        raise SystemExit(f'ABORT [gates.half_split] "{mode}" is not implemented. Only '
+                         f'"cell_bar_median" is specified; a frame-midpoint split changes '
+                         f'the SHORT d3 verdict on its own and must not be chosen silently.')
+    mid = len(ids) // 2
+    return {'A': ids[:mid], 'B': ids[mid:]}, (ids[mid] if ids else None)
