@@ -32,6 +32,7 @@ import pandas as pd
 TRAIN_EXCLUDE_MONTHS = 1
 ARM_SIZES = (150, 200, 297, 500, 1000)
 SEED = 0
+SMOKE_NULL_CAP = None
 _SEL_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 # Section 7. Measured on the 4,575 PRE-CORRECTION pool, so every range is a FLOOR:
@@ -1022,13 +1023,21 @@ def prereg_null_exhaustive(df, sigs, ad, st, w, conv, cfg, adm_mod, gap_names,
                                    verbose=False, conviction=conv)
         return book_loss_events(td, gap_names)
 
+    # SMOKE_NULL_CAP truncates the ENUMERATION so smoke does not become the 186s/320s
+    # long pole it exists to precede. A CAPPED NULL IS NOT A VERDICT and the caller must
+    # print it as a cap - a smoke figure that reads like a result is worse than no figure.
+    _items = sorted(shortlist_masks.items(), key=lambda x: str(x[0]))
+    _cap = SMOKE_NULL_CAP
+    _capped = bool(_cap) and len(_items) > int(_cap)
+    if _capped:
+        _items = _items[:int(_cap)]
     try:
         adopted = events_with(adopted_mask)
         nulls = []
-        for i, (k, m) in enumerate(sorted(shortlist_masks.items(), key=lambda x: str(x[0])), 1):
+        for i, (k, m) in enumerate(_items, 1):
             nulls.append((str(k), events_with(m)))
-            if progress and (i % 5 == 0 or i == len(shortlist_masks)):
-                progress(i, len(shortlist_masks))
+            if progress and (i % 5 == 0 or i == len(_items)):
+                progress(i, len(_items))
     finally:
         for a_, v_ in (('ADM_TIERGATES', keep['tg']), ('MAX_POSITIONS', keep['mx']),
                        ('ADM_FLOOR', keep['fl']), ('ADM_GATES', keep['gt']),
@@ -1039,7 +1048,8 @@ def prereg_null_exhaustive(df, sigs, ad, st, w, conv, cfg, adm_mod, gap_names,
     vals = [v for _k, v in nulls]
     better = sum(1 for v in vals if v < adopted)
     ties = sum(1 for v in vals if v == adopted)
-    return {'adopted': adopted, 'n': len(vals), 'min': min(vals),
+    return {'capped': _capped, 'cap': (int(_cap) if _capped else None),
+            'adopted': adopted, 'n': len(vals), 'min': min(vals),
             'median': float(np.median(vals)), 'max': max(vals),
             'better': better, 'ties': ties, 'p': round(better / float(len(vals)), 4),
             'nulls': nulls}
@@ -1193,6 +1203,10 @@ def run_gate_layer(df, sigs, ad, st, w, conv, cfg, pool, adm_mod, sw_mod, gap_na
             continue
         v = 'CONFIRMED' if r['p'] <= thr else 'CANDIDATE'
         verdicts[key] = v
+        if r.get('capped'):
+            out.append(f'      *** {key[0]} d{key[1]} PREREG NULL ENUMERATION CAPPED AT '
+                       f'{r["cap"]} OF THE FULL SHORTLIST - THIS p IS NOT A VERDICT. The real '
+                       f'run enumerates every candidate. ***')
         out.append(f'      {key[0]:5} d{key[1]:<3} {pe["variable"]} > p{int(pe["pct"])}  '
                    f'BOOK LOSS EVENTS (full engine run, replace-not-stack) adopted '
                    f'{r["adopted"]} | null n {r["n"]} EXHAUSTIVE | min/med/max {r["min"]}/'
@@ -1207,3 +1221,58 @@ def run_gate_layer(df, sigs, ad, st, w, conv, cfg, pool, adm_mod, sw_mod, gap_na
                f'prereg {n_tests} pairs')
     out.append('  ' + '=' * 96)
     return out, verdicts
+
+
+DEPLOY_FILES = (
+    'master.py', 'select_stage.py', 'engine/whole_dot_config.json',
+    'engine/canary_reference.json', 'engine/adm_engine.py', 'engine/swept_thresholds.py',
+    'engine/whole_dot_signals.csv', 'engine/book50_signals.csv',
+    'engine/dots_thresholds.py', 'engine/wf.py', 'engine/core.py',
+    'engine/portfolio_simulation_engine.py', 'engine/conviction.py', 'engine/score_g.py',
+    'engine/cluster_profiler.py', 'orchestrator/discovery_orchestrator.py',
+    'scanners/sequential_temporal.py', 'dot_frame_binding.py', 'sitecustomize.py',
+)
+
+
+def deploy_manifest(root, reference=None):
+    """EVERY FILE --stage SELECT REQUIRES, WITH ITS SHA. FAILS BY NAME.
+
+    The operator has a second tree (DOT_deploy) and had to be told by hand which files
+    to copy across a build that changed many of them. One command should tell him exactly
+    what to copy rather than making him diff two trees.
+
+    Returns (rows, missing, stale). A file absent or differing from the reference is
+    named individually - a manifest that says "something is wrong" is not a manifest.
+    """
+    rows, missing, stale = [], [], []
+    for rel in DEPLOY_FILES:
+        path = os.path.join(root, rel)
+        if not os.path.exists(path):
+            rows.append({'file': rel, 'sha': '', 'status': 'MISSING'})
+            missing.append(rel)
+            continue
+        sha = _sha(path)
+        st = 'OK'
+        if reference and rel in reference and reference[rel] != sha:
+            st = f'STALE (have {sha}, want {reference[rel]})'
+            stale.append(rel)
+        rows.append({'file': rel, 'sha': sha, 'status': st})
+    return rows, missing, stale
+
+
+def print_deploy_manifest(root, reference=None):
+    rows, missing, stale = deploy_manifest(root, reference)
+    out = ['', '  DEPLOY MANIFEST - every file --stage SELECT requires',
+           f'    {"file":48}{"sha":14}status']
+    for r in rows:
+        out.append(f'    {r["file"]:48}{r["sha"] or "-":14}{r["status"]}')
+    if missing:
+        out.append(f'    *** {len(missing)} FILE(S) MISSING: {missing} - COPY THESE ACROSS. '
+                   f'The run dies without them. ***')
+    if stale:
+        out.append(f'    *** {len(stale)} FILE(S) STALE: {stale} - COPY THESE ACROSS. ***')
+    if not missing and not stale:
+        out.append('    all present and current')
+    out.append('    NOTE: a COPIED F0 scan does NOT carry its provenance stamp. Re-run '
+               '--stage S3 in the target tree, or SELECT aborts on the section-4 guard.')
+    return out, missing, stale

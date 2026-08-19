@@ -1365,6 +1365,90 @@ def _gate_ctx(df, ad, st, w, pool, cfg):
     return {'df': df, 'sigs': sigs, 'conv': conv, 'pool': pool, 'adm': _adm, 'sw': _sw}
 
 
+def _smoke_select(df, ad, st, w, pool, anchor, out, input_sha, workers):
+    """The SELECT leg of --smoke. EVERY CAP IS PRINTED AS A CAP.
+
+    A smoke figure that reads like a result is worse than no figure: the operator must
+    never mistake a capped null or a capped screen for a measurement. The cells are REAL
+    regardless of how many signals the screen admits, so they are NOT capped - only the
+    scan row count, the arm sizes and the prereg null enumeration are.
+    """
+    import select_stage as sel
+    import discovery_orchestrator as orch
+    import pandas as _pd
+    results = os.path.join(out, 'results')
+    scan = os.path.join(results, 'results_F0_triple_convergence_and_d2ddir.csv')
+    if not os.path.exists(scan):
+        print('  SMOKE SELECT: F0 scan absent - S3 did not emit it. SKIPPED.', flush=True)
+        return
+    # THE SECTION-4 PROVENANCE GUARD, EXERCISED. It fired in development with
+    # "no provenance stamp" and cost a run, so a freshly-populated tree will hit it too.
+    ok, why = orch.provenance_is_current(scan, input_sha)
+    print(f'  SECTION-4 PROVENANCE GUARD: {"PASS" if ok else "WOULD ABORT"} - {why}',
+          flush=True)
+    if not ok:
+        print(f'      THE REAL RUN WOULD ABORT HERE. The scan carries no stamp for this '
+              f'frame, so the screen would validate LAST MONTH\'S candidate rows against '
+              f'NEW data. FIX: re-run --stage S3 against this frame, which stamps the scan. '
+              f'Copying a scan between trees does NOT carry the stamp.', flush=True)
+        return
+    cfg_path = os.path.join(_HERE, 'engine', 'whole_dot_config.json')
+    if not os.path.exists(cfg_path):
+        print('  SMOKE SELECT: engine/whole_dot_config.json absent. SKIPPED.', flush=True)
+        return
+    with open(cfg_path, encoding='utf-8') as f:
+        cfg = json.load(f)
+    sel.assert_config(cfg, cfg_path)
+    cap_rows = int(globals().get('SMOKE_SCAN_ROWS', 120))
+    cap_null = int(globals().get('SMOKE_NULL_CAP', 8))
+    arms = tuple(globals().get('SMOKE_ARMS', (16, 24, 32)))
+    print(f'  *** SMOKE CAPS, AND EVERY ONE IS A CAP NOT A RESULT: scan rows {cap_rows} of '
+          f'the full scan | arm sizes {arms} are STAND-INS for '
+          f'{cfg["draw"]["arm_sizes"]} | prereg null enumeration capped at {cap_null} of the '
+          f'full shortlist. THE CELLS ARE REAL AND ARE NOT CAPPED. ***', flush=True)
+    full = _pd.read_csv(scan)
+    sub = full.iloc[:min(cap_rows, len(full))]
+    smoke_scan = os.path.join(results, '_smoke_F0_scan.csv')
+    sub.to_csv(smoke_scan, index=False, lineterminator='\n')
+    orch.stamp_provenance(smoke_scan, input_sha)
+    sel.SMOKE_NULL_CAP = cap_null
+    try:
+        res = sel.run_select(df, ad, st, w, pool, anchor, cfg, cfg_path, out, input_sha,
+                             workers, scan_path=smoke_scan, score_fn=_score_configured,
+                             metrics_fn=_metrics_from_trades,
+                             grammar_fn=_assert_book_grammar,
+                             breakdown_fn=breakdown_report, loss_events_fn=loss_events,
+                             arm_sizes=arms, book_size=arms[-1],
+                             gate_ctx=_gate_ctx(df, ad, st, w, pool, cfg))
+    finally:
+        sel.SMOKE_NULL_CAP = None
+    paths = sel.emit_artifacts(out, res, res['arm_books'], res['scores'], cfg_path,
+                               _sha12_of(cfg_path))
+    for ln in sel.arm_table(res):
+        print(ln, flush=True)
+    print('  SELECT ARTIFACTS:', flush=True)
+    _empty = []
+    for k, v in paths.items():
+        n = max(0, sum(1 for _l in open(v, encoding='utf-8', errors='replace')
+                       if not _l.startswith('#')) - 1)
+        print(f'    {k:10} {os.path.basename(v):28} {n:>6} rows  sha {_sha12_of(v)}',
+              flush=True)
+        if n == 0:
+            _empty.append(os.path.basename(v))
+    if _empty:
+        raise SystemExit(f'ABORT [--smoke] SELECT artifact(s) with ZERO ROWS: {_empty}. Under '
+                         f'--smoke an empty artifact is a FAILED SMOKE RUN - the path it '
+                         f'exercises was not tested.')
+    print('  smoke non-empty assertion EXTENDED TO THE SELECT ARTIFACTS: all have rows.',
+          flush=True)
+    for _ln in sel.print_deploy_manifest(_HERE)[0]:
+        print(_ln, flush=True)
+    b50 = os.path.join(_HERE, 'engine', 'book50_signals.csv')
+    if os.path.exists(b50):
+        print('  SMOKE CANARY: scoring BOOK-50 so the engine check cannot be silent', flush=True)
+        s8_committed(df, ad, st, w, pool, anchor, b50, out, input_sha)
+
+
 def s_select(df, ad, st, w, pool, anchor, book_file, out, input_sha, workers,
              arm_sizes=None, book_size=None):
     """SELECT - data in, signals and score out.
@@ -4189,6 +4273,15 @@ def main():
                 'downstream threshold silently turns a test into a no-op - that was invisible '
                 'for four runs. Raise DOT_SMOKE_CAP or lower ONSET_FLOORS until these populate.')
         print('  smoke non-empty assertion: every load-bearing artifact has rows.', flush=True)
+    if globals().get('SMOKE') and run_all:
+        # SMOKE MUST COVER THE NEWEST AND LEAST-PROVEN STAGE. The previous smoke path ran
+        # S0-S10 and stopped: SELECT never executed, S8 committed scoring took 0.00s
+        # because no --book was passed, and the canary could not fire for the same reason.
+        # A SMOKE TEST THAT SKIPS THE ONE THING THAT CHANGED IS NOT A SMOKE TEST.
+        print('\n[SELECT] SMOKE LEG - every path --stage SELECT touches, at CAPPED size',
+              flush=True)
+        with rl.Stage('SELECT', 'smoke: select & score (capped)'):
+            _smoke_select(df, ad, st, w, pool, anchor, out, input_sha, args.workers)
     if run_all or only == 'S10':
         print('\n[S10] COLLECT - every analysis artifact into one flat folder, split for upload')
         with rl.Stage('S10', 'collect & split for upload'):
