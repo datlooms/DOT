@@ -132,7 +132,7 @@
         "variable": "Micro_Hurst",
         "side": "hi",
         "pct": 90,
-        "mechanism": "persistence, for an entry standing on fewer confirmations"
+        "mechanism": "persistence"
       },
       {
         "cell": [
@@ -142,7 +142,7 @@
         "variable": "Micro_Hurst",
         "side": "hi",
         "pct": 90,
-        "mechanism": "persistence, for an entry standing on fewer confirmations"
+        "mechanism": "persistence"
       }
     ],
     "_prereg_note": "REV5 \u00a75.4. THE MISSING INFORMATION IS A PRIOR. Hand-derivation cleared p=0.022 and p=0.000 as ONE candidate at ONE cell on a mechanism argument - trial count 1. The same p as best-of-66 is expected ~1.5 times by chance. Declared BEFORE the run, printed in the banner, tested at its own trial count. THE ARTIFACT RECORDS THE CONFIG SHA so a candidate cannot be added after seeing the scan output - without that, pre-registration is just a way to declare a winner.",

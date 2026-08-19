@@ -1346,6 +1346,25 @@ def _score_configured(df, sigs, ad, st, w, conv, cfg):
     return r, td
 
 
+def _gate_ctx(df, ad, st, w, pool, cfg):
+    """Everything the gate layer needs, assembled once. Without this the gate layer is
+    present in select_stage.py and NOT REACHABLE from --stage SELECT, which is exactly
+    what the reachability check caught."""
+    import adm_engine as _adm
+    import swept_thresholds as _sw
+    import score_g as _sg
+    import sequential_temporal as _seq
+    import conviction as _C
+    bk = pd.read_csv(os.path.join(_HERE, 'engine', 'whole_dot_signals.csv'))
+    anchor = _seq.anchor_array(df, 'ST_Flip')
+    cv = cfg['conviction']
+    conv = _C.build_conviction(df, bool(cv['hurst']), bool(cv['recentfb']), bool(cv['d2d']),
+                               d2d_conviction=bool(cv['d2d_conviction']),
+                               d2d_gap=bool(cv['d2d_gap']))
+    sigs = _sg.build_book(df, pool, anchor, bk, adaptive=ad, structural=st)
+    return {'df': df, 'sigs': sigs, 'conv': conv, 'pool': pool, 'adm': _adm, 'sw': _sw}
+
+
 def s_select(df, ad, st, w, pool, anchor, book_file, out, input_sha, workers,
              arm_sizes=None, book_size=None):
     """SELECT - data in, signals and score out.
@@ -1394,7 +1413,8 @@ def s_select(df, ad, st, w, pool, anchor, book_file, out, input_sha, workers,
                          scan_path=scan, score_fn=_score_configured,
                          metrics_fn=_metrics_from_trades, grammar_fn=_assert_book_grammar,
                          breakdown_fn=breakdown_report, loss_events_fn=loss_events,
-                         arm_sizes=arm_sizes, book_size=book_size)
+                         arm_sizes=arm_sizes, book_size=book_size,
+                         gate_ctx=_gate_ctx(df, ad, st, w, pool, cfg))
     inc = pd.read_csv(os.path.join(_HERE, 'engine', 'whole_dot_signals.csv'))
     paths = sel.emit_artifacts(out, res, res['arm_books'], res['scores'], cfg_path,
                                _sha12_of(cfg_path))

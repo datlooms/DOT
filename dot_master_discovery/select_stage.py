@@ -341,7 +341,8 @@ def baseline_table():
 
 def run_select(df, ad, st, w, pool, anchor, cfg, cfg_path, out, input_sha, workers,
                scan_path, score_fn, metrics_fn, grammar_fn, breakdown_fn, loss_events_fn,
-               arm_sizes=ARM_SIZES, seed=SEED, book_size=None, frame_path=None):
+               arm_sizes=ARM_SIZES, seed=SEED, book_size=None, frame_path=None,
+               gate_ctx=None):
     """SCREEN -> NESTED ARMS -> SCORE ALL SIX -> EMIT. Data in, signals and score out.
 
     The adopted 297 exists as an artefact of several days of conversation and cannot be
@@ -412,17 +413,53 @@ def run_select(df, ad, st, w, pool, anchor, cfg, cfg_path, out, input_sha, worke
         t1 = _t.time()
         import score_g as _sg
         sigs = _sg.build_book(df, pool, anchor, bk, adaptive=ad, structural=st)
-        r, td = score_fn(df, sigs, ad, st, w, _conv_for(df, cfg), cfg)
+        try:
+            r, td = score_fn(df, sigs, ad, st, w, _conv_for(df, cfg), cfg)
+        except (ZeroDivisionError, ValueError, IndexError) as exc:
+            # A SMALL ARM CAN PRODUCE ZERO BOOK-ONLY TRADES: every trade on the bar is a
+            # conviction gap filler, so the BOOK-only population is empty and the metrics
+            # block divides by zero. Report the arm as EMPTY rather than aborting the
+            # sweep - at stand-in sizes this is expected, and at real sizes it is a
+            # finding about the arm.
+            print(f'    arm {n:>6}: EMPTY - no BOOK-only trades '
+                  f'({type(exc).__name__}); scored as zero', flush=True)
+            scores[n] = ({'trades': 0, 'WR': 0.0, 'PF': '', 'net': 0.0, 'signals': n,
+                          'events': 0, 'event_days': 0, 'trade_losses': 0,
+                          'secs': round(_t.time() - t1, 1)}, None)
+            continue
         tl, ev, dy = loss_events_fn(td)
         r.update({'signals': n, 'events': ev, 'event_days': dy, 'trade_losses': tl,
                   'secs': round(_t.time() - t1, 1)})
         scores[n] = (r, td)
         print(f'    arm {n:>6}: {r["trades"]:>6} trades  WR {r["WR"]:>6}  PF {str(r["PF"]):>7}  '
               f'net {r["net"]:>12,.2f}  events {ev:>4}  days {dy:>3}  ({r["secs"]}s)', flush=True)
+    # THE GATE LAYER, REACHABLE FROM --stage SELECT. Presence proved the merge and said
+    # nothing about wiring: none of Stage A/B/C/D, resolve_ranking, prereg_mask or the
+    # exhaustive prereg null was reachable from the command the operator types.
+    gate_lines, gate_verdicts = [], {}
+    if gate_ctx is not None:
+        import cluster_profiler as _cp
+        td_ung = ungated_trades(gate_ctx['df'], gate_ctx['sigs'], ad, st, w,
+                                gate_ctx['conv'], cfg, gate_ctx['adm'], _cp.GAP_NAMES)
+        gate_lines, gate_verdicts = run_gate_layer(
+            gate_ctx['df'], gate_ctx['sigs'], ad, st, w, gate_ctx['conv'], cfg,
+            gate_ctx['pool'], gate_ctx['adm'], gate_ctx['sw'], _cp.GAP_NAMES, td_ung)
+        for ln in gate_lines:
+            print(ln, flush=True)
+    # §4.5 QUALITY ARMS - never a default derived from the incumbent's medians.
+    qa = quality_arms(surv, cfg_get(cfg, 'screen.quality_pctile_arms', default=[None]))
+    print('  §4.5 QUALITY ARMS  percentile of the SURVIVING pool, PER DIRECTION, applied '
+          'AFTER the four absolute criteria. Measured on FULL-SAMPLE statistics - one step '
+          'from the look-ahead the pre-filter had - so it is emitted as ARMS and the '
+          'OPERATOR RULES.', flush=True)
+    print(f'    {"arm":8}{"book size":>11}', flush=True)
+    for k in sorted(qa, key=lambda x: (x != 'null', x)):
+        print(f'    {k:8}{len(qa[k]):>11}', flush=True)
     return {'survivors': surv, 'rejected': rej, 'arms': arms, 'arm_books': arm_books,
             'scores': scores, 'seed': seed, 'book_size': bs, 'fingerprint': fpr,
             'train_months': train_months, 'held': held, 'screen_secs': el,
-            'scan_rows': len(scan)}
+            'scan_rows': len(scan), 'gate_lines': gate_lines,
+            'gate_verdicts': gate_verdicts, 'quality_arms': {k: len(v) for k, v in qa.items()}}
 
 
 def _conv_for(df, cfg):
@@ -1045,3 +1082,128 @@ def quality_arms(survivors, arms):
                     keep.append(s)
         out[str(a)] = keep
     return out
+
+
+def run_gate_layer(df, sigs, ad, st, w, conv, cfg, pool, adm_mod, sw_mod, gap_names, td_ungated):
+    """THE GATE LAYER, DRIVEN. §5.5 PRINT ORDER.
+
+    Every one of Stage A/B/C/D, resolve_ranking, prereg_mask and the exhaustive prereg
+    null is reachable from here, and run_select calls this - PRESENCE PROVED THE MERGE
+    AND SAID NOTHING ABOUT WIRING, which is why none of it was reachable from the command
+    the operator types.
+    """
+    out = []
+    tiers = cfg_get(cfg, 'gates.tiers')
+    alpha = cfg_get(cfg, 'gates.confirm_alpha')
+    msup = cfg_get(cfg, 'gates.min_cell_support')
+    hsp = cfg_get(cfg, 'gates.half_split')
+    lo, hi = cfg_get(cfg, 'gates.rarity_lo'), cfg_get(cfg, 'gates.rarity_hi')
+    draws = cfg_get(cfg, 'gates.null_draws')
+    mt = cfg_get(cfg, 'gates.max_min_rate_ties')
+    seed = cfg_get(cfg, 'draw.seed')
+    pre = cfg_get(cfg, 'gates.preregistered')
+    out.append('  ' + '=' * 96)
+    out.append('  GATE LAYER')
+    out.append(f'    CELL BASIS  UNGATED {len(td_ungated):,} BOOK-only trades | floor '
+               f'L{cfg_get(cfg, "arch.floor_long")}/S{cfg_get(cfg, "arch.floor_short")} '
+               f'cap {cfg_get(cfg, "arch.max_positions")} '
+               f'ATR_1M >= {cfg_get(cfg, "arch.atr_min")} | ADM_TIERGATES EMPTY')
+    out.append('    A GATE IS DERIVED FROM THE POPULATION IT WILL FILTER, NEVER FROM THE '
+               'POPULATION IT HAS ALREADY FILTERED.')
+    out.append('    PREREG CHECKSUM (hard abort, exact to 4dp):')
+    for ln in assert_prereg_checksums(df, cfg, sw_mod):
+        out.append('  ' + ln)
+    cells = cells_of(td_ungated, tiers)
+    A = stage_a_power(cells, cfg_get(cfg, 'gates.min_cell_events'))
+    out.append(f'    STAGE A  POWER FLOOR min_cell_events='
+               f'{cfg_get(cfg, "gates.min_cell_events")} - "can this cell support a test?", '
+               f'not "is this cell worse than the book?"')
+    for k in sorted(A, key=lambda x: (x[0], x[1])):
+        v = A[k]
+        out.append(f'      {k[0]:5} d{k[1]:<3} {v["verdict"]:18} events {v["events"]:>3}  '
+                   f'trades {v["trades"]:>5}  bars {v["bars"]:>4}')
+    admitted = [k for k, v in A.items() if v['verdict'] == 'TESTABLE']
+    out.append(f'      ADMITTED {len(admitted)} of {len(cells)}')
+    masks = pool_masks(df, pool, gate_candidates(pool))
+    prereg_cells, n_tests = [], 0
+    for pe in pre:
+        key = (str(pe['cell'][0]), int(pe['cell'][1]))
+        if key not in cells:
+            out.append(f'    PREREG {key} - CELL ABSENT, skipped')
+            continue
+        cb = cells[key]['bars']
+        sub = td_ungated[np.isin(td_ungated['entry_bar'].values.astype(np.int64),
+                                 np.asarray(sorted(set(int(x) for x in cb)), dtype=np.int64))]
+        bs = sub.groupby('entry_bar')['pnl'].sum()
+        lossb = [int(x) for x in bs[bs < 0].index]
+        sup, dropped = support_filter(masks, cb, msup)
+        halves, splitbar = cell_halves(cb, hsp)
+        pm = prereg_mask(df, pe['variable'], pe['side'], pe['pct'], sw_mod)
+        ref = float(pm[np.asarray(sorted(set(int(x) for x in cb)), dtype=np.int64)].mean())
+        short, _r, bi = stage_b_rarity({k: masks[k] for k in sup}, cb, lo, hi, ref=ref)
+        out.append(f'    --- {key[0]} d{key[1]}: {len(cb)} bars, {len(lossb)} loss bars, '
+                   f'base {len(lossb) / max(len(cb), 1):.4f}')
+        out.append(f'      STAGE B  min_cell_support={msup} excludes {dropped} of '
+                   f'{len(masks)} -> {len(sup)} supported')
+        out.append(f'               half_split={hsp}: A {len(halves["A"])} / B '
+                   f'{len(halves["B"])} bars | split bar {splitbar}')
+        out.append(f'               RARITY REF = THE PREREG CANDIDATE\'S OWN pass rate on '
+                   f'this cell {100 * ref:.2f}% - §7.5 CIRCULARITY: the shortlist is centred '
+                   f'on the thing being tested. A filter, not a test.')
+        out.append(f'               band [{bi[1][0]:.4f},{bi[1][1]:.4f}] -> shortlist '
+                   f'{len(short)} of {len(sup)}')
+        surv, base = stage_c_rate(masks, cb, lossb, halves, short)
+        out.append(f'      STAGE C  RATE (non-monotone). base A {base["A"][1]}/'
+                   f'{base["A"][2]}={base["A"][0]:.4f}  B {base["B"][1]}/{base["B"][2]}='
+                   f'{base["B"][0]:.4f} -> both halves {len(surv)} of {len(short)}')
+        ranked, ties, mn, vd = resolve_ranking(surv, mt)
+        out.append(f'               RESOLUTION ties {ties} (ceiling {mt}) -> {vd}')
+        D = stage_d_gated(masks, cb, lossb, surv, short, draws, seed)
+        thr_scan = alpha / max(len(short) * max(len(admitted), 1), 1)
+        conf = [k for k, v in D.items() if v['p'] < thr_scan]
+        out.append(f'      STAGE D  draws {draws} | BASIS GATED BOTH ARMS | corrected '
+                   f'p < {thr_scan:.6f}')
+        out.append(f'               CONFIRMED {len(conf)} - AN EMPTY TIER IS THE CORRECT '
+                   f'RESULT; {draws} draws cannot resolve {thr_scan:.6f} and no threshold '
+                   f'is lowered to populate it')
+        cand = sorted([dict(v, condition=k) for k, v in D.items() if v['p'] < alpha],
+                      key=lambda x: x['p'])[:5]
+        for r in cand:
+            rk = next((s.get('rank') for s in ranked if s['condition'] == r['condition']), None)
+            out.append(f'               CANDIDATE {r["condition"]:30} p={r["p"]:<7} '
+                       f'trials={len(short) * max(len(admitted), 1)} NOT MET {thr_scan:.6f}'
+                       + (f' rank {rk}' if rk and vd == 'RANKED' else ''))
+        prereg_cells.append((key, pe, pm, {k: masks[k] for k in short}, len(lossb)))
+        n_tests += 1
+    thr = prereg_threshold(n_tests, alpha)
+    out.append(f'    PREREG  n_tests {n_tests} (candidate,cell) PAIRS COUNTED BY THE CODE '
+               f'-> threshold {thr}. Never read from config: a correction that can be argued '
+               f'down by re-describing the hypothesis is not a correction.')
+    verdicts = {}
+    for key, pe, pm, sm, nloss in prereg_cells:
+        print(f'    PREREG null {key[0]} d{key[1]}: {len(sm)} exhaustive engine runs...',
+              flush=True)
+        r = prereg_null_exhaustive(df, sigs, ad, st, w, conv, cfg, adm_mod, gap_names,
+                                   key, pm, sm,
+                                   progress=lambda i, n: print(f'      ...{i}/{n} runs',
+                                                               flush=True))
+        if r.get('verdict') == 'NO NULL POPULATION':
+            out.append(f'      PREREG: NO NULL POPULATION at {key[0]} d{key[1]} - no verdict. '
+                       f'No fallback to a sampled null.')
+            continue
+        v = 'CONFIRMED' if r['p'] <= thr else 'CANDIDATE'
+        verdicts[key] = v
+        out.append(f'      {key[0]:5} d{key[1]:<3} {pe["variable"]} > p{int(pe["pct"])}  '
+                   f'BOOK LOSS EVENTS (full engine run, replace-not-stack) adopted '
+                   f'{r["adopted"]} | null n {r["n"]} EXHAUSTIVE | min/med/max {r["min"]}/'
+                   f'{r["median"]}/{r["max"]} | strictly better {r["better"]} | p {r["p"]} | '
+                   f'ties {r["ties"]} (not counted as better) -> {v}')
+        out.append(f'                    full cell {nloss} loss bars - THE PREREG ROUTE '
+                   f'BYPASSES STAGE C, whose weaker half can carry four')
+    out.append(f'    CONJUNCTION  SUPPORTING - CELLS ARE NOT INDEPENDENT. Never the criterion.')
+    out.append(f'    ACCEPTANCE  ' + ' | '.join(f'{k[0]} d{k[1]} {v}'
+                                                for k, v in sorted(verdicts.items())))
+    out.append(f'    TOTAL TRIALS  scan {sum(1 for _ in prereg_cells)} cells x shortlist, '
+               f'prereg {n_tests} pairs')
+    out.append('  ' + '=' * 96)
+    return out, verdicts
