@@ -1,0 +1,822 @@
+================================================================================
+THE WHOLE DOT — L7/S4 REFERENCE SPECIFICATION
+foundational_documents/The_Whole_DOT_spec_v3_L7S4.txt
+================================================================================
+
+STATUS: REFERENCE, NOT ADOPTED. This document does NOT replace
+The_Whole_DOT_spec_v3.txt (sha256 f8ff98da78c1). That document specifies the
+DEPLOYED book at LONG >= 3 / SHORT >= 3. This one specifies the SAME 297-signal
+book at LONG >= 7 / SHORT >= 4, measured on the SAME architecture, so that the
+depth ladder can be read as a property of the signals rather than of a
+configuration.
+
+WHY THIS DOCUMENT EXISTS
+
+  CONCURRENCE STACKING IS THE PERSISTING ATTRIBUTE OF THESE SIGNALS. It is the
+  one thing that has survived every rebuild, every re-pricing, every admission
+  change and every gate re-derivation. This document is the cleanest available
+  demonstration of it: take the deployed book, change ONE number, and the loss
+  population falls from 42 events to 16 while the profit factor rises from 14.53
+  to 25.91.
+
+  A new analyst building the selection process into discovery should read
+  section 6 first. THE LADDER IS THE POINT. Everything else here is context.
+
+--------------------------------------------------------------------------------
+0. EVERY FIGURE HERE WAS RE-MEASURED. NOTHING IS INHERITED.
+--------------------------------------------------------------------------------
+
+0.1  THE FIGURES THIS DOCUMENT REPLACES, AND WHY
+
+  A previous pass circulated an L7/S4 result of 2,558 trades / PF 41.34 / 7 loss
+  events / 103 days. THOSE FIGURES ARE WITHDRAWN. They were produced under
+  CURRENT admission with the depth floor applied as a POST-HOC FILTER — defects
+  D1 and D2 in spec v3 section 0.1. They describe a book no live engine can run:
+  trades were opened and then deleted, and executed depth was capped by free
+  slots so events were re-tiered downward.
+
+  EVERY FIGURE IN THIS DOCUMENT IS FROM A FLOORED RUN ON adm_engine.py.
+
+0.2  THE CONTROL, RUN BEFORE ANYTHING ELSE
+
+  The L3/S3 incumbent was reproduced from the same harness before the floor was
+  changed. If the control does not land, nothing from the harness is trustworthy.
+
+      published (spec v3 section 1)     5,776 tr  WR 96.12%  PF 14.53  $284,974
+                                        42 loss events on 35 days  margin 33.07
+      reproduced here                   5,776 tr  WR 96.12%  PF 14.53  $284,974
+                                        42 loss events on 35 days  margin 33.07
+
+  EXACT ON EVERY FIELD. Gate checksums also reproduce: HU90 9.7478%,
+  FB20 80.1874%, ATS90 6.2217%.
+
+0.3  A DEFECT FOUND IN adm_engine.py WHILE DOING THIS — REPORT IT
+
+  adm_engine.py L312 reads:
+
+      if ADMISSION_RULE != 'CURRENT':
+
+  and the module default at L43 is ADMISSION_RULE = 'CURRENT'. THE ENTIRE
+  FLOORED ADMISSION BLOCK IS SKIPPED UNLESS THE CALLER SETS IT EXPLICITLY. A
+  first control run against this fork produced 18,416 trades instead of 5,776
+  and did not error, did not warn, and responded identically to every floor
+  value passed.
+
+  SHAPE: THE SAME PERMISSIVE-FALLBACK CLASS AS D4. A missing setting defaulted
+  to the permitted, looser behaviour. The fork is named for FLOORED admission
+  and does not perform it by default.
+
+  THE FULL INVOCATION A SECOND PARTY MUST USE:
+
+      AE.ADMISSION_RULE = 'FLOORED'
+      AE.ADM_FLOOR      = {1: <long_floor>, -1: <short_floor>}
+      AE.MAX_POSITIONS  = <cap>
+      AE.ADM_ORDER      = (1, -1)
+      AE.ADM_GATES      = {'ATR': df['ATR_1M'].values, 'atr_min': 20.0}
+      AE.ADM_TIERGATES  = {(+1, 3): [HU90], (+1, 4): [FB20, ATS90],
+                           (+1, 5): [FB20],
+                           (-1, 3): [HU90], (-1, 4): [], (-1, 5): []}
+      conviction built with recentfb = False
+
+  ADM_TIERGATES KEYS ARE INTEGER DIRECTIONS, NOT STRINGS. The signals CSV must
+  also be parsed into feat_1..3 / thresh_1..3; build_signal_masks reads those
+  columns and whole_dot_signals.csv ships only signal_def.
+
+================================================================================
+1. HEADLINE — 1.0 LOT BASE
+================================================================================
+
+  4,045 trades | 3,940 winners | 105 losers | WR 97.40% | PF 25.91
+  gross profit 237,006.0 pts | gross loss 9,145.7 pts | NET 227,860.3 pts
+  56.33 pts/trade | 558 ENTRY BARS
+
+  105 losing trades = 16 DISTINCT BAR-EVENTS on 14 DISTINCT DAYS
+  4 losing days | 0 losing weeks of 26 | 0 losing months of 7
+  worst bar-event -1,224.0 | worst day -478.8 | worst week +42.4
+
+  break-even WR 59.15% against 97.40% actual — a 38.25-point MARGIN
+  ceiling 6,300 pts at 1.0 lot = 126.0% of the 5,000 FTMO daily
+
+  1.0 LOT IS THE REFERENCE SIZE, NOT A DEPLOYABLE ONE. Its ceiling exceeds the
+  FTMO daily limit. See 8.2.
+
+  THREE DENOMINATORS, NAMED SO THEY ARE NEVER CONFLATED:
+      132   TRADING DAYS IN THE FRAME
+      110   DAYS WITH AT LEAST ONE BOOK TRADE   (83.3% of 132)
+      106   OF THOSE 110 THAT CLOSED POSITIVE   (96.4% of 110)
+
+THE RISK UNIT IS THE BAR, NOT THE TRADE. 105 losses are 16 independent
+observations. Every day-keyed figure rests on 14. THIS IS THE CENTRAL LIMITATION
+OF THIS CONFIGURATION AND SECTION 10 IS ABOUT IT.
+
+================================================================================
+2. THE RULE, IN EXECUTION ORDER
+================================================================================
+
+Identical to spec v3 section 2 in every step EXCEPT STEP 6. Only the floor
+differs. Reproduced here so this document is self-contained.
+
+STEP 1 — BAR ELIGIBILITY
+    post-warmup (bar >= warmup_floor); ADX_Value >= 15; Volume > 50;
+    Friday cutoff.
+
+STEP 2 — SIGNAL QUALIFICATION
+    F0 triple-convergence: three conditions of the form V:hi / V:lo / V:==N,
+    ANDed, thresholds from dots_thresholds mechanism D (rolling-2500 causal
+    percentile, day-refreshed). MANDATORY FOURTH TERM: D2D_Trend_Dir == the
+    trade direction. All 297 signals are F0 triples — one grammar, no family
+    split.
+
+STEP 3 — DEPTH
+    Depth is the count ADMITTED IN THE FLOORED BATCH, knowable at decision
+    time. NOT qualification depth, and NOT the 249-condition count.
+
+STEP 4 — GLOBAL GATE
+    ATR_1M >= 20 (raw, at the entry bar).
+
+STEP 5 — TIER GATES
+    tier = min(depth, 5). See section 5 — MOST OF THE STACK IS UNREACHABLE AT
+    THIS FLOOR AND THAT IS THE HEADLINE FINDING OF THIS DOCUMENT.
+
+STEP 6 — THE FLOOR  *** THE ONLY DIFFERENCE FROM v3 ***
+    LONG  admit only if the FLOORED batch size >= 7
+    SHORT admit only if the FLOORED batch size >= 4
+    (v3 deployed: 3 and 3)
+
+STEP 7 — FLOORED ADMISSION
+    Batch the bar: n = min(admissible, free). Refuse the batch entirely if
+    n < floor. No trade is opened and later deleted.
+
+STEP 8 — THE JAR
+    live_lots counts ONLY positions that are not be_nudged. A position at
+    break-even leaves the jar and frees its slot.
+
+STEP 9 — CONVICTION SIZING
+    Hurst x2.0, D2D-agree x2.0, D2D gap. recentfb_sizing FALSE.
+
+STEP 10 — TRADE MANAGEMENT
+    RISK_MULT 2.0 / MOMENTUM_SL_MULT 4.0 / MAX_RISK 150 POINTS /
+    LOCK_FRAC 1.0 / STEP_PCT 0.30 / LAG_BASE 2 / LAG_MOMENTUM 3 /
+    momentum condition (Micro_LogReturn x direction) >= 0.00012.
+
+================================================================================
+3. THE CONSTANT REGISTRY — WHAT DIFFERS FROM v3
+================================================================================
+
+Every constant is as spec v3 section 3 EXCEPT the two below. Do not restate v3's
+registry from this document; read it from v3.
+
+  long_depth_floor    7   NOT DERIVED FOR THIS BOOK. v3 derives 3 from a
+                          measured d2->d3 cliff (LONG 16.55% -> 8.75%). SEVEN
+                          IS NOT A CLIFF — it is a point on a monotone curve,
+                          selected here to demonstrate the ladder, not because
+                          a measurement identified it.
+
+  short_depth_floor   4   Same status. NOT DERIVED.
+
+  max_positions      21   INHERITED FROM v3, WHERE IT IS THE LAST SAFE VALUE
+                          BEFORE A WORST-DAY CLIFF. AT 7/4 THERE IS NO CLIFF
+                          (section 7). 21 is carried so the two documents are
+                          comparable, NOT because it is optimal here.
+
+THE FLOORS IN THIS DOCUMENT ARE A DEMONSTRATION, NOT A DERIVATION. Anyone
+adopting them must derive them.
+
+================================================================================
+4. THE SIGNAL LISTING — ALL 297, UNCHANGED FROM v3
+================================================================================
+
+  Identical book to the deployed specification: 191 LONG / 106 SHORT, all F0
+  triples. Reproduced in full so this document rebuilds without v3.
+
+  WIDTH CHECK: longest signal_def 74 chars; longest emitted line 88. NOTHING
+  TRUNCATES. (v1 truncated one row of 123 at a 70-char column and could not be
+  rebuilt from itself.)
+
+--- LONG (191 signals) ---
+   #  trigger signal_def
+   1  F0      AT_Lookback_LT:hi + Micro_MomoTransfer:lo + Micro_RangeVelocity:lo
+   2  F0      AT_Lookback_LT:hi + VAH_Dist_ATR:hi + WeeklyOpen_Dist_ATR:lo
+   3  F0      AT_Lookback_ST:hi + AT_Slope_ST:lo + Micro_RollProxy:hi
+   4  F0      AT_Lookback_ST:hi + Slope_EMA_ST:hi + ADX_Value:lo
+   5  F0      AT_Lookback_ST:hi + Slope_EMA_ST:lo + Sqz_State:==1
+   6  F0      AT_Score_LT:hi + Micro_GarmanKlass:hi + Micro_Rejection:hi
+   7  F0      AT_Score_LT:hi + PrevDay_High_Dist_ATR:lo + MultiDay_Slope:lo
+   8  F0      AT_Score_LT:hi + Volume_Avg_10:hi + Micro_CSSpread:hi
+   9  F0      AT_Score_LT:lo + Micro_MicroGap:lo + OR_High_Side:==-1
+  10  F0      AT_Score_LT:lo + Micro_VolOfVol:lo + Round_500_Dist_ATR:lo
+  11  F0      AT_Score_LT:lo + Slope_Accel_LT:hi + Body_Size:hi
+  12  F0      AT_Score_LT:lo + Slope_Accel_LT:hi + Micro_RangeAccel:hi
+  13  F0      AT_Score_LT:lo + Slope_Accel_LT:hi + VWAP_Sigma:hi
+  14  F0      AT_Slope_LT:lo + AT_Slope_ST:lo + Micro_Hurst:hi
+  15  F0      AT_Slope_LT:lo + AT_Slope_ST:lo + Micro_RollProxy:hi
+  16  F0      AT_Slope_LT:lo + Micro_FailedBreak:hi + Micro_RangeAccel:lo
+  17  F0      AT_Slope_LT:lo + Slope_EMA_ST:lo + Micro_FailedBreak:hi
+  18  F0      AT_Slope_LT:lo + Slope_EMA_ST:lo + Micro_Hurst:hi
+  19  F0      AT_Slope_ST:lo + Bars_Since_Flip:hi + Lower_Wick:hi
+  20  F0      AT_Slope_ST:lo + Bars_Since_Flip:hi + Upper_Wick:hi
+  21  F0      AT_Slope_ST:lo + Micro_Amihud:hi + Lower_Wick:hi
+  22  F0      AT_Slope_ST:lo + Micro_AutoCorr:hi + D2D_DirStep:==1
+  23  F0      AT_Slope_ST:lo + Micro_AutoCorr:hi + Micro_LogReturn:hi
+  24  F0      AT_Slope_ST:lo + Micro_AutoCorr:hi + Micro_RangeVelocity:hi
+  25  F0      AT_Slope_ST:lo + Micro_AutoCorr:hi + Micro_WickImbalance:lo
+  26  F0      AT_Slope_ST:lo + Micro_BarOverlap:lo + VWAP_Sigma:hi
+  27  F0      AT_Slope_ST:lo + Micro_FailedBreak:hi + VWAP_Side:==-1
+  28  F0      AT_Slope_ST:lo + Micro_FractalDim:lo + Micro_Hurst:hi
+  29  F0      AT_Slope_ST:lo + Micro_HLAsymmetry:hi + Micro_Hurst:hi
+  30  F0      AT_Slope_ST:lo + Micro_Hurst:hi + Round_1000_Dist_ATR:lo
+  31  F0      AT_Slope_ST:lo + Micro_OrderFlowDelta:hi + Micro_WickImbalance:lo
+  32  F0      AT_Slope_ST:lo + Micro_RangeAccel:hi + RangeOsc_State:==2
+  33  F0      AT_Slope_ST:lo + Micro_RangeAccel:lo + AT_Regime_LT:==1
+  34  F0      AT_Slope_ST:lo + Micro_RollProxy:hi + RangeOsc_State:==-1
+  35  F0      AT_Slope_ST:lo + Micro_VPIN:lo + OBVf_Signal:==1
+  36  F0      AT_Slope_ST:lo + Micro_VolOfVol:hi + OBVf_Signal:==1
+  37  F0      AT_Slope_ST:lo + Micro_VolOfVol:hi + OR_Position:lo
+  38  F0      AT_Slope_ST:lo + Micro_VolOfVol:hi + Volume:hi
+  39  F0      AT_Slope_ST:lo + Momentum_Value:hi + AT_Regime_ST:==1
+  40  F0      AT_Slope_ST:lo + Momentum_Value:hi + Body_Size:hi
+  41  F0      AT_Slope_ST:lo + Momentum_Value:hi + D2D_Signal:==0
+  42  F0      AT_Slope_ST:lo + Momentum_Value:hi + Micro_RollProxy:hi
+  43  F0      AT_Slope_ST:lo + RangeOsc_Val:lo + Micro_HLAsymmetry:hi
+  44  F0      AT_Slope_ST:lo + RangeOsc_Val:lo + Micro_RollProxy:hi
+  45  F0      AT_Slope_ST:lo + Session_Low_Dist_ATR:lo + Volume:hi
+  46  F0      Bar_Range:hi + Micro_Lambda:lo + PrevDay_High_Dist_ATR:hi
+  47  F0      Bar_Range:hi + Micro_Lambda:lo + RangeOsc_State:==2
+  48  F0      Bar_Range:hi + Micro_MomoTransfer:hi + Micro_TickIntensity:hi
+  49  F0      Bar_Range:hi + OBV_Macd:lo + Micro_TickIntensity:hi
+  50  F0      Bar_Range:hi + Slope_EMA_ST:lo + Micro_AutoCorr:hi
+  51  F0      Bars_Since_Flip:hi + Micro_CSSpread:hi + Upper_Wick:hi
+  52  F0      Bars_Since_Flip:hi + Micro_PriceAccel:lo + OR_Low_Side:==-1
+  53  F0      Bars_Since_Flip:hi + MultiDay_Position:lo + VWAP_Sigma_ATR:lo
+  54  F0      Bars_Since_Flip:hi + PrevDay_Low_Dist_ATR:lo + OR_Low_Side:==-1
+  55  F0      Bars_Since_Flip:hi + Round_500_Dist_ATR:lo + VA_Position:hi
+  56  F0      Bars_Since_Flip:hi + Slope_Accel_LT:hi + Micro_VPIN:lo
+  57  F0      Bars_Since_Flip:hi + Volume_Avg_10:hi + MultiDay_Position:lo
+  58  F0      Bars_Since_Flip:hi + Volume_Avg_10:hi + Session_Low_Dist_ATR:lo
+  59  F0      D2D_ATR:hi + AT_Slope_ST:lo + Bars_Since_Flip:hi
+  60  F0      D2D_ATR:hi + Micro_Rejection:lo + PrevDay_High_Dist_ATR:hi
+  61  F0      D2D_ATR_MA:hi + AT_Slope_ST:lo + Micro_VolOfVol:hi
+  62  F0      D2D_ATR_MA:hi + Micro_VPIN:lo + ST_Flip_Event:==-1
+  63  F0      D2D_ATR_MA:hi + OR_Position:lo + PrevDay_High_Side:==1
+  64  F0      D2D_Dynamic_Sensitivity:lo + OBV_Macd:lo + Micro_MicroGap:lo
+  65  F0      D2D_Persist:hi + PrevDay_Low_Side:==-1 + OR_Low_Side:==1
+  66  F0      DailyOpen_Dist_ATR:lo + VWAP_Side:==1 + OR_Low_Side:==-1
+  67  F0      Dist_To_PoC_ATR:lo + Micro_VolOfVol:lo + Round_1000_Dist_ATR:lo
+  68  F0      EMA_Oscillator:hi + AT_Regime_ST:==1 + PrevDay_Low_Side:==-1
+  69  F0      EMA_Oscillator:lo + Micro_HLAsymmetry:lo + AT_Regime_ST:==1
+  70  F0      Efficiency_Ratio:hi + Micro_RangeVelocity:lo + RangeOsc_State:==2
+  71  F0      KAMA_Dist:hi + AT_Regime_ST:==1 + PrevDay_Low_Side:==-1
+  72  F0      KAMA_Dist:lo + Micro_WickImbalance:hi + ADX_Rising:==0
+  73  F0      KAMA_Dist:lo + Micro_WickImbalance:hi + Harmonic_OBVf_Concordance:==0
+  74  F0      KAMA_Dist:lo + Micro_WickImbalance:hi + Lower_Wick:hi
+  75  F0      KAMA_Dist:lo + Micro_WickImbalance:hi + OR_High_Side:==-1
+  76  F0      KAMA_Dist:lo + Micro_WickImbalance:hi + PrevDay_High_Side:==-1
+  77  F0      KAMA_Dist:lo + Micro_WickImbalance:hi + Volume:hi
+  78  F0      KAMA_Dist:lo + Upper_Wick:hi + RangeOsc_State:==-1
+  79  F0      KAMA_Dist:lo + VWAP_Dist_ATR:lo + DailyOpen_Dist_ATR:lo
+  80  F0      KAMA_Dist:lo + VWAP_Dist_ATR:lo + OR_High_Side:==-1
+  81  F0      Micro_Amihud:hi + AT_Regime_ST:==1 + OR_Low_Side:==-1
+  82  F0      Micro_Amihud:lo + Micro_RangeAccel:lo + Micro_VPIN:hi
+  83  F0      Micro_AutoCorr:hi + Session_Low_Dist_ATR:lo + TChan_A15:hi
+  84  F0      Micro_Entropy:lo + DailyOpen_Side:==-1 + OR_High_Side:==1
+  85  F0      Micro_Entropy:lo + Micro_HLAsymmetry:lo + OR_Low_Side:==-1
+  86  F0      Micro_Entropy:lo + Micro_MomoTransfer:hi + Micro_RangeAccel:lo
+  87  F0      Micro_Entropy:lo + Micro_MomoTransfer:hi + Micro_RangeVelocity:lo
+  88  F0      Micro_GarmanKlass:hi + Micro_VolOfVol:hi + PrevDay_Close_Dist_ATR:hi
+  89  F0      Micro_HLAsymmetry:lo + Micro_LogReturn:hi + Micro_MicroGap:hi
+  90  F0      Micro_HLAsymmetry:lo + VWAP_Sigma:lo + OR_Position:hi
+  91  F0      Micro_IBSP:hi + DailyOpen_Side:==1 + OR_Low_Side:==-1
+  92  F0      Micro_IBSP:lo + VWAP_Sigma:lo + Volume:hi
+  93  F0      Micro_Lambda:lo + Micro_RollProxy:hi + RangeOsc_State:==2
+  94  F0      Micro_Lambda:lo + OR_Position:hi + PrevDay_Low_Side:==-1
+  95  F0      Micro_LogReturn:hi + Micro_TickIntensity:hi + Micro_VPIN:lo
+  96  F0      Micro_LogReturn:hi + Micro_TickIntensity:hi + Micro_VolOfVol:hi
+  97  F0      Micro_LogReturn:lo + Micro_PriceAccel:hi + ADX_Value:lo
+  98  F0      Micro_LogReturn:lo + Upper_Wick:hi + OR_High_Side:==0
+  99  F0      Micro_MicroGap:hi + Micro_ThrustEff:lo + OBVf_Signal:==-1
+ 100  F0      Micro_MicroGap:lo + AT_Regime_ST:==1 + OR_Low_Side:==-1
+ 101  F0      Micro_MomoTransfer:hi + Micro_RangeAccel:lo + AT_Regime_LT:==1
+ 102  F0      Micro_MomoTransfer:hi + Micro_RangeVelocity:lo + AT_Regime_LT:==1
+ 103  F0      Micro_MomoTransfer:lo + VWAP_Sigma:lo + Volume:hi
+ 104  F0      Micro_OrderFlowDelta:hi + Micro_Rejection:lo + DailyOpen_Side:==-1
+ 105  F0      Micro_OrderFlowDelta:hi + Micro_Rejection:lo + Lower_Wick:lo
+ 106  F0      Micro_OrderFlowDelta:hi + Session_High_Dist_ATR:lo + PrevDay_Low_Side:==-1
+ 107  F0      Micro_OrderFlowDelta:lo + PrevDay_High_Side:==1 + OR_Low_Side:==-1
+ 108  F0      Micro_OrderFlowDelta:lo + Session_Low_Dist_ATR:lo + ADX_Value:hi
+ 109  F0      Micro_PriceAccel:hi + VWAP_Sigma:hi + D2D_Signal:==1
+ 110  F0      Micro_RangeVelocity:hi + Micro_TickIntensity:hi + Lower_Wick:hi
+ 111  F0      Micro_RangeVelocity:lo + Sqz_State:==-1 + ST_Flip_Event:==-1
+ 112  F0      Micro_Rejection:lo + AT_Regime_ST:==1 + PrevDay_Low_Side:==-1
+ 113  F0      Micro_Rejection:lo + Session_Low_Dist_ATR:lo + OR_Low_Side:==1
+ 114  F0      Micro_Rejection:lo + VWAP_Sigma:lo + Volume:hi
+ 115  F0      Micro_VPIN:lo + Volume:hi + ST_Flip_Event:==-1
+ 116  F0      Micro_VolOfVol:hi + AT_Regime_ST:==1 + OR_Low_Side:==-1
+ 117  F0      Micro_WickImbalance:hi + Lower_Wick:lo + AT_Regime_LT:==1
+ 118  F0      Momentum_Value:hi + Micro_CSSpread:lo + ST_Flip_Event:==1
+ 119  F0      Momentum_Value:hi + Micro_Hurst:hi + AT_Regime_ST:==1
+ 120  F0      Momentum_Value:hi + Micro_Hurst:hi + ST_Flip_Event:==1
+ 121  F0      Momentum_Value:lo + Micro_FailedBreak:hi + Round_500_Dist_ATR:lo
+ 122  F0      Momentum_Value:lo + Micro_VolOfVol:hi + Volume:hi
+ 123  F0      OBV_Macd:lo + Efficiency_Ratio:hi + Micro_VPIN:lo
+ 124  F0      OBV_Macd:lo + Harmonic_LLEMA:hi + Micro_Rejection:lo
+ 125  F0      OBV_Macd:lo + Micro_Lambda:lo + Micro_RollProxy:hi
+ 126  F0      OBV_Macd:lo + Micro_LogReturn:lo + Micro_Rejection:lo
+ 127  F0      OBV_Macd:lo + Micro_MicroGap:hi + Micro_RollProxy:hi
+ 128  F0      OBV_Macd:lo + Micro_OrderFlowDelta:lo + Micro_WickImbalance:hi
+ 129  F0      OBV_Macd:lo + Micro_WickImbalance:lo + ADX_Value:hi
+ 130  F0      OBV_Macd:lo + MultiDay_Slope:lo + Lower_Wick:hi
+ 131  F0      OBV_Macd:lo + Sqz_State:==1 + RangeOsc_State:==-2
+ 132  F0      OBV_Macd:lo + VA_Position:hi + AT_Regime_ST:==1
+ 133  F0      OBV_Macd:lo + Volume_Ratio_10:hi + AT_Regime_ST:==1
+ 134  F0      OBV_Velocity:hi + DailyOpen_Dist_ATR:lo + D2D_Signal:==1
+ 135  F0      OBV_Velocity:hi + Micro_FractalDim:hi + OR_Low_Side:==-1
+ 136  F0      PrevDay_High_Dist_ATR:lo + ADX_Rising:==1 + PrevDay_Low_Side:==-1
+ 137  F0      PrevDay_High_Dist_ATR:lo + PrevDay_Close_Side:==-1 + WeeklyOpen_Side:==-1
+ 138  F0      PrevDay_High_Dist_ATR:lo + PrevDay_Low_Side:==-1 + OR_Low_Side:==1
+ 139  F0      PrevDay_High_Dist_ATR:lo + Sqz_State:==1 + PrevDay_Low_Side:==-1
+ 140  F0      PrevDay_High_Dist_ATR:lo + VWAP_Side:==-1 + WeeklyOpen_Side:==-1
+ 141  F0      RangeOsc_State:==-2 + OR_Low_Side:==-1 + WeeklyOpen_Side:==-1
+ 142  F0      RangeOsc_Val:hi + OR_Position:lo + PrevDay_Low_Side:==1
+ 143  F0      RangeOsc_Val:hi + Session_Low_Dist_ATR:lo + PrevDay_Close_Side:==-1
+ 144  F0      Round_1000_Dist_ATR:lo + MultiDay_Position:hi + AT_Regime_LT:==1
+ 145  F0      Round_500_Dist_ATR:lo + DailyOpen_Side:==1 + OR_Low_Side:==-1
+ 146  F0      Session_High_Dist_ATR:lo + Volume:hi + D2D_Signal:==1
+ 147  F0      Session_Low_Dist_ATR:lo + OR_Position:hi + DailyOpen_Side:==-1
+ 148  F0      Session_Low_Dist_ATR:lo + OR_Position:hi + OR_High_Side:==-1
+ 149  F0      Slope_Accel_LT:hi + AT_Regime_ST:==1 + OR_Low_Side:==-1
+ 150  F0      Slope_Accel_LT:hi + Micro_TickIntensity:hi + PrevDay_Low_Side:==-1
+ 151  F0      Slope_Accel_LT:hi + OBV_Macd:lo + Micro_TickIntensity:hi
+ 152  F0      Slope_Accel_LT:hi + ST_Flip_Event:==-1 + OR_High_Side:==-1
+ 153  F0      Slope_Accel_LT:hi + Sqz_State:==1 + RangeOsc_State:==-2
+ 154  F0      Slope_Accel_LT:lo + Micro_HLAsymmetry:hi + Volume:hi
+ 155  F0      Slope_Accel_LT:lo + Micro_Hurst:hi + Upper_Wick:hi
+ 156  F0      Slope_Accel_LT:lo + Micro_LogReturn:hi + Micro_RangeVelocity:lo
+ 157  F0      Slope_Accel_LT:lo + Micro_LogReturn:hi + OR_High_Side:==-1
+ 158  F0      Slope_Accel_LT:lo + Micro_RollProxy:hi + PrevDay_High_Side:==1
+ 159  F0      Slope_Accel_LT:lo + Micro_TickIntensity:lo + OR_High_Side:==-1
+ 160  F0      Slope_Accel_LT:lo + Micro_VolOfVol:hi + Micro_WickImbalance:lo
+ 161  F0      Slope_Accel_LT:lo + Round_100_Dist_ATR:lo + PrevDay_High_Side:==1
+ 162  F0      Slope_Accel_LT:lo + Session_High_Dist_ATR:lo + OBVf_Signal:==-1
+ 163  F0      Slope_Accel_ST:lo + Micro_VPIN:lo + ST_Flip_Event:==-1
+ 164  F0      Slope_EMA_ST:hi + Micro_Rejection:lo + Session_Low_Dist_ATR:lo
+ 165  F0      Slope_EMA_ST:lo + Lower_Wick:hi + RangeOsc_State:==-1
+ 166  F0      Slope_EMA_ST:lo + Micro_FailedBreak:hi + Micro_WickImbalance:lo
+ 167  F0      Slope_EMA_ST:lo + Micro_HLAsymmetry:hi + Micro_OrderFlowDelta:lo
+ 168  F0      Slope_EMA_ST:lo + Micro_HLAsymmetry:hi + Micro_Rejection:lo
+ 169  F0      Slope_EMA_ST:lo + Micro_Hurst:hi + PrevDay_High_Side:==-1
+ 170  F0      Slope_EMA_ST:lo + Micro_Hurst:hi + VWAP_Side:==-1
+ 171  F0      Slope_EMA_ST:lo + Micro_RangeAccel:hi + Micro_Rejection:lo
+ 172  F0      Slope_EMA_ST:lo + Micro_RangeVelocity:hi + D2D_DirStep:==-1
+ 173  F0      Slope_EMA_ST:lo + Micro_RangeVelocity:hi + OR_Low_Side:==-1
+ 174  F0      Slope_EMA_ST:lo + Micro_RangeVelocity:lo + OR_Position:lo
+ 175  F0      Slope_EMA_ST:lo + Micro_Rejection:lo + Micro_RollProxy:lo
+ 176  F0      Slope_EMA_ST:lo + Micro_Rejection:lo + Round_100_Dist_ATR:lo
+ 177  F0      Slope_EMA_ST:lo + Micro_VolOfVol:hi + AT_Regime_ST:==1
+ 178  F0      Slope_EMA_ST:lo + Momentum_Value:hi + Micro_RangeVelocity:hi
+ 179  F0      Slope_EMA_ST:lo + Session_High_Dist_ATR:lo + ADX_Rising:==0
+ 180  F0      Sqz_Val:hi + Sqz_State:==1 + RangeOsc_State:==-2
+ 181  F0      Upper_Wick:hi + D2D_Signal:==1 + PoC_Side:==1
+ 182  F0      VWAP_Dist_ATR:lo + D2D_Signal:==1 + VWAP_Side:==1
+ 183  F0      Volume_Avg_10:hi + Micro_FailedBreak:hi + Micro_Rejection:lo
+ 184  F0      Volume_Avg_10:hi + Micro_HLAsymmetry:lo + VWAP_Sigma:lo
+ 185  F0      Volume_Avg_10:hi + Micro_OrderFlowDelta:lo + VWAP_Sigma:lo
+ 186  F0      Volume_Avg_10:hi + Micro_Rejection:lo + PrevDay_High_Dist_ATR:hi
+ 187  F0      Volume_Avg_10:hi + Micro_Rejection:lo + VWAP_Sigma:lo
+ 188  F0      Volume_Avg_10:hi + Micro_WickImbalance:lo + VWAP_Sigma:lo
+ 189  F0      Volume_Ratio_10:hi + Micro_AutoCorr:hi + TChan_A15:hi
+ 190  F0      Volume_Ratio_10:hi + Micro_FractalDim:lo + TChan_A15:hi
+ 191  F0      Volume_Ratio_10:hi + Micro_LogReturn:hi + Micro_TickIntensity:hi
+
+--- SHORT (106 signals) ---
+   #  trigger signal_def
+   1  F0      ATR_1M:hi + Micro_CSSpread:hi + RangeOsc_State:==2
+   2  F0      ATR_1M:hi + MultiDay_Slope:hi + RangeOsc_State:==2
+   3  F0      AT_Lookback_LT:hi + Micro_Amihud:lo + Body_Size:hi
+   4  F0      AT_Lookback_ST:hi + Sqz_Val:hi + Micro_TickIntensity:hi
+   5  F0      AT_Score_LT:hi + Micro_Rejection:hi + RangeOsc_State:==-1
+   6  F0      AT_Score_LT:hi + Volume_Avg_10:hi + OR_High_Side:==-1
+   7  F0      AT_Score_LT:hi + Volume_Avg_10:hi + RangeOsc_State:==-1
+   8  F0      AT_Score_LT:hi + Volume_Ratio_10:hi + Volume:hi
+   9  F0      AT_Score_LT:lo + Micro_Lambda:hi + TChan_A15:hi
+  10  F0      AT_Score_LT:lo + Micro_LogReturn:hi + Micro_PriceAccel:lo
+  11  F0      AT_Score_LT:lo + Volume_Avg_10:hi + Micro_CSSpread:hi
+  12  F0      AT_Slope_LT:hi + Micro_BarOverlap:hi + OBVf_Signal:==1
+  13  F0      AT_Slope_LT:hi + Micro_MicroGap:hi + PrevDay_Low_Side:==-1
+  14  F0      AT_Slope_ST:hi + Micro_BarEntropy:lo + DailyOpen_Side:==-1
+  15  F0      AT_Slope_ST:hi + Micro_MicroGap:lo + Upper_Wick:hi
+  16  F0      AT_Slope_ST:hi + OR_High_Dist_ATR:hi + Sqz_State:==-1
+  17  F0      AT_Slope_ST:lo + OBV_Velocity:hi + Micro_BarOverlap:lo
+  18  F0      AT_Slope_ST:lo + Sqz_Val:hi + Micro_CSSpread:lo
+  19  F0      Bar_Range:hi + AT_Score_LT:hi + AT_Slope_ST:lo
+  20  F0      Bar_Range:hi + Micro_Hurst:hi + PrevDay_Low_Dist_ATR:hi
+  21  F0      Bar_Range:hi + Micro_RangeVelocity:lo + Lower_Wick:lo
+  22  F0      Bar_Range:hi + PrevDay_Low_Dist_ATR:hi + PrevDay_High_Side:==1
+  23  F0      Bars_Since_Flip:hi + Sqz_Val:hi + PrevDay_Close_Dist_ATR:hi
+  24  F0      D2D_ATR:hi + AT_Score_LT:hi + RangeOsc_State:==-1
+  25  F0      D2D_ATR:hi + WeeklyOpen_Dist_ATR:hi + PrevDay_High_Side:==1
+  26  F0      D2D_ATR_MA:hi + Micro_MicroGap:lo + VWAP_Sigma:lo
+  27  F0      D2D_ATR_MA:hi + Sqz_Val:hi + Session_High_Dist_ATR:hi
+  28  F0      D2D_Dn_Count:hi + Micro_IBSP:lo + Micro_VolOfVol:lo
+  29  F0      D2D_Dn_Count:hi + Slope_Accel_ST:lo + Micro_VolAccel:lo
+  30  F0      D2D_Dynamic_Sensitivity:lo + EMA_Oscillator:lo + Lower_Wick:lo
+  31  F0      D2D_Dynamic_Sensitivity:lo + Lower_Wick:lo + Volume:hi
+  32  F0      D2D_Dynamic_Sensitivity:lo + Micro_IBSP:lo + Micro_WickImbalance:hi
+  33  F0      D2D_Dynamic_Sensitivity:lo + OBV_Macd:lo + MultiDay_Slope:lo
+  34  F0      D2D_Dynamic_Sensitivity:lo + RangeOsc_Val:lo + Volume_Avg_10:hi
+  35  F0      D2D_Dynamic_Sensitivity:lo + Slope_Accel_LT:lo + MultiDay_Position:hi
+  36  F0      D2D_Dynamic_Sensitivity:lo + Upper_Wick:hi + VAH_Side:==-1
+  37  F0      D2D_Dynamic_Sensitivity:lo + Volume_Avg_10:hi + Efficiency_Ratio:hi
+  38  F0      DailyOpen_Dist_ATR:lo + TChan_A15:hi + VAH_Side:==-1
+  39  F0      DailyOpen_Dist_ATR:lo + VAH_Side:==0 + PrevDay_Low_Side:==1
+  40  F0      EMA_Oscillator:lo + Micro_Hurst:hi + ADX_Value:lo
+  41  F0      Efficiency_Ratio:hi + Micro_BarEntropy:hi + Body_Size:hi
+  42  F0      Efficiency_Ratio:lo + DailyOpen_Side:==-1 + OR_High_Side:==1
+  43  F0      Efficiency_Ratio:lo + PrevDay_Close_Side:==-1 + OR_High_Side:==1
+  44  F0      KAMA_Dist:hi + Micro_IBSP:hi + OBVf_Signal:==1
+  45  F0      Micro_AutoCorr:hi + VA_Position:hi + VWAP_Side:==-1
+  46  F0      Micro_AutoCorr:lo + Micro_MicroGap:hi + Micro_MomoTransfer:hi
+  47  F0      Micro_AutoCorr:lo + VAL_Side:==0 + WeeklyOpen_Side:==-1
+  48  F0      Micro_BarEntropy:hi + Round_100_Dist_ATR:lo + PoC_Side:==0
+  49  F0      Micro_BarEntropy:hi + WeeklyOpen_Dist_ATR:lo + VAH_Side:==0
+  50  F0      Micro_BarEntropy:lo + Micro_Hurst:hi + Session_High_Dist_ATR:lo
+  51  F0      Micro_BarOverlap:hi + Micro_HLAsymmetry:lo + PrevDay_High_Side:==1
+  52  F0      Micro_BarOverlap:lo + Micro_OrderFlowDelta:hi + Micro_PriceAccel:lo
+  53  F0      Micro_BarOverlap:lo + RangeOsc_State:==2 + OR_High_Side:==1
+  54  F0      Micro_Entropy:lo + Micro_WickImbalance:lo + Lower_Wick:lo
+  55  F0      Micro_Entropy:lo + Micro_WickImbalance:lo + VAL_Side:==0
+  56  F0      Micro_Entropy:lo + PrevDay_High_Dist_ATR:lo + VWAP_Z:lo
+  57  F0      Micro_FailedBreak:lo + Micro_FractalDim:lo + Micro_HLAsymmetry:hi
+  58  F0      Micro_FailedBreak:lo + Micro_HLAsymmetry:hi + Micro_VolAccel:hi
+  59  F0      Micro_FailedBreak:lo + Micro_PriceAccel:hi + VAH_Side:==-1
+  60  F0      Micro_GarmanKlass:hi + WeeklyOpen_Dist_ATR:hi + PrevDay_High_Side:==1
+  61  F0      Micro_HLAsymmetry:hi + Micro_Hurst:lo + DailyOpen_Dist_ATR:hi
+  62  F0      Micro_HLAsymmetry:hi + MultiDay_Slope:hi + RangeOsc_State:==2
+  63  F0      Micro_HLAsymmetry:lo + Micro_Hurst:hi + Session_High_Dist_ATR:lo
+  64  F0      Micro_HLAsymmetry:lo + Micro_LogReturn:hi + MultiDay_Slope:hi
+  65  F0      Micro_Hurst:hi + Micro_Lambda:hi + Micro_RangeVelocity:lo
+  66  F0      Micro_IBSP:hi + Micro_VolAccel:hi + VWAP_Z:lo
+  67  F0      Micro_IBSP:lo + Micro_PriceAccel:hi + Session_High_Dist_ATR:lo
+  68  F0      Micro_LogReturn:hi + Micro_ThrustEff:lo + MultiDay_Slope:hi
+  69  F0      Micro_LogReturn:lo + WeeklyOpen_Dist_ATR:hi + Lower_Wick:hi
+  70  F0      Micro_MicroGap:hi + Micro_ThrustEff:lo + D2D_Signal:==-1
+  71  F0      Micro_MicroGap:lo + Micro_OrderFlowDelta:lo + VWAP_Sigma:lo
+  72  F0      Micro_MomoTransfer:hi + Micro_OrderFlowDelta:lo + Micro_Rejection:hi
+  73  F0      Micro_MomoTransfer:hi + Micro_RangeAccel:lo + OBVf_Signal:==1
+  74  F0      Micro_MomoTransfer:hi + Micro_WickImbalance:lo + VAL_Side:==0
+  75  F0      Micro_OrderFlowDelta:lo + PrevDay_High_Dist_ATR:lo + VAH_Side:==0
+  76  F0      Micro_PriceAccel:lo + Micro_RangeAccel:lo + VAL_Side:==0
+  77  F0      Micro_RangeAccel:lo + VWAP_Dist_ATR:lo + D2D_Signal:==-1
+  78  F0      Micro_RangeAccel:lo + VWAP_Sigma_ATR:lo + D2D_Signal:==-1
+  79  F0      Micro_RangeVelocity:lo + Lower_Wick:lo + AT_Regime_ST:==0
+  80  F0      Micro_VolAccel:hi + Body_Size:lo + OR_Low_Side:==-1
+  81  F0      Micro_VolOfVol:lo + VWAP_Sigma_ATR:lo + D2D_Signal:==-1
+  82  F0      Momentum_Value:hi + Micro_VolAccel:lo + RangeOsc_State:==2
+  83  F0      Momentum_Value:hi + Session_High_Dist_ATR:hi + TChan_A15:hi
+  84  F0      OBV_Velocity:hi + Micro_RollProxy:hi + PrevDay_High_Dist_ATR:lo
+  85  F0      OBV_Velocity:lo + Micro_TickIntensity:hi + VAL_Side:==0
+  86  F0      OBV_Velocity:lo + Micro_TickIntensity:lo + PoC_Side:==0
+  87  F0      OBVf_DirStepCount:hi + VAL_Side:==0 + WeeklyOpen_Side:==-1
+  88  F0      PrevDay_Close_Dist_ATR:lo + VWAP_Side:==1 + PrevDay_High_Side:==1
+  89  F0      Round_500_Dist_ATR:lo + RangeOsc_State:==2 + PrevDay_Close_Side:==-1
+  90  F0      Slope_Accel_LT:hi + RangeOsc_Val:lo + Dist_To_PoC_ATR:lo
+  91  F0      Slope_Accel_LT:hi + RangeOsc_Val:lo + Micro_LogReturn:lo
+  92  F0      Slope_Accel_LT:lo + Micro_OrderFlowDelta:hi + PoC_Side:==0
+  93  F0      Slope_Accel_LT:lo + Micro_Rejection:hi + PrevDay_High_Side:==1
+  94  F0      Slope_Accel_LT:lo + Sqz_Val:hi + Micro_CSSpread:lo
+  95  F0      Slope_Accel_ST:lo + Volume_Avg_10:hi + VAL_Side:==-1
+  96  F0      Slope_EMA_LT:hi + Micro_VPIN:lo + RangeOsc_State:==-1
+  97  F0      Slope_EMA_ST:hi + Micro_MicroGap:hi + OBVf_Signal:==1
+  98  F0      Slope_EMA_ST:hi + Slope_Accel_ST:hi + VA_Position:hi
+  99  F0      Slope_EMA_ST:lo + Micro_ThrustEff:hi + ADX_Value:lo
+ 100  F0      Slope_EMA_ST:lo + OBV_Velocity:hi + Micro_BarOverlap:lo
+ 101  F0      Sqz_Val:hi + Micro_OrderFlowDelta:hi + Session_High_Dist_ATR:hi
+ 102  F0      Sqz_Val:hi + Micro_TickIntensity:hi + Session_High_Dist_ATR:hi
+ 103  F0      Sqz_Val:hi + Volume_Avg_10:hi + PrevDay_Close_Dist_ATR:hi
+ 104  F0      Volume_Avg_10:hi + Body_Size:hi + VWAP_Sigma:lo
+ 105  F0      Volume_Ratio_10:hi + VWAP_Sigma:hi + RangeOsc_State:==-2
+ 106  F0      Volume_Ratio_10:lo + Micro_RollProxy:lo + Volume:hi
+
+================================================================================
+5. WHICH GATES ARE LIVE — THE FINDING THAT MATTERS MOST HERE
+================================================================================
+
+  tier = min(depth, 5). Measured by counting trades at each tier index.
+
+    tier   gate                                    LONG trades   SHORT trades
+    3      Micro_Hurst > p90                             0            0
+    4      Micro_FailedBreak>p20 AND AT_Slope_ST>p90     0          756 (FREE)
+    5+     Micro_FailedBreak > p20                    2,512          777 (FREE)
+    global ATR_1M >= 20                               LIVE         LIVE
+
+  MICRO_HURST > P90 CANNOT FIRE AT THIS FLOOR.
+
+  That is the only CONFIRMED gate in the entire system — the only condition ever
+  to clear a rarity-matched null at two independent cells (v3 section 3.5.1:
+  LONG d3 p = 0.0000 against 39 alternatives; SHORT d3 p = 0.0303). It lives at
+  tier 3. A floor of 7 LONG / 4 SHORT makes tier 3 unreachable in both
+  directions, so the system's best-supported gate is dead code.
+
+  ONE REAL GATE FIRES: Micro_FailedBreak > p20 on LONG, plus the ATR global.
+  SHORT is entirely ungated above its floor.
+
+  THEREFORE: THE GATE STACK IN THIS DOCUMENT IS NOT DERIVED FOR THIS FLOOR. It
+  is v3's stack, carried unchanged, and most of it is unreachable. ANY SERIOUS
+  ADOPTION OF A 7/4 FLOOR REQUIRES THE STACK TO BE RE-DERIVED AT THE CELLS THAT
+  ACTUALLY TRADE — LONG d7+ and SHORT d4+. Listing unreachable gates in a
+  specification is the defect v1 had (v3 section 0.2). They are listed here only
+  to show WHY they are unreachable.
+
+================================================================================
+6. PERFORMANCE — THE DEPTH LADDER IS THE CENTREPIECE
+================================================================================
+
+6.1  THE LADDER, LONG (floor 7)
+
+    depth      trades      WR        PF   losses  events        net   pts/trade   worst bar
+    d7            511   97.26     34.41       14       2   35,683.9       69.83      -646.1
+    d8-9          508   93.31      6.95       34       4   18,643.1       36.70    -1,224.0
+    d10-12        515   95.92     20.53       21       2   25,667.8       49.84      -672.0
+    d13-20        600  100.00     blank        0       0   34,207.0       57.01      +160.0
+    d21           378  100.00     blank        0       0   46,960.2      124.23      +199.5
+
+6.2  THE LADDER, SHORT (floor 4)
+
+    depth      trades      WR        PF   losses  events        net   pts/trade   worst bar
+    d4            756   96.83     10.80       24       6   23,128.4       30.59      -612.0
+    d5            345   98.55     41.05        5       1   14,620.0       42.38      -365.0
+    d6            186  100.00     blank        0       0    8,130.6       43.71       +55.2
+    d7            133   94.74      4.65        7       1    3,292.8       24.76      -902.3
+    d8-9           90  100.00     blank        0       0    2,639.6       29.33       +82.4
+    d10-12         10    n<20     blank        0       0      219.0       21.90      +219.0
+    d13-20         13    n<20     blank        0       0   14,667.9    1,128.30   +14,667.9
+
+  READ THIS AND NOTHING ELSE IF YOU READ ONE THING:
+
+  LONG d13 AND ABOVE: 978 TRADES, ZERO LOSSES. SHORT d6 AND ABOVE, EXCLUDING
+  d7: 113 TRADES, ZERO LOSSES. The deepest LONG cell runs 124.23 pts/trade
+  against the book's 56.33 — MORE THAN DOUBLE THE BOOK AVERAGE.
+
+  AND THE LADDER IS NOT MONOTONE. LONG d8-9 is the weak cell: 34 losses, PF
+  6.95, and it carries the worst bar in the book at -1,224.0. SHORT d7 is worse
+  than SHORT d5 and d6. DEPTH IS NOT A CONFIDENCE SCORE THAT RISES SMOOTHLY;
+  it is a size measurement with real structure and real exceptions, and any
+  selection process built on it must handle the exceptions rather than assume
+  monotonicity.
+
+6.3  THE SAME LADDER IN THE DEPLOYED 3/3 BOOK, FOR CONTRAST
+
+    LONG  d3        177   94.92      7.20    9 losses   3 events   47.32 pts/tr
+    LONG  d4        368   91.30      5.10   32 losses   8 events   39.37
+    LONG  d5-6    1,316   93.24      5.74   89 losses  16 events   29.98
+    LONG  d7-9      861   94.19     10.64   50 losses   6 events   45.72
+    LONG  d10-20  1,004   99.00     97.99   10 losses   1 event    64.92
+    LONG  d21       378  100.00     blank    0 losses   0 events  124.23
+    SHORT d3        186   96.77     17.05    6 losses   2 events   29.80
+    SHORT d4        724   97.79     16.26   16 losses   4 events   31.62
+    SHORT d5-6      516   99.03     60.99    5 losses   1 event    42.43
+    SHORT d7-9      223   96.86      7.57    7 losses   1 event    26.60
+    SHORT d10-20     23  100.00     blank    0 losses   0 events  647.26
+
+  THE SHALLOW TIERS CARRY THE LOSSES IN BOTH BOOKS. In the deployed book LONG
+  d3-d6 is 1,861 trades and 27 of the 42 events. Raising the floor removes them.
+
+6.4  MONTHLY — ALL SEVEN POSITIVE
+
+    month     trades  losses  events      WR       PF          net    worst day
+    2026.01      211       0       0  100.00    blank      6,550.7       +608.4
+    2026.02      833      27       4   96.76    23.46     42,713.7        +64.0
+    2026.03      858       8       1   99.07    45.51     54,486.0       -478.8
+    2026.04      642      11       2   98.29    23.34     31,037.5       -121.5
+    2026.05      486      16       3   96.71    26.19     32,060.0        -73.3
+    2026.06      694      43       6   93.80     8.69     25,810.1       -406.1
+    2026.07      321       0       0  100.00    blank     35,202.3        +42.4
+
+  JANUARY AND JULY HAVE ZERO LOSSES. JUNE CARRIES 6 OF THE 16 EVENTS AND 43 OF
+  THE 105 LOSSES. June is the weak month in every configuration this project has
+  measured and it is not understood (v3 section 9.1).
+
+6.5  WEEKLY — 26 ISO WEEKS, ZERO LOSING
+
+    p10 1,095.8 | p25 2,811.8 | median 5,814.9 | p75 12,835.3 | p90 22,257.9
+    worst week +42.4 | best week +32,019.1
+
+6.6  DIRECTION, EXITS, PATH
+
+    LONG    2,512 trades   69 losses    8 events   WR 97.25%   PF 30.20   161,162.0
+    SHORT   1,533 trades   36 losses    8 events   WR 97.65%   PF 19.39    66,698.3
+    trade split 1.64:1 (terrain is 0.99:1)
+
+    BE   3,178  78.6%   mean  +28.12   total  +89,366.7
+    LF     754  18.6%   mean +191.87   total +144,666.5
+    SL     105   2.6%   mean  -87.10   total   -9,145.7
+    FC       8   0.2%   mean +371.60   total   +2,972.8
+
+    18.6% OF TRADES PRODUCE 63.5% OF GROSS PROFIT.
+
+    BASE path  1,425  35.2%  loss rate 5.96%   net  48,418.3
+    MOM  path  2,620  64.8%  loss rate 0.76%   net 179,442.0
+
+================================================================================
+7. THE CAP CURVE — THERE IS NO CLIFF AT THIS FLOOR
+================================================================================
+
+    cap    trades      WR      PF        net  events  worst bar  worst day  margin
+      6     1,407   97.51   15.91     52,147       8     -773.4     -209.1   26.38
+      9     3,361   97.17   18.95    170,609      15   -1,377.0     -657.0   32.70
+     12     3,595   97.44   23.85    193,572      15   -1,224.0     -657.0   35.95
+     15     3,760   97.47   26.30    214,396      15   -1,224.0     -518.4   38.01
+     18     3,946   97.36   25.35    221,027      16   -1,224.0     -478.8   38.06
+     21     4,045   97.40   25.91    227,860      16   -1,224.0     -478.8   38.25
+     24     4,138   97.46   26.74    235,380      16   -1,224.0     -478.8   38.50
+     30     4,274   97.33   26.53    246,633      17   -1,224.0     -921.8   39.43
+     40     4,390   97.45   28.18    259,427      17   -1,224.0     -921.8   39.90
+    unc     4,420   97.47   28.83    265,661      17   -1,224.0     -921.8   40.31
+
+  MAX_POSITIONS 21 IS THE L3/S3 CONSTRAINT AND IT DOES NOT BIND HERE. The curve
+  is smooth and still rising uncapped. A 7/4 book holds far fewer concurrent
+  positions, so the cliff that makes 21 the last safe value in the deployed book
+  is absent.
+
+  WORST DAY IS NON-MONOTONE IN THE CAP: -657.0 at 12, -478.8 at 21, -921.8 at
+  30 and above. THE CAP CANNOT BE CHOSEN BY INTERPOLATION. This reproduces the
+  same anomaly recorded for the deployed book.
+
+================================================================================
+8. RISK POSTURE
+================================================================================
+
+8.1  EXPOSURE
+
+    peak OPEN positions        42
+    peak AT-RISK positions     21   (equals MAX_POSITIONS — the bound is reached)
+    ceiling = 21 x 150 pts x 2 conviction = 6,300 pts at 1.0 lot
+    worst observed intraday -4,709.0 pts = 74.7% of that ceiling
+
+  HALF THE OPEN POSITIONS ARE BE-LOCKED AND CANNOT LOSE. The jar counts at-risk
+  positions only.
+
+8.2  SCALING — 1.0 LOT IS NOT DEPLOYABLE
+
+    lot     ceiling    % of 5,000 daily   worst intraday   % of 5,000      net
+    1.00      6,300         126.0%            -4,709.0        94.2%    227,860
+    0.50      3,150          63.0%            -2,354.5        47.1%    113,930
+    0.30      1,890          37.8%            -1,412.7        28.3%     68,358
+    0.25      1,575          31.5%            -1,177.2        23.5%     56,965
+    0.10        630          12.6%              -470.9         9.4%     22,786
+
+  0.30 IS THE SIZE THE DEPLOYED SYSTEM USES. At that size this configuration's
+  ceiling is 37.8% of the daily limit and its worst observed intraday is 28.3%.
+
+8.3  INTRADAY FREQUENCY (reconstruction, convention below)
+
+    worst -4,709.0 | p50 -391.2 | p90 -1,500.0 | p99 -3,018.8
+
+    worse than   -500:  47 of 110 days
+    worse than -1,000:  18 of 110
+    worse than -1,500:  11 of 110
+    worse than -2,500:   3 of 110
+    worse than -5,000:   0 of 110
+
+8.4  THE ELEVEN DEEPEST DAYS, WITH THEIR CLOSES
+
+    date          intraday floor        closed
+    2026.07.14         -4,709.0      +6,610.0
+    2026.05.20         -3,054.6     +16,202.4
+    2026.05.27         -2,656.9      +2,586.4
+    2026.04.23         -2,355.8      +2,052.2
+    2026.06.12         -2,260.8      +2,889.5
+    2026.07.17         -2,184.0     +21,819.9
+    2026.02.27         -2,000.0      +1,228.0
+    2026.06.17         -1,739.8      +1,404.2
+    2026.02.25         -1,731.5        +730.2
+    2026.06.05         -1,719.5        -406.1
+    2026.03.18         -1,652.7      +1,605.8
+
+  TEN OF ELEVEN CLOSED GREEN. The book opens many positions into a move, they go
+  against it together early, and the break-even lock converts them. The deepest
+  floor in the frame closed +6,610.0.
+
+  MARKING CONVENTION. The engine holds no equity or floating-P&L tracking, so
+  these are a reconstruction. Each open position is marked at the bar's adverse
+  extreme, FLOORED AT ITS OWN STOP — a position cannot be marked below a level
+  at which it would already have closed, and the engine's own exit decisions
+  establish that price did not reach the stop on that bar. Positions past the BE
+  nudge are floored at the lock level. RESIDUAL CONSERVATISM: all open positions
+  are assumed to reach their worst moment simultaneously. True drawdowns are
+  shallower by an unmeasured amount.
+
+================================================================================
+9. OUT-OF-SAMPLE
+================================================================================
+
+  Three walk-forward test windows, both configurations, same architecture.
+
+    split   book      trades   losses   events   loss rate       PF        net
+      0     L7/S4        398       16        3       4.02%    19.87   28,715.0
+      0     L3/S3        562       16        3       2.85%    37.00   34,661.4
+      1     L7/S4        615       39        5       6.34%     7.88   21,625.7
+      1     L3/S3        822       75       12       9.12%     4.58   23,829.6
+      2     L7/S4        471        4        1       0.85%   197.17   42,528.8
+      2     L3/S3        675       16        4       2.37%    44.77   48,829.5
+
+  ALL SIX WINDOWS PROFITABLE. Split 1 is the weak window in both — it is the
+  May-June stretch, unexplained across the whole study.
+
+  SPLIT 2 AT ONE LOSS EVENT IS NOT A MEASUREMENT. PF 197.17 on a single bad bar
+  is arithmetic, not evidence, and it illustrates section 10 better than any
+  argument could.
+
+  THE SAME LOOK-AHEAD CAVEAT APPLIES AS IN v3: the field these signals were
+  drawn from used full-sample statistics, so these windows test the book, not
+  the process.
+
+================================================================================
+10. WHY THIS CONFIGURATION WAS NOT ADOPTED
+================================================================================
+
+  IT SCORES BETTER ON ALMOST EVERY RATIO AND IT WAS STILL REJECTED. The reason
+  is the loss population, and it is worth stating flatly.
+
+    metric                    L7/S4          L3/S3 (deployed)
+    trades                    4,045                    5,776
+    days traded /132            110                      120
+    win rate                 97.40%                   96.12%
+    profit factor             25.91                    14.53
+    net pts               227,860.3                284,974.0
+    pts/trade                 56.33                    49.34
+    LOSS EVENTS                  16                       42
+    event-days                   14                       35
+    entry bars                  558                      973
+    worst bar              -1,224.0                 -1,224.0
+    worst day                -478.8                   -346.6
+    losing days                   4                        7
+    losing weeks                  0                        0
+    break-even WR            59.15%                   63.05%
+    MARGIN                 38.25 pts                33.07 pts
+    peak AT-RISK                 21                       21
+    worst intraday         -4,709.0                 -4,502.0
+
+  TWO REASONS, BOTH THE OPERATOR'S, BOTH MEASURED.
+
+  10.1  PARTICIPATION. 110 days of 132 against 120. The 7/4 book is silent on
+        22 trading days — one day in six. A book that goes quiet is hard to run,
+        hard to trust and hard to test. It also earns 20% less in absolute terms
+        despite the better ratios, because it trades 30% less.
+
+  10.2  AUDITABILITY, AND THIS IS THE BINDING REASON.
+
+        EVERY RATIO IN THIS DOCUMENT RESTS ON SIXTEEN BAD BARS IN SIX MONTHS.
+        The 97.40% win rate, the 25.91 profit factor, the four losing days, the
+        zero losing weeks — all sixteen events. Day-keyed figures rest on
+        fourteen.
+
+        AT SIXTEEN EVENTS YOU CANNOT DISTINGUISH A REAL PROBLEM FROM NOISE
+        INSIDE A YEAR OF LIVE TRADING. Three bad bars in a month is either
+        variance or the end of the edge, and nothing in the data tells you
+        which. The deployed book's 42 events on 35 days is not a comfortable
+        sample either, but it is more than twice the evidence for 27% more
+        money and 10 more trading days.
+
+        FEWER LOSSES IS FEWER EVENTS TO MEASURE WITH. THEY ARE THE SAME NUMBER.
+        A configuration that loses less is not automatically safer to run; it is
+        harder to verify, and verification is what protects the account over a
+        year.
+
+  10.3  AND THE GATE PROBLEM. Section 5: the floor makes the system's only
+        confirmed gate unreachable. Adopting 7/4 means either running with one
+        real gate or re-deriving the stack at LONG d7+ and SHORT d4+ — and gate
+        derivation at this floor would face 16 events across five reachable
+        cells, roughly 3 events per cell. THAT IS NOT ENOUGH TO FIT ANYTHING.
+
+================================================================================
+11. WHAT THIS DOCUMENT DOES NOT CLAIM
+================================================================================
+
+It does not claim 7 and 4 are derived. They are not (section 3). v3's 3 and 3
+are derived from a measured cliff; these are a demonstration point.
+It does not claim the gate stack is appropriate at this floor. Most of it is
+unreachable and the best-supported gate cannot fire (section 5).
+It does not claim MAX_POSITIONS 21 is optimal here. There is no cliff at this
+floor and the curve is still rising uncapped (section 7).
+It does not claim 16 loss events support a confidence interval on anything.
+Day-keyed figures rest on 14.
+It does not claim the intraday figures are engine output. They are a
+reconstruction with a stated convention (section 8.3).
+It does not claim the out-of-sample windows test the selection process. They
+test this book on a field built with full-sample statistics.
+It does not claim June is understood. It is not.
+
+WHAT IT DOES CLAIM, AND IT IS THE ONLY REASON THE DOCUMENT EXISTS:
+
+  THE SAME 297 SIGNALS, THE SAME ENGINE, THE SAME GATES AND THE SAME CAP —
+  CHANGING ONLY THE DEPTH FLOOR FROM 3/3 TO 7/4 — TAKE THE LOSS POPULATION FROM
+  42 EVENTS TO 16, THE PROFIT FACTOR FROM 14.53 TO 25.91, AND THE DURABILITY
+  MARGIN FROM 33.07 TO 38.25 POINTS. LONG DEPTH 13 AND ABOVE IS 978 TRADES WITH
+  ZERO LOSSES.
+
+  CONCURRENCE STACKING IS THE PERSISTING ATTRIBUTE OF THESE SIGNALS. THAT IS
+  WHAT THE SELECTION PROCESS HAS TO PRESERVE.
+
+================================================================================
+END OF SPECIFICATION
+================================================================================
