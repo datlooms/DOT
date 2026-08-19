@@ -1366,32 +1366,26 @@ def _gate_ctx(df, ad, st, w, pool, cfg):
 
 
 def _smoke_select(df, ad, st, w, pool, anchor, out, input_sha, workers):
-    """The SELECT leg of --smoke. EVERY CAP IS PRINTED AS A CAP.
+    """The SELECT leg of --smoke. RESEQUENCED SO THE SCREEN CANNOT KILL THE REST.
 
-    A smoke figure that reads like a result is worse than no figure: the operator must
-    never mistake a capped null or a capped screen for a measurement. The cells are REAL
-    regardless of how many signals the screen admits, so they are NOT capped - only the
-    scan row count, the arm sizes and the prereg null enumeration are.
+    The previous ordering aborted the whole leg on its own capped input: smoke's S3
+    emits ONE F0 row (s3_limit=8 caps the family; 1 of 8 combos survives - EXPECTED at
+    smoke caps, not a defect), the screen yielded 0 survivors, nested_arms returned [0],
+    and the book_size guard correctly refused book_size=32. THE GUARD IS RIGHT AND IS NOT
+    WEAKENED HERE - smoke simply must stop handing it an impossible request.
+
+    THE FOUR MOST VALUABLE CHECKS DO NOT DEPEND ON THE SCREEN AT ALL and were all killed
+    by that abort: the PREREG checksum (pure masks), the gate layer (the incumbent's REAL
+    ungated cells), the BOOK-50 canary (a different book), and the deploy manifest (pure
+    file checks). They now run FIRST. The screen-dependent leg runs LAST and DEGRADES.
+
+    EVERY CAP PRINTS AS A CAP. A smoke figure that reads like a result is worse than no
+    figure.
     """
     import select_stage as sel
     import discovery_orchestrator as orch
     import pandas as _pd
     results = os.path.join(out, 'results')
-    scan = os.path.join(results, 'results_F0_triple_convergence_and_d2ddir.csv')
-    if not os.path.exists(scan):
-        print('  SMOKE SELECT: F0 scan absent - S3 did not emit it. SKIPPED.', flush=True)
-        return
-    # THE SECTION-4 PROVENANCE GUARD, EXERCISED. It fired in development with
-    # "no provenance stamp" and cost a run, so a freshly-populated tree will hit it too.
-    ok, why = orch.provenance_is_current(scan, input_sha)
-    print(f'  SECTION-4 PROVENANCE GUARD: {"PASS" if ok else "WOULD ABORT"} - {why}',
-          flush=True)
-    if not ok:
-        print(f'      THE REAL RUN WOULD ABORT HERE. The scan carries no stamp for this '
-              f'frame, so the screen would validate LAST MONTH\'S candidate rows against '
-              f'NEW data. FIX: re-run --stage S3 against this frame, which stamps the scan. '
-              f'Copying a scan between trees does NOT carry the stamp.', flush=True)
-        return
     cfg_path = os.path.join(_HERE, 'engine', 'whole_dot_config.json')
     if not os.path.exists(cfg_path):
         print('  SMOKE SELECT: engine/whole_dot_config.json absent. SKIPPED.', flush=True)
@@ -1399,33 +1393,102 @@ def _smoke_select(df, ad, st, w, pool, anchor, out, input_sha, workers):
     with open(cfg_path, encoding='utf-8') as f:
         cfg = json.load(f)
     sel.assert_config(cfg, cfg_path)
+    import swept_thresholds as _sw
+    import adm_engine as _adm
+    import cluster_profiler as _cp
+
+    print('  [1/6] PREREG CHECKSUM - pure masks, needs no survivor', flush=True)
+    for _ln in sel.assert_prereg_checksums(df, cfg, _sw):
+        print(_ln, flush=True)
+
+    print('  [2/6] GATE LAYER on the incumbent\'s REAL UNGATED CELLS - NOT CAPPED, needs '
+          'no survivor', flush=True)
+    _ctx = _gate_ctx(df, ad, st, w, pool, cfg)
+    _td_ung = sel.ungated_trades(df, _ctx['sigs'], ad, st, w, _ctx['conv'], cfg, _adm,
+                                 _cp.GAP_NAMES)
+    _cap_null = int(globals().get('SMOKE_NULL_CAP', 8))
+    print(f'      *** PREREG NULL ENUMERATION CAPPED AT {_cap_null} OF THE FULL SHORTLIST '
+          f'- ANY p BELOW IS NOT A VERDICT. The real run enumerates every candidate '
+          f'(186s LONG d3, 320s SHORT d3). THE CELLS THEMSELVES ARE REAL AND UNCAPPED. ***',
+          flush=True)
+    sel.SMOKE_NULL_CAP = _cap_null
+    try:
+        _gl, _gv = sel.run_gate_layer(df, _ctx['sigs'], ad, st, w, _ctx['conv'], cfg, pool,
+                                      _adm, _sw, _cp.GAP_NAMES, _td_ung)
+    finally:
+        sel.SMOKE_NULL_CAP = None
+    for _ln in _gl:
+        print(_ln, flush=True)
+
+    print('  [3/6] BOOK-50 CANARY - a separate book, needs no survivor', flush=True)
+    b50 = os.path.join(_HERE, 'engine', 'book50_signals.csv')
+    if os.path.exists(b50):
+        s8_committed(df, ad, st, w, pool, anchor, b50, out, input_sha)
+    else:
+        print('      *** BOOK-50 ABSENT - THE ENGINE CHECK DID NOT RUN. Not a pass. ***',
+              flush=True)
+
+    print('  [4/6] DEPLOY MANIFEST - pure file checks', flush=True)
+    for _ln in sel.print_deploy_manifest(_HERE)[0]:
+        print(_ln, flush=True)
+
+    print('  [5/6] SECTION-4 PROVENANCE GUARD', flush=True)
+    scan = os.path.join(results, 'results_F0_triple_convergence_and_d2ddir.csv')
+    # PREFER A REAL SCAN WHEN ONE EXISTS: a CAPPED READ OF A REAL SCAN is a far better
+    # smoke test than a full read of a 1-row one. The provenance guard still decides
+    # whether it is usable, so preferring it cannot bypass the check.
+    _cands = [scan, os.path.join(_HERE, 'discovery', 'full', 'results',
+                                 'results_F0_triple_convergence_and_d2ddir.csv')]
+    _use, _rows, _why = None, 0, ''
+    for _c in _cands:
+        if not os.path.exists(_c):
+            continue
+        _ok, _w2 = orch.provenance_is_current(_c, input_sha)
+        _n = max(0, sum(1 for _l in open(_c, encoding='utf-8', errors='replace')) - 1)
+        print(f'      {os.path.basename(os.path.dirname(_c))}/{os.path.basename(_c)}: '
+              f'{_n} rows, provenance {"CURRENT" if _ok else "STALE"} - {_w2}', flush=True)
+        if _ok and _n > _rows:
+            _use, _rows, _why = _c, _n, _w2
+    if _use is None:
+        print('      *** NO SCAN WITH CURRENT PROVENANCE. The real run would ABORT here. '
+              'FIX: re-run --stage S3 against this frame - a COPIED scan does NOT carry '
+              'its stamp. SCREEN/ARM/ARTIFACT LEG SKIPPED, and the non-empty artifact '
+              'assertion IS THEREFORE NOT RUN. ***', flush=True)
+        return
     cap_rows = int(globals().get('SMOKE_SCAN_ROWS', 120))
-    cap_null = int(globals().get('SMOKE_NULL_CAP', 8))
-    arms = tuple(globals().get('SMOKE_ARMS', (16, 24, 32)))
-    print(f'  *** SMOKE CAPS, AND EVERY ONE IS A CAP NOT A RESULT: scan rows {cap_rows} of '
-          f'the full scan | arm sizes {arms} are STAND-INS for '
-          f'{cfg["draw"]["arm_sizes"]} | prereg null enumeration capped at {cap_null} of the '
-          f'full shortlist. THE CELLS ARE REAL AND ARE NOT CAPPED. ***', flush=True)
-    full = _pd.read_csv(scan)
-    sub = full.iloc[:min(cap_rows, len(full))]
+    print(f'  [6/6] SCREEN, ARMS, ARTIFACTS  *** CAPPED: asked for {cap_rows} scan rows, '
+          f'the chosen scan has {_rows} - reading {min(cap_rows, _rows)}. NOT A RESULT. ***',
+          flush=True)
+    sub = _pd.read_csv(_use).iloc[:min(cap_rows, _rows)]
     smoke_scan = os.path.join(results, '_smoke_F0_scan.csv')
     sub.to_csv(smoke_scan, index=False, lineterminator='\n')
     orch.stamp_provenance(smoke_scan, input_sha)
-    sel.SMOKE_NULL_CAP = cap_null
-    try:
-        res = sel.run_select(df, ad, st, w, pool, anchor, cfg, cfg_path, out, input_sha,
-                             workers, scan_path=smoke_scan, score_fn=_score_configured,
-                             metrics_fn=_metrics_from_trades,
-                             grammar_fn=_assert_book_grammar,
-                             breakdown_fn=breakdown_report, loss_events_fn=loss_events,
-                             arm_sizes=arms, book_size=arms[-1],
-                             gate_ctx=_gate_ctx(df, ad, st, w, pool, cfg))
-    finally:
-        sel.SMOKE_NULL_CAP = None
+    # ARMS DERIVED FROM WHAT SURVIVES, IN THE CALLER. nested_arms and the book_size guard
+    # are SHARED WITH PRODUCTION and are not modified: fix the caller, not the callee.
+    _probe = sel.run_select(df, ad, st, w, pool, anchor, cfg, cfg_path, out, input_sha,
+                            workers, scan_path=smoke_scan, score_fn=_score_configured,
+                            metrics_fn=_metrics_from_trades, grammar_fn=_assert_book_grammar,
+                            breakdown_fn=breakdown_report, loss_events_fn=loss_events,
+                            arm_sizes=(), book_size=None, gate_ctx=None)
+    _ns = len(_probe['survivors'])
+    _arms = tuple(a for a in (4, 8, 16, 32, 64) if a <= _ns)
+    if not _arms:
+        print(f'      *** SMOKE SCREEN YIELDED {_ns} SURVIVORS FROM A CAPPED SCAN OF '
+              f'{len(sub)} ROWS; ARM AND ARTIFACT LEG SKIPPED. THIS IS A SMOKE CAP, NOT A '
+              f'SCREEN FAILURE. The non-empty artifact assertion IS THEREFORE NOT RUN - '
+              f'it is skipped, and it says so rather than passing silently. ***', flush=True)
+        return
+    res = sel.run_select(df, ad, st, w, pool, anchor, cfg, cfg_path, out, input_sha,
+                         workers, scan_path=smoke_scan, score_fn=_score_configured,
+                         metrics_fn=_metrics_from_trades, grammar_fn=_assert_book_grammar,
+                         breakdown_fn=breakdown_report, loss_events_fn=loss_events,
+                         arm_sizes=_arms, book_size=_arms[-1], gate_ctx=None)
+    print(f'      arms {_arms} DERIVED FROM {_ns} SURVIVORS - stand-ins for '
+          f'{cfg["draw"]["arm_sizes"]}', flush=True)
     paths = sel.emit_artifacts(out, res, res['arm_books'], res['scores'], cfg_path,
                                _sha12_of(cfg_path))
-    for ln in sel.arm_table(res):
-        print(ln, flush=True)
+    for _ln in sel.arm_table(res):
+        print(_ln, flush=True)
     print('  SELECT ARTIFACTS:', flush=True)
     _empty = []
     for k, v in paths.items():
@@ -1437,16 +1500,9 @@ def _smoke_select(df, ad, st, w, pool, anchor, out, input_sha, workers):
             _empty.append(os.path.basename(v))
     if _empty:
         raise SystemExit(f'ABORT [--smoke] SELECT artifact(s) with ZERO ROWS: {_empty}. Under '
-                         f'--smoke an empty artifact is a FAILED SMOKE RUN - the path it '
-                         f'exercises was not tested.')
+                         f'--smoke an empty artifact is a FAILED SMOKE RUN.')
     print('  smoke non-empty assertion EXTENDED TO THE SELECT ARTIFACTS: all have rows.',
           flush=True)
-    for _ln in sel.print_deploy_manifest(_HERE)[0]:
-        print(_ln, flush=True)
-    b50 = os.path.join(_HERE, 'engine', 'book50_signals.csv')
-    if os.path.exists(b50):
-        print('  SMOKE CANARY: scoring BOOK-50 so the engine check cannot be silent', flush=True)
-        s8_committed(df, ad, st, w, pool, anchor, b50, out, input_sha)
 
 
 def s_select(df, ad, st, w, pool, anchor, book_file, out, input_sha, workers,
