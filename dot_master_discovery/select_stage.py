@@ -846,3 +846,202 @@ def cell_halves(cell_bars, mode):
                          f'the SHORT d3 verdict on its own and must not be chosen silently.')
     mid = len(ids) // 2
     return {'A': ids[:mid], 'B': ids[mid:]}, (ids[mid] if ids else None)
+
+
+def retained_loss_rate(mask, cell_bars, loss_bars):
+    """STAGE C METRIC ONLY - A RATE, NOT A COUNT, NON-MONOTONE BY CONSTRUCTION.
+
+    INVENTED FOR STAGE C TO BE CHEAP. IT IS NOT WHAT THE GATE WAS DERIVED ON: the
+    hand-derivation measured BOOK LOSS EVENTS FROM A FULL ENGINE RUN. Using this
+    quantity for the prereg null produced p=0.045 and p=0.12; on the derived quantity
+    they are 0.0000 and 0.0303. Do not reuse it for the prereg verdict.
+    """
+    adm = mask[cell_bars]
+    n = int(adm.sum())
+    if n == 0:
+        return None, 0, 0
+    return int((adm & loss_bars).sum()) / float(n), int((adm & loss_bars).sum()), n
+
+
+def stage_c_rate(masks, cell_bars, loss_bar_ids, halves, shortlist):
+    """Candidate must beat the cell's base retained-loss rate in BOTH halves.
+
+    "Reduce book loss events in both halves" was MONOTONE and could not fail - 45 of 45
+    passed. A ratio moves either way because admitting fewer bars removes winners too.
+    """
+    cb = np.asarray(sorted(set(int(b) for b in cell_bars)), dtype=np.int64)
+    lb = np.isin(cb, np.asarray(sorted(set(int(b) for b in loss_bar_ids)), dtype=np.int64))
+    out, base = [], {}
+    for hname, hbars in halves.items():
+        sel = np.isin(cb, np.asarray(sorted(set(int(b) for b in hbars)), dtype=np.int64))
+        nb = int(sel.sum())
+        base[hname] = ((int((lb & sel).sum()) / float(nb)) if nb else None,
+                       int((lb & sel).sum()), nb)
+    for k in shortlist:
+        m = masks[k][cb]
+        ok = True
+        for hname, hbars in halves.items():
+            sel = np.isin(cb, np.asarray(sorted(set(int(b) for b in hbars)), dtype=np.int64))
+            a = m & sel
+            n = int(a.sum())
+            if n == 0 or base[hname][0] is None or \
+                    not (int((a & lb).sum()) / float(n) < base[hname][0]):
+                ok = False
+                break
+        if ok:
+            nf = int(m.sum())
+            out.append({'condition': str(k),
+                        'rate': round(int((m & lb).sum()) / float(nf), 6) if nf else None,
+                        'loss_bars': int((m & lb).sum()), 'bars': nf})
+    return out, base
+
+
+def resolve_ranking(survivors, max_ties):
+    """ties = survivors at the minimum rate. Above the ceiling the ranking is SUPPRESSED
+    and NO ROW CARRIES A RANK - candidates tied at 0.0000 in a four-loss-bar half is the
+    arithmetic of a small denominator, not evidence."""
+    if not survivors:
+        return [], 0, None, 'NO SURVIVORS'
+    rates = [s['rate'] for s in survivors if s['rate'] is not None]
+    if not rates:
+        return survivors, 0, None, 'FILTER ONLY - no resolvable rate'
+    mn = min(rates)
+    ties = sum(1 for r in rates if r == mn)
+    if ties > int(max_ties):
+        return survivors, ties, mn, (f'FILTER ONLY - {ties} CANDIDATES TIED AT MINIMUM RATE '
+                                     f'{mn:.4f}, RANKING SUPPRESSED')
+    ranked = sorted(survivors, key=lambda s: (s['rate'], s['condition']))
+    for i, s in enumerate(ranked, 1):
+        s['rank'] = i
+    return ranked, ties, mn, 'RANKED'
+
+
+def stage_d_gated(masks, cell_bars, loss_bar_ids, survivors, shortlist, draws, seed):
+    """Stage D scan tier - BOTH ARMS GATED. §C.6 caught a latent instance of the Stage C
+    vacuity here: "comparison is loss EVENTS" against the UNGATED book reproduces it."""
+    cb = np.asarray(sorted(set(int(b) for b in cell_bars)), dtype=np.int64)
+    lb = np.isin(cb, np.asarray(sorted(set(int(b) for b in loss_bar_ids)), dtype=np.int64))
+    rng = np.random.default_rng(seed)
+    cache = {}
+
+    def rate(k):
+        if k not in cache:
+            m = masks[k][cb]
+            n = int(m.sum())
+            cache[k] = (int((m & lb).sum()) / float(n)) if n else 9e9
+        return cache[k]
+
+    out = {}
+    for s in survivors:
+        key = next((kk for kk in shortlist if str(kk) == s['condition']), None)
+        if key is None:
+            continue
+        obs = rate(key)
+        idx = rng.integers(0, len(shortlist), size=int(draws))
+        out[s['condition']] = {
+            'p': round(sum(1 for j in idx if rate(shortlist[int(j)]) <= obs) / float(draws), 4),
+            'obs_rate': round(obs, 6), 'draws': int(draws), 'basis': 'GATED BOTH ARMS'}
+    return out
+
+
+def book_loss_events(td, gap_names):
+    """THE DERIVED QUANTITY: |{(entry_bar, direction) : pnl < 0}| over the BOOK-only
+    population, from a FULL ENGINE RUN. Not retained_loss_rate, not masks only, not
+    cell-scoped."""
+    b = td[~td['signal_name'].isin(gap_names)] if gap_names else td
+    if not len(b):
+        return 0
+    g = b.groupby(['entry_bar', 'direction'])['pnl'].sum()
+    return int((g < 0).sum())
+
+
+def prereg_null_exhaustive(df, sigs, ad, st, w, conv, cfg, adm_mod, gap_names,
+                           cell, adopted_mask, shortlist_masks, run_label=None,
+                           progress=None):
+    """REV8 §7.4 - THE PREREG NULL. EXHAUSTIVE, NOT SAMPLED, ON BOOK LOSS EVENTS.
+
+    THE POPULATION IS FINITE AND SMALL, SO ENUMERATE IT: p becomes exact and it is
+    cheaper than sampling. At 39 and 66 distinct candidates a 200-draw null cannot
+    resolve below 1/39 and 1/66, and 200 draws over 39 distinct values is 31 minutes of
+    recomputing the same handful of numbers.
+
+    replace-not-stack, BOTH ARMS GATED. One engine run per candidate.
+    p = (candidates with STRICTLY FEWER book loss events) / (shortlist size).
+    TIES ARE REPORTED SEPARATELY AND ARE NOT COUNTED AS BETTER.
+    """
+    dv = 1 if str(cell[0]).upper() == 'LONG' else -1
+    keep = dict(tg=adm_mod.ADM_TIERGATES, mx=adm_mod.MAX_POSITIONS, fl=adm_mod.ADM_FLOOR,
+                gt=adm_mod.ADM_GATES, rule=adm_mod.ADMISSION_RULE)
+    adm_mod.ADMISSION_RULE = cfg_get(cfg, 'admission')
+    adm_mod.MAX_POSITIONS = int(cfg_get(cfg, 'arch.max_positions'))
+    adm_mod.ADM_FLOOR = {1: int(cfg_get(cfg, 'arch.floor_long')),
+                         -1: int(cfg_get(cfg, 'arch.floor_short'))}
+    adm_mod.ADM_GATES = {'ATR': df['ATR_1M'].values.astype(float),
+                         'atr_min': float(cfg_get(cfg, 'arch.atr_min'))}
+
+    def events_with(mask):
+        adm_mod.ADM_TIERGATES = {(dv, int(cell[1])): [mask]}
+        td = adm_mod.run_portfolio(df, sigs, adaptive=ad, structural=st, warmup=w,
+                                   verbose=False, conviction=conv)
+        return book_loss_events(td, gap_names)
+
+    try:
+        adopted = events_with(adopted_mask)
+        nulls = []
+        for i, (k, m) in enumerate(sorted(shortlist_masks.items(), key=lambda x: str(x[0])), 1):
+            nulls.append((str(k), events_with(m)))
+            if progress and (i % 5 == 0 or i == len(shortlist_masks)):
+                progress(i, len(shortlist_masks))
+    finally:
+        for a_, v_ in (('ADM_TIERGATES', keep['tg']), ('MAX_POSITIONS', keep['mx']),
+                       ('ADM_FLOOR', keep['fl']), ('ADM_GATES', keep['gt']),
+                       ('ADMISSION_RULE', keep['rule'])):
+            setattr(adm_mod, a_, v_)
+    if not nulls:
+        return {'verdict': 'NO NULL POPULATION', 'adopted': adopted, 'n': 0}
+    vals = [v for _k, v in nulls]
+    better = sum(1 for v in vals if v < adopted)
+    ties = sum(1 for v in vals if v == adopted)
+    return {'adopted': adopted, 'n': len(vals), 'min': min(vals),
+            'median': float(np.median(vals)), 'max': max(vals),
+            'better': better, 'ties': ties, 'p': round(better / float(len(vals)), 4),
+            'nulls': nulls}
+
+
+def prereg_threshold(n_tests, alpha):
+    """n_tests IS THE NUMBER OF (candidate, cell) PAIRS ACTUALLY EVALUATED, COUNTED BY THE
+    CODE. Never read from config and never declared by the operator: the "one mechanism
+    tested twice" argument buys exactly the gap between 0.0303 and 0.05, and A CORRECTION
+    THAT CAN BE ARGUED DOWN BY RE-DESCRIBING THE HYPOTHESIS IS NOT A CORRECTION."""
+    return alpha / max(int(n_tests), 1)
+
+
+def quality_arms(survivors, arms):
+    """§4.5 AS ARMS - NEVER A DEFAULT DERIVED FROM THE INCUMBENT'S MEDIANS.
+
+    Measured on FULL-SAMPLE scan statistics, not train-window, and one step from the
+    look-ahead the pre-filter had. Percentile of the SURVIVING pool, PER DIRECTION,
+    applied AFTER the four absolute criteria. null DISABLES. The operator rules.
+    """
+    out = {}
+    for a in arms:
+        if a is None:
+            out['null'] = list(survivors)
+            continue
+        keep = []
+        for d in sorted({str(s.get('direction', '')) for s in survivors}):
+            sub = [s for s in survivors if str(s.get('direction', '')) == d]
+            tv = [float(s.get('train_trades', 0)) for s in sub]
+            pv = [float(s['train_PF']) for s in sub
+                  if str(s.get('train_PF', '')) not in ('', 'inf')]
+            if not tv or not pv:
+                keep.extend(sub)
+                continue
+            tc, pc = float(np.quantile(tv, a)), float(np.quantile(pv, a))
+            for s in sub:
+                pf = s.get('train_PF', '')
+                if float(s.get('train_trades', 0)) >= tc and \
+                        (str(pf) == 'inf' or (pf != '' and float(pf) >= pc)):
+                    keep.append(s)
+        out[str(a)] = keep
+    return out

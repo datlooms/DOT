@@ -1,0 +1,30 @@
+ADDENDUM TO non_negotiables_supervisor.txt / _developer.txt / _auditor.txt
+Section: MEASUREMENT DISCIPLINE. Insert as a numbered law.
+
+  ANY RULE WITH A THRESHOLD IN IT IS RUN ON THE CURRENT FRAME AND ITS VERDICT REPORTED
+  BEFORE IT IS TREATED AS BUILT. A threshold stated as an expectation is not built.
+
+  ANY NULL IS REPORTED WITH ITS QUANTITY, ITS POPULATION, AND WHETHER THAT POPULATION WAS
+  SAMPLED OR ENUMERATED. A p-VALUE WITHOUT THOSE THREE IS NOT A MEASUREMENT.
+
+    QUANTITY    what is compared. BOOK loss events from a full engine run is a different
+                measurement from a cell-scoped retained-loss RATE computed from masks, and
+                the two return different answers on the same gate.
+    POPULATION  what it is compared against, and its size.
+    BASIS       ENUMERATED (exact, p = better/N) or SAMPLED (then state the resolution
+                floor 1/draws and the seed).
+
+  WHERE THE NULL POPULATION IS FINITE AND SMALL, ENUMERATE IT. Sampling 200 draws from 39
+  distinct candidates cannot resolve below 1/39; that is resampling, not resolution.
+  Measured: enumeration is also cheaper — 39 runs 2.8 min, 66 runs 4.6 min at 4.2 s per
+  engine run with mask caching, against ~31 min for a 200-draw null.
+
+  RATIONALE — FOUR DEFECTS CAUGHT:
+    1. a Stage C comparison that was monotone and could not fail (45 of 45 passed)
+    2. Micro_Hurst > p90 failing a per-half filter whose weaker half carried 4 loss bars
+    3. a resolution-floor rule that suppressed ranking at both cells instead of one
+    4. three published p-values in a RATIFIED specification (The_Whole_DOT_spec_v3 3.5.1)
+
+  Item 4 is the first to correct a number already ratified. The corrections were
+  LONG d3 0.022 -> 0.0000, SHORT d3 0.000 -> 0.0303, LONG d4 0.056 -> 0.0328.
+  NO DECISION REVERSED AND NO PERFORMANCE FIGURE MOVED.
