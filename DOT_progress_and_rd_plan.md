@@ -2305,6 +2305,264 @@ Deterministic throughout: byte-identical artifacts across runs and worker counts
 explicitly seeded with the seed recorded in the artifact, no wall-clock in any CSV. Sacred five untouched;
 `adm_engine` and `swept_thresholds` with the fork-parity assertion retained.
 
+### 11v. `SELECT` — THE SELECTION LAYER STOPS BEING A CONVERSATION
+
+The 297 is a union of four objectives assembled across days of dialogue, and **no single reproducible
+procedure produces it.** So a new month could not be assessed and a new instrument meant starting over.
+`master.py --stage SELECT` now screens the raw F0 scan, draws nested arms, derives gates, scores every arm
+and compares against the incumbent — **data in, signals and score out, in one run.**
+
+Delivered: `select_stage.py` at 50 functions, `_gate_ctx` and `s_select` in `master.py`,
+`engine/whole_dot_config.json` carrying every threshold, `engine/canary_reference.json`, and a spec chain of
+five documents — `SELECT_BUILD_SPEC.md` through `REV_5`, `REV_6_STAGEC`, `REV_7` and `REV_8`.
+
+**The build took five Developer turns and four specification revisions, and every revision came from
+executing a rule rather than re-reading it.** That is the record worth keeping.
+
+### 11w. THE SCREEN, AND THE LOOK-AHEAD IT WAS BUILT ON
+
+The existing 6,488/6,034 pre-filter uses **full-sample** `agg_pf`, `folds_plus` and `trades` — computed over
+the months the screen is meant to validate against. **A train-only screen layered on a full-sample pre-filter
+is not train-only, and a reviewer checking that claim finds it false in the first place they look.**
+
+Measured rather than argued: 300 seeded signals drawn from the 13,720 the pre-filter cuts, solo-run and
+re-screened on train-window data — **37 of 300 pass, projecting roughly 1,692 wrongly excluded and the
+eligible population understated by about 37%.** And for a monthly stage it compounds, because each month the
+pre-filter consumes the newest data.
+
+**The screen now runs on the raw 19,754 F0 rows.** `trades >= 12`, `agg_pf >= 2.0`, at least three monthly
+buckets present, and profitable in **at least 2/3 of the buckets actually present — a proportion, not a
+count**, since `folds_plus >= 4` as a count is arithmetically unsatisfiable for 503 signals lacking four
+buckets.
+
+**And the train window is a rule, not a date.** `screen.holdout_months_N`, printed with its resolved window
+every run. **`N` was never pinned and it cost a full exchange:** N=2 gives 6,267 survivors and N=1 gives
+8,016 — **a 28% move on one month of training data, with every downstream band moving with it.** The two
+screens agree on 4,505 signals; the 1,380 that differ are exactly what a sixth bucket does — signals at
+`train_PF` 1.87-1.99 on five months clearing 2.0 on six.
+
+### 11x. SIZE IS A PARAMETER, NOT A RANKING — AND TAKING EVERYTHING DESTROYS THE ARCHITECTURE
+
+All 4,575 survivors scored under the adopted stack: WR 96.12% -> 85.83%, PF 14.53 -> 1.81, **loss events 42
+-> 1,113**, worst day -$347 -> **-$7,502**, margin 33.07 -> 8.81.
+
+**And the mechanism is the architecture turning against itself.** At 4,575 signals **82.6% of entry bars reach
+depth 5+ with a median depth of 8**, and depth-exactly-3 falls from 12.4% to 3.3%. `tier = min(depth,5)` then
+routes 82.6% of bars into the single d5+ cell gated by `FailedBreak > p20` — an 80.19%-pass gate — **and
+`Micro_Hurst > p90` at both d3 cells goes inert, because almost nothing lands at depth 3 any more.**
+
+**"Same architecture" and "take them all" are incompatible. The config is unchanged; the effective
+architecture is not.**
+
+So size is a config parameter and the draw is **seeded, nested and stably ordered.** One permutation with
+prefixes taken, so 150 is a strict subset of 200 and size is the only thing varying between arms. Sorted on
+`(signal_def, direction)` and **never on a float**, because a recorded seed is cosmetic if the survivor list
+can reorder across worker counts. And `book_size` must name one of the emitted arms or the stage aborts —
+**a seventh arm is not drawn silently and the size is not rounded to the nearest.**
+
+### 11y. THE GATE SCAN — FOUR SPECIFICATIONS, EACH KILLED BY EXECUTION
+
+117 variables across 6 cells. The true candidate space is the S2 pool at 249 conditions, so **249 x 6 = 1,494
+single-gate trials against 42 loss events. Bonferroni needs p < 0.000032 against a null resolution floor of
+0.033 at 30 draws — a naive sweep cannot clear its own correction.** That arithmetic is the design constraint,
+not a footnote.
+
+**STAGE A WAS FALSIFIED BY RUNNING IT.** It asked "is this cell worse than the book?" — and SHORT d3 is
+*better* (5.21% against 7.29%), so it was closed before any candidate could be tested, **while
+`Micro_Hurst > p90` demonstrably works there.** "Worth gating" is not "worse than average." Replaced with a
+**power floor** — *can this cell support a test?* — which closes SHORT d4 (4 events) and SHORT d5+ (2) on a
+stated basis, **the same verdict 20 hand-relocations reached independently.**
+
+**AND THE GATE MUST BE DERIVED FROM THE UNGATED POPULATION.** Run on the incumbent's already-gated trade
+table, LONG d3 gives `p = 0.475`; on the ungated table it gives **`p = 3.4e-05`.** The gate had already
+removed what it was derived to remove. **A gate is derived from the population it will filter, never from the
+population it has already filtered.**
+
+**STAGE C WAS VACUOUS AS FIRST WRITTEN — 45 of 45 candidates passed.** "Reduce book loss events in both
+halves" is **monotone**: removing any trades can only reduce loss events, so the test cannot fail. Replaced
+with `retained_loss_rate` = cell loss bars admitted / cell bars admitted — **non-monotone by construction, 500x
+cheaper (masks only, 4 seconds per cell against 9.3 seconds per candidate), and it rejects 21 of 112 and 36 of
+125.**
+
+**AND ITS RESOLUTION RULE WAS ALSO WRONG.** Floors of 11 and 5 were the range across the shortlist while the
+rule operates on **survivors**, where they are 2 and 1 — **suppressing both cells and making the acceptance
+line unprintable at the very cell it depends on.** Replaced with `max_min_rate_ties`, which measures
+orderability directly: LONG d3 has 1 tie so `RANKED`, SHORT d3 has 3 tied at exactly 0.0000 so `FILTER ONLY,
+RANKING SUPPRESSED`. **Those ties are the arithmetic of a 7-loss-bar half, not evidence.**
+
+### 11z. THE POOL CANNOT EXPRESS THE GATES — RECORDED AS ARCHITECTURE
+
+`dots_thresholds.py` L48-49 hardcodes `hi = p80` and `lo = p20`. **`Micro_Hurst > p90` and
+`AT_Slope_ST > p90` are not expressible in the S2 pool.** The scan was ranking `> p80` — a looser condition —
+and placing it last.
+
+**The 297 signals are built from a p80/p20 vocabulary, and the adopted gate stack uses percentiles that
+vocabulary cannot express. The gates entered through hand-derivation with `swept_thresholds`, never through
+the scan grammar.** That is a fact about the system, not a defect in it.
+
+**Widening the space to five percentiles was rejected on the binding ground rather than the arithmetic one:
+choosing which of five percentiles a variable uses because it scored best is curve-fitting, applied 900
+times.**
+
+**So the acceptance test moved. It validates the pipeline's ability to CONFIRM A PRE-REGISTERED MECHANISM,
+not the scan's ability to rediscover one.** `gates.preregistered` is a config list declared before the run,
+printed in the banner, tested at its own trial count, **with the config sha in the artifact so a candidate
+cannot be added after seeing the output — that sha is the entire integrity of the mechanism, and without it
+pre-registration is just a way to declare a winner.**
+
+And `prereg_mask()` carries a hard-abort checksum — **9.7478% / 6.2217% / 80.1874%, exact to 4dp.** It caught
+a `90`-versus-`0.90` scale error on its first live run, **before anything downstream consumed the mask.**
+
+### 11aa. THE PREREG NULL — THE QUANTITY WAS WRONG, AND FIXING IT CORRECTED THE RATIFIED SPEC
+
+Built on `retained_loss_rate` the null gave p = 0.045 and p = 0.12 against hand-derived figures of 0.022 and
+0.000. **The hand-derivation measured BOOK LOSS EVENTS FROM A FULL ENGINE RUN, replace-not-stack — a
+different quantity entirely.** The tell was decisive: **a correction effect cannot turn 0 of 30 into 24 of
+200, but a change of quantity can.**
+
+**And the draw count was also wrong. At 39 and 66 distinct candidates a 200-draw null cannot resolve below
+1/39. The population is finite — enumerate it.** Exact, and cheaper: 2.8 and 4.6 minutes against 31.
+
+| cell | adopted | null n | min/median/max | strictly better | p | ties |
+|---|---|---|---|---|---|---|
+| LONG d3 | 96 | 39 | 97 / 101 / 105 | 0 | **0.0000** | 0 |
+| SHORT d3 | 128 | 66 | 127 / 130 / 136 | 2 | **0.0303** | 5 |
+
+**The two figures moved in OPPOSITE directions, which independently confirms the diagnosis.**
+
+And `n_tests` is counted by the code from `(candidate, cell)` pairs, **never read from config.** The "one
+mechanism tested twice" argument was declined: **it is not measurable, it would be decided by whoever writes
+the config, and it buys exactly the gap between 0.0303 and 0.05. A correction that can be argued down by
+re-describing the hypothesis is not a correction.**
+
+**ACCEPTANCE: LONG d3 CONFIRMED, SHORT d3 CANDIDATE.** Unambiguous at the cell with 61 loss bars, marginal at
+the cell with 20.
+
+### 11ab. THREE PUBLISHED p-VALUES WERE WRONG
+
+| cell | v2 published | v3 exhaustive | direction |
+|---|---|---|---|
+| LONG d3 `Micro_Hurst > p90` | 1 of 45, p = 0.022 | **0 of 39, p = 0.0000** | STRONGER |
+| SHORT d3 `Micro_Hurst > p90` | 0 of 30, p = 0.000 | **2 of 66, p = 0.0303** | weaker |
+| LONG d4 `AT_Slope_ST > p90` | 7 of 126, p = 0.056 | **4 of 122, p = 0.0328** | STRONGER |
+
+**v2's SHORT d3 figure was a 30-candidate subsample that happened to exclude both better conditions.** And
+**`AT_Slope_ST > p90` was adopted at p = 0.056, which does not clear an uncorrected 0.05 — on the derived
+quantity it is 0.0328 and does. The decision was right and the published justification was weaker than the
+truth.**
+
+**No decision reverses and §6 does not move** — the listing is still 297 rows, 5,776 trades, PF 14.53,
+$284,974, 42 loss events, margin 33.07, all verified after patching. **`Micro_Hurst > p90` remains the
+best-supported condition in the system and the only one ever to clear at two independent cells, and at LONG d3
+it now beats every one of 39 alternatives.**
+
+**And one subtlety: LONG d3 moved WITHOUT having been a subsample.** v2's 45 was exhaustive under its own
+rarity rule; v3's 39 is exhaustive under a 20-cell-bar minimum-support rule. **Both are enumerations of
+different populations, so that figure must always be quoted with its support rule — the same class as the band
+without its `N`, arriving a fourth time.**
+
+### 11ac. THE RUN-BEFORE-SHIPPING RULE, NOW LAW
+
+Four defects were caught by executing a rule rather than re-reading its prose: **the Stage C vacuity, the
+SHORT d3 half failure, the `min_retained_loss_bars_per_half` boundary defect, and the wrong null quantity —
+the last of which corrected a number already sitting in a ratified specification.**
+
+It is now §0.5 of spec v3 and an addendum to all three non-negotiables documents. **The operative clause: a
+p-value without its quantity, its population, and whether that population was sampled or enumerated is not a
+measurement.** Plus the enumeration rule — **where the population is finite and small, enumerate it, because
+sampling 200 draws from 39 candidates cannot resolve below 1/39 and enumeration is both exact and cheaper.**
+
+### 11ad. THE FIRST FULL RUN — AND THE OVERLAP IS THE FINDING
+
+15:07 on the operator's box. 19,754 rows screened in 9.7 minutes, **8,016 survivors (40.6%)**, rejections
+`trades 9,069 / train_PF 2,206 / bucket_profit_frac 390 / buckets_present 73`, six nested arms scored.
+
+| arm | trades | WR% | PF | net | EVENTS | worstDay |
+|---|---|---|---|---|---|---|
+| 150 | 1,091 | 93.3 | 8.22 | 69,641 | 16 | -977.50 |
+| 200 | 1,959 | 93.5 | 7.17 | 100,702 | 28 | -825.10 |
+| 297 | 4,443 | 92.2 | 5.17 | 172,373 | 68 | -1,466.00 |
+| 500 | 9,966 | 91.5 | 4.76 | 341,826 | 151 | -2,529.80 |
+| 1000 | 24,182 | 89.2 | 2.90 | 543,166 | 391 | -6,020.20 |
+| 8016 | 88,860 | 84.9 | 1.62 | 865,875 | 1,431 | -8,220.80 |
+
+**280 of the incumbent's 297 SURVIVE THE SCREEN — 94.3%.** Three are rejected on `train_PF` and 14 were never
+scanned by the F0 scanner at all. **But the drawn book contains only 8 of them, against `280 x (297/8,016) =
+10.4` expected by chance.**
+
+**The screen admits the book almost entirely. A random draw of 297 from 8,016 cannot find it. The missing
+component is SELECTION — not screening, not size, not the pool.**
+
+**And re-measured on the correct pool, every arm sits inside its own random band.** The earlier "four of five
+below" reading was withdrawn — it compared against bands measured on the smaller 4,575 N=2 pool. **At n=297 the
+band is 51-61 events and the incumbent is 42**, so the corrected screen closed the gap from **2.14x to 1.33x**.
+Margin (24.4-30.2 against 33.07) and days traded (109-118 against 119) are nearly closed too.
+
+**Profit factor is the only remaining outlier: 5.87-7.75 against 14.53.**
+
+### 11ae. THREE SET-LEVEL CONSTRAINTS TESTED AS SELECTION CRITERIA — ALL NEGATIVE
+
+Per-signal ranking was already dead. **Direction balance, participation and terrain coverage are SET
+properties, not member properties, and none had ever been tested as a selection constraint.**
+
+**DIRECTION BALANCE BUYS NOTHING.** 191/106 drawn from separate strata against unconstrained draws, 5 seeds
+each: median 57 events against 59, inside spreads of 44-75 and 51-61 — **and worst day (-$1,751 against
+-$1,478) and losing weeks (2 against 1) are both WORSE balanced.** The pool is 5,630 LONG / 2,386 SHORT =
+2.36:1 and the draw reproduces it faithfully at 2.45:1. **The incumbent's 1.80:1 is a property of the 297, not
+a cause of its performance.**
+
+**PARTICIPATION IS ESSENTIALLY CLOSED.** The band is 109-118 days and the incumbent is 119 — **at the top of
+the band rather than outside it. Roughly one day of headroom at n=297.**
+
+**COVERAGE AS A CONSTRAINT IS NEGATIVE.** `Spearman(coverage, loss events) = -0.184, p = 0.663`, and it
+correlates only with days traded (+0.679) and **worst day (+0.764, p = 0.027) — more coverage, more
+participation, worse tail.** The concentration finding arriving from a fifth direction.
+
+**ONE POSITIVE, AND IT IS NOT WHAT IT LOOKED LIKE.** The incumbent separates from the pool at **p = 0.0000** on
+`trades` (31 v 19), `agg_pf` (4.49 v 3.48), `folds_plus` (5 v 4) and `worst_day_usd` (-108.75 v -78.90). **But
+it is not a short-side effect — the LONG control separates just as strongly (32 v 22, 5.69 v 3.65).** It is a
+whole-book property: **the operator selected from the upper tail on both sides, and the screen's floors sit far
+below where he actually selected.**
+
+Emitted as **arms** at `{null, 0.25, 0.50}` with book size alongside — **never as a default derived from the
+incumbent's medians**, because that figure is measured on full-sample statistics and is one step from the
+look-ahead the pre-filter had. **That is the line a future instance will cross, and the spec says so
+explicitly.**
+
+### 11af. THE SMOKE PATH, THE CANARY, AND TWO DEFECTS IN THE TESTING APPARATUS ITSELF
+
+**A smoke run that skips the newest and least-proven stage is not a smoke test.** The SELECT leg was added —
+and **the first attempt aborted on its own capped input.** Smoke's S3 emits a 1-row F0 scan at `s3_limit=8`,
+giving 0 survivors, `nested_arms` returning `[0]`, and the `book_size` guard firing correctly **on an
+impossible request smoke had handed it.**
+
+**The four most valuable checks need no survivor and now run first:** the PREREG checksum (pure masks), the
+gate layer (**the incumbent's real ungated cells, not capped**), the BOOK-50 canary (a separate book), and the
+deploy manifest (pure file checks). **The screen leg runs last and degrades with a stated reason rather than
+aborting, and the skipped non-empty assertion announces itself.**
+
+**Every cap prints as a cap** — and it matters: the capped null makes SHORT d3 read `CONFIRMED` when the real
+verdict is `CANDIDATE` at p = 0.0303, **with the warning printed immediately above it.**
+
+**And the change is smoke-only, proven by AST diff: `_smoke_select` is the only function changed, added `[]`
+and removed `[]`, `select_stage.py` unchanged, and both acceptance figures held to the cent.** `nested_arms`,
+the `book_size` guard, `run_select` and every gate-layer function are byte-identical — the arms are derived in
+the caller and passed in, **and there is no `if smoke:` inside any shared function.**
+
+**THE CANARY HAD BEEN SILENTLY INERT FOR WEEKS.** `master.py` L1533 hardcoded `r['trades'] == 2698 and
+abs(r['net'] - 92347) < 1` — figures from an engine configuration that no longer exists. BOOK-50 now scores
+3,101 and $97,675, so the condition was simply false and the assertion did not print. **A check that fails by
+saying nothing is worse than no check at all.** Replaced with `engine/canary_reference.json` and proven in
+three states: **reference matches -> `ENGINE INTACT`; reference stale -> a loud mismatch naming both figures
+and the delta; reference absent -> "THE PER-SESSION ENGINE CHECK DID NOT RUN. This is not a pass."**
+
+**AND THE SMOKE TREE MUST BE DELETED BETWEEN RUNS.** A second smoke into the same `--out` **resumes from the
+first run's markers and does not execute the stages again.** Measured on the same tree: **S3 ran 566.31s cold
+and 0.49s resumed; S3B, S5C, S5D and S8B all dropped to 0.01s.** Every stage still printed `ok` and it still
+reached `MASTER COMPLETE` — **it just did not run most of them.** The tell is ~3 minutes where a cold smoke is
+~14. **The cold-run rule applied to smoke: a stage that always resumes has never been tested.** Recorded in
+`QUICK_START.md`, which previously stated the smoke tree "needs no cleanup."
+
 ### 14. STATUS
 
 The Whole DOT is specified and the research is closed. What remains is engineering: S8 cannot yet score

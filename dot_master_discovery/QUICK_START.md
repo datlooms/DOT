@@ -20,7 +20,26 @@ because a stage that does not execute is a stage that can still crash at hour ni
 **IF IT REACHES `MASTER COMPLETE` WITH EXIT 0, THE FULL RUN WILL COMPLETE. IF IT DOES NOT, YOU HAVE
 LOST TWO MINUTES INSTEAD OF ELEVEN HOURS.**
 
-Note the different `--out`. The smoke tree cannot contaminate the real one and needs no cleanup.
+Note the different `--out`. The smoke tree cannot contaminate the real one.
+
+### DELETE THE SMOKE TREE BEFORE EVERY RE-RUN
+
+**A SECOND SMOKE RUN INTO THE SAME `--out` RESUMES FROM THE FIRST ONE'S MARKERS AND DOES NOT
+EXECUTE THE STAGES AGAIN.**
+
+    Remove-Item -Recurse -Force discovery\smoke
+    python master.py --data data --workers 14 --out discovery\smoke --smoke
+
+Measured, on the same tree: **S3 ran 566.31s cold and 0.49s resumed. S3B, S5C, S5D and S8B all
+dropped to 0.01s.** The run still prints `ok` on every stage and still reaches `MASTER COMPLETE` —
+**it just did not run most of them.** A total of ~3 minutes where a cold smoke is ~14 is the tell.
+
+**THAT IS THE COLD-RUN RULE APPLIED TO SMOKE: A STAGE THAT ALWAYS RESUMES HAS NEVER BEEN TESTED.**
+The point of smoke is to execute every stage before the long run, so a resumed smoke proves nothing
+about the stages it skipped — and if a defect was introduced in one of them, a resumed smoke passes
+and the full run still dies.
+
+**DELETE IT EVERY TIME.** The tree is disposable and the whole reason it exists is to be re-run.
 
 ### Why this exists
 

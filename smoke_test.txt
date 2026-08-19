@@ -80,17 +80,336 @@ Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
     21:00 overnight      283 eps  up  139 dn  144  med    33.9pt  max    291.5pt  top10%    5
     22:00 overnight      330 eps  up  156 dn  174  med    28.0pt  max    138.0pt  top10%    1
     23:00 overnight      348 eps  up  182 dn  166  med    24.8pt  max    122.0pt  top10%    0
-  S2B runtime 1.1s for one pass over 177,251 bars x 4 grid cells — single-pass and cheap, so it is NOT chunked and does not consume --workers.
+  S2B runtime 1.5s for one pass over 177,251 bars x 4 grid cells — single-pass and cheap, so it is NOT chunked and does not consume --workers.
 
 [S3] FAMILY DISCOVERY (long-pole; delegates to ratified orchestrator)
-  S3 scanner-sha coverage: 13 families in registry, 13 checked, 0 UNCHECKED | 0 moved
-  S3 resumed from marker: 12 per-family result CSVs present on disk AND every producing scanner still matches the sha recorded in its family marker - skipping the scan.
+  S3 scanner-sha coverage: 13 families in registry, 0 checked, 13 UNCHECKED (F0 (no marker at results_F0_triple_convergence_and_d2ddir.done), F1 (no marker at results_F1_sequential_temporal.done), F2 (no marker at results_F2_state_transition.done), F3 (no marker at results_F3_conditional_interaction.done), F4 (no marker at results_F4_divergence_nonconfirm.done), F5 (no marker at results_F5_persistence_autocorr.done), F6 (no marker at results_F6_threshold_crossing.done), F7 (no marker at results_F7_mean_reversion.done), F8 (no marker at results_F8_cross_variable_structure.done), F9 (no marker at results_F9_session_temporal.done), F11 (no marker at results_F11_rolling_leadlag.done), F12 (no marker at results_F12_concurrence_profiler.done), F13 (no marker at results_F13_single_variable_extremes.done)) | 0 moved
+      AN UNCHECKED FAMILY IS NOT A PASSING FAMILY. A DETECTOR THAT CANNOT SAY WHAT IT DID NOT EXAMINE IS NOT A DETECTOR - this line exists because F12 was skipped silently and the gate reported every scanner current.
+  worker frame written to _s3_frame_46586cbb1671.csv so each process loads it independently
+  (the name carries input_sha and the file is REWRITTEN every S3 entry, so a cache from a different
+   dataset can never be read; it is deleted when S3 completes)
+  delegating to discovery_orchestrator.orchestrate(scope="full", workers=14) — F1–F11 + F0/F13 ingest.
+  (this is the 1–2 day long pole. Per family: results land in results/ and are written ATOMICALLY with a
+   .done marker carrying the row count and CSV sha256. A restart re-reads any complete family from disk
+   and re-scans only the incomplete ones, so the worst case loss is ONE family, not the whole stage.)
+equiDOT — discovery orchestrator | scope=full | workers=14 | target lot 1.0
+  using the INGESTED frame from S0: 177,251 rows x 172 cols (2026.01.19 15:49 -> 2026.07.21 17:09)
+  FAMILY COVERAGE — 14 families: 13 queued, 0 ingested, 1 fused, 0 MISSING
+    F0   QUEUED    chunked onto the S3 queue
+    F1   QUEUED    chunked onto the S3 queue
+    F2   QUEUED    chunked onto the S3 queue
+    F3   QUEUED    chunked onto the S3 queue
+    F4   QUEUED    chunked onto the S3 queue
+    F5   QUEUED    chunked onto the S3 queue
+    F6   QUEUED    chunked onto the S3 queue
+    F7   QUEUED    chunked onto the S3 queue
+    F8   QUEUED    chunked onto the S3 queue
+    F9   QUEUED    chunked onto the S3 queue
+    F10  FUSED     concurrence lens fused into F0; covered when F0 runs
+    F11  QUEUED    chunked onto the S3 queue
+    F12  QUEUED    diagnostic stage scheduled this run
+    F13  QUEUED    diagnostic stage scheduled this run
+  11 of 11 families to run this pass
+Candidate partition OK: 90 FEAT_ (89 baseline + VWAP_Sigma_ATR derived) + 27 equality + 54 excluded + Time = 171 (no overlap, no gap)
+
+FEAT_ conditions: 90 features x (hi,lo) = 180
+Equality values enumerated DATA-DRIVEN from the post-warmup scannable eligible baseline (neutral 0 retained where live):
+  D2D_Signal: [-1, 0, 1]
+  D2D_DirStep: [-1, 1]
+  OBVf_Signal: [-1, 1]  [warmup-only, excluded: [0]]
+  OBVf_Trend_Dir: [-1, 1]
+  Harmonic_OBVf_Concordance: [0, 1]
+  Harmonic_D2D_Concordance: [0, 1]
+  ADX_Rising: [0, 1]
+  Sqz_State: [-1, 1]  [warmup-only, excluded: [0]]
+  RangeOsc_State: [-2, -1, 1, 2]  [warmup-only, excluded: [0]]
+  PoC_Side: [-1, 0, 1]
+  ST_Flip_Event: [-1, 0, 1]
+  Trend_Concordance: [0, 1]
+  Trend_Conflict: [0, 1]
+  AT_Regime_ST: [0, 1]
+  AT_Regime_LT: [0, 1]
+  VWAP_Side: [-1, 0, 1]
+  VAH_Side: [-1, 0, 1]
+  VAL_Side: [-1, 0, 1]
+  PrevDay_High_Side: [-1, 0, 1]
+  PrevDay_Low_Side: [-1, 0, 1]
+  PrevDay_Close_Side: [-1, 0, 1]
+  DailyOpen_Side: [-1, 0, 1]
+  OR_High_Side: [-1, 0, 1]
+  OR_Low_Side: [-1, 0, 1]
+  Session_High_Side: [-1, 0]
+  Session_Low_Side: [0, 1]
+  WeeklyOpen_Side: [-1, 0, 1]
+
+Resolved conditions: 180 FEAT_ (hi/lo) + 69 equality = 249 scan conditions
+  (3 warmup-only equality value(s) excluded) -> MATCHES S.10 (90x2 + 69 = 249)
+Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
+Scorable pool: 239 of 249 conditions with >= 30 post-warmup activations (rest fire too rarely to reach the floor)
+[F1] full scope = 24^2 x 2 lags x 2 dir = 2,304 candidates
+Transition pool: 6 states -> 28 transition conditions (typed with >= 30 occurrences + generic any-change)
+Conditioning gates: 6 states -> 12 state==value gates
+  CHUNK PLAN: 14 chunks across 11 families (axis split, 1 chunks max per family, independent of worker count):
+    F1   axis '('cond_labels', 'lags')' = 8 items -> 4 chunks | unit size 2 | geometry SMOKE
+    F0   axis '__combos__' = 8 items -> 1 chunks | unit size 8 | geometry SMOKE
+    F3   axis 'base_pool' = 8 items -> 1 chunks | unit size 8 | geometry SMOKE
+    F9   axis 'base_labels' = 8 items -> 1 chunks | unit size 8 | geometry SMOKE
+    F11  axis 'pairs' = 3 items -> 1 chunks | unit size 3 | geometry SMOKE
+    F4   axis 'price_feats' = 6 items -> 1 chunks | unit size 6 | geometry SMOKE
+    F2   axis 'cond_labels' = 8 items -> 1 chunks | unit size 8 | geometry SMOKE
+    F7   axis 'stretch_feats' = 8 items -> 1 chunks | unit size 8 | geometry SMOKE
+    F5   axis 'cond_labels' = 8 items -> 1 chunks | unit size 8 | geometry SMOKE
+    F8   axis 'pairs' = 3 items -> 1 chunks | unit size 3 | geometry SMOKE
+    F6   axis 'cross_feats' = 5 items -> 1 chunks | unit size 5 | geometry SMOKE
+  running 14 pending chunks across 14 worker processes from ONE queue — a worker that finishes takes the next chunk of ANY family, so no thread idles while work remains and the last family gets every worker
+  submission order is longest-family-first (scheduling only; collation is by axis order, so output cannot depend on it)
+
+Search: 6 price x 2 flow x 2 divergence-configs x 2 d2d-mode = 48 candidatesCandidate partition OK: 90 FEAT_ (89 baseline + VWAP_Sigma_ATR derived) + 27 equality + 54 excluded + Time = 171 (no overlap, no gap)
+
+Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
+
+FEAT_ conditions: 90 features x (hi,lo) = 180
+Equality values enumerated DATA-DRIVEN from the post-warmup scannable eligible baseline (neutral 0 retained where live):
+
+Search: 3 pairs x 2 windows x 2 relations x 2 dir = 24 candidates | leadlag k=5
+  D2D_Signal: [-1, 0, 1]
+
+Search: 8 stretched feats x 2 fade-configs x 2 d2d-mode = 32 candidates
+Scorable pool: 239 of 249 conditions with >= 30 post-warmup activations (rest fire too rarely to reach the floor)
+[F1] full scope = 24^2 x 2 lags x 2 dir = 2,304 candidates
+  D2D_DirStep: [-1, 1]
+
+Search: 8 persistence conditions x 2 dir = 16 candidates | forward-bias target N=10 (discovery-only)
+  OBVf_Signal: [-1, 1]  [warmup-only, excluded: [0]]
+  OBVf_Trend_Dir: [-1, 1]
+Conditioning gates: 6 states -> 12 state==value gates
+
+Search: 5 relations x 2 dir = 10 candidates
+Search: 5 feats x 2 cross-dir = 10 candidates | ROC filter=none  Harmonic_OBVf_Concordance: [0, 1]
+
+
+Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
+  Harmonic_D2D_Concordance: [0, 1]
+  ADX_Rising: [0, 1]
+  Sqz_State: [-1, 1]  [warmup-only, excluded: [0]]
+Scorable pool: 239 of 249 conditions with >= 30 post-warmup activations (rest fire too rarely to reach the floor)
+[F1] full scope = 24^2 x 2 lags x 2 dir = 2,304 candidates
+Transition pool: 6 states -> 28 transition conditions (typed with >= 30 occurrences + generic any-change)
+Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
+  RangeOsc_State: [-2, -1, 1, 2]  [warmup-only, excluded: [0]]
+  PoC_Side: [-1, 0, 1]
+
+Search: 8 transitions x 2 dir = 16 candidates
+Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
+Scorable pool: 239 of 249 conditions with >= 30 post-warmup activations (rest fire too rarely to reach the floor)
+[F1] full scope = 24^2 x 2 lags x 2 dir = 2,304 candidates
+  ST_Flip_Event: [-1, 0, 1]
+  Trend_Concordance: [0, 1]
+  Trend_Conflict: [0, 1]
+Scorable pool: 239 of 249 conditions with >= 30 post-warmup activations (rest fire too rarely to reach the floor)
+[F1] full scope = 24^2 x 2 lags x 2 dir = 2,304 candidates
+  AT_Regime_ST: [0, 1]
+  AT_Regime_LT: [0, 1]
+  VWAP_Side: [-1, 0, 1]
+  VAH_Side: [-1, 0, 1]
+  VAL_Side: [-1, 0, 1]
+  PrevDay_High_Side: [-1, 0, 1]
+  PrevDay_Low_Side: [-1, 0, 1]
+  PrevDay_Close_Side: [-1, 0, 1]
+  DailyOpen_Side: [-1, 0, 1]
+  OR_High_Side: [-1, 0, 1]
+  OR_Low_Side: [-1, 0, 1]
+  Session_High_Side: [-1, 0]
+  Session_Low_Side: [0, 1]
+  WeeklyOpen_Side: [-1, 0, 1]
+
+Resolved conditions: 180 FEAT_ (hi/lo) + 69 equality = 249 scan conditions
+  (3 warmup-only equality value(s) excluded) -> MATCHES S.10 (90x2 + 69 = 249)
+
+============================================================
+COMBINATORIAL SEARCH (triple convergence + D2D gate)
+============================================================
+Features: 117 | C(117,3) = 8 feature-triples
+Total directional variants (condition products x 2 dirs): 128
+
+Search complete in 0.5s
+Tested: 128 | Simulated: 34 | Passed PF>=2.0: 1
+Raw survivors saved: dots_results\raw_survivors.csv
+  [1/14   7.1%] F0 c0000 0 survivors in 0.7s | elapsed 0:00:29 | ETA forming (10 families unmeasured) | 2.0 chunks/min
+
+Search: 8 base x 12 gates x 2 dir = 192 candidates
+  [2/14  14.3%] F1 c0002 41 survivors in 19.4s | elapsed 0:00:47 | ETA >= 0:00:04 (9 unmeasured: F11,F2,F3,F4,F5,F6,F7,F8,F9) | 2.5 chunks/min
+  [3/14  21.4%] F1 c0001 0 survivors in 19.7s | elapsed 0:00:47 | ETA >= 0:00:02 (9 unmeasured: F11,F2,F3,F4,F5,F6,F7,F8,F9) | 3.8 chunks/min
+  [4/14  28.6%] F1 c0000 43 survivors in 20.1s | elapsed 0:00:48 | ETA >= 0:00:01 (9 unmeasured: F11,F2,F3,F4,F5,F6,F7,F8,F9) | 5.0 chunks/min
+  [5/14  35.7%] F1 c0003 0 survivors in 19.7s | elapsed 0:00:48 | ETA forming (9 families unmeasured) | 6.2 chunks/min
+Scored 10 candidates with >= 30 completions.
+  [6/14  42.9%] F6 c0000 10 survivors in 20.4s | elapsed 0:00:48 | ETA forming (8 families unmeasured) | 7.4 chunks/min
+Scored 10 candidates with >= 30 completions.
+  [7/14  50.0%] F8 c0000 10 survivors in 20.9s | elapsed 0:00:49 | ETA forming (7 families unmeasured) | 8.6 chunks/min
+
+Search: 8 base x 35 session/weekday gates x 2 dir = 560 candidates | D2D inherited = confirm
+Scored 16 candidates with >= 30 completions.
+  [8/14  57.1%] F2 c0000 15 survivors in 29.5s | elapsed 0:00:57 | ETA forming (6 families unmeasured) | 8.3 chunks/min
+Scored 16 candidates with >= 30 completions.
+  [9/14  64.3%] F5 c0000 16 survivors in 31.3s | elapsed 0:00:59 | ETA forming (5 families unmeasured) | 9.1 chunks/min
+    ... S3 chunk queue (14 chunks) still running (1.0 min elapsed)
+Scored 24 candidates with >= 30 completions.
+  [10/14  71.4%] F11 c0000 20 survivors in 40.4s | elapsed 0:01:08 | ETA forming (4 families unmeasured) | 8.8 chunks/min
+Scored 30 candidates with >= 30 completions.
+  [11/14  78.6%] F7 c0000 26 survivors in 49.0s | elapsed 0:01:17 | ETA forming (3 families unmeasured) | 8.6 chunks/min
+Scored 40 candidates with >= 30 completions.
+  [12/14  85.7%] F4 c0000 40 survivors in 66.5s | elapsed 0:01:34 | ETA forming (2 families unmeasured) | 7.6 chunks/min
+    ... S3 chunk queue (14 chunks) still running (2.0 min elapsed)
+    ... S3 chunk queue (14 chunks) still running (3.0 min elapsed)
+Scored 218 session-gated candidates with >= 30 completions.
+  [13/14  92.9%] F9 c0000 68 survivors in 161.4s | elapsed 0:03:09 | ETA forming (1 families unmeasured) | 4.1 chunks/min
+Scored 192 gated candidates with >= 30 completions.
+  [14/14 100.0%] F3 c0000 96 survivors in 178.8s | elapsed 0:03:26 | ETA 0:00:00 | 4.1 chunks/min
+  PER-FAMILY CHUNK COMPLETENESS (before collation is attempted):
+    F1   4/4 complete
+    F0   1/1 complete
+    F3   1/1 complete
+    F9   1/1 complete
+    F11  1/1 complete
+    F4   1/1 complete
+    F2   1/1 complete
+    F7   1/1 complete
+    F5   1/1 complete
+    F8   1/1 complete
+    F6   1/1 complete
+  [F1] collated 4 chunks -> 84 rows | candidate invariant 384 == 384
+
+============================================================
+DEDUPLICATION
+============================================================
+Before dedup: 1 | After dedup: 1
+Saved: dots_results\deduped_survivors.csv
+  F0 RE-SCORE PARITY: serial reference on a bounded 1-survivor prefix vs the same prefix of the parallel result | IDENTICAL: True | dedup ran SERIALLY in both, only the re-score parallelised | full parallel pass computed ONCE and reused | sample is STRATIFIED across the index range so every chunk boundary is covered at any worker count | this reference is ~100.0% of a serial pass and is paid on the FIRST run per dataset+code only, zero thereafter
+  [F0] 1 raw survivors across 1 chunks -> global 80% overlap dedup at COLLATION (single pass, ascending chunk order) -> 1 pool rows
+  [F0] collated 1 chunks -> 1 rows | candidate invariant 128 == 128
+  [F3] collated 1 chunks -> 96 rows | candidate invariant n/a
+  [F9] collated 1 chunks -> 68 rows | candidate invariant n/a
+  [F11] collated 1 chunks -> 20 rows | candidate invariant n/a
+  [F4] collated 1 chunks -> 40 rows | candidate invariant n/a
+  [F2] collated 1 chunks -> 15 rows | candidate invariant n/a
+  [F7] collated 1 chunks -> 26 rows | candidate invariant n/a
+  [F5] collated 1 chunks -> 16 rows | candidate invariant n/a
+  [F8] collated 1 chunks -> 10 rows | candidate invariant n/a
+  [F6] collated 1 chunks -> 10 rows | candidate invariant n/a
+  [F0] chunked path already collated F0 into the pool — SKIPPING ingest_f0(). collate_f0 writes the same filename F0_CSV that ingest_f0 reads, so running both double-counted F0 (19,757 -> 39,514) and inflated the trial count that spec H.1 uses for the empirical null and Benjamini-Yekutieli, making the multiple-testing bar harder than the search warranted.
+  POOL NOTE -> discovery_master.POOL_NOTE.txt
+    POOL PROPERTY THE SELECTION LAYER MUST KNOW — folds_plus and min_fold_pf on EVERY row of this pool come from sacred wf.FOLDS, which is the CALENDAR LI...
+
+Collated 386 candidates -> discovery\smoke\results\discovery_master.csv (sorted: folds_plus, min_fold_pf, worst_day_usd, agg_pf, WR; no rows dropped)
+Per-family counts: {'F0': 1, 'F1': 84, 'F11': 20, 'F2': 15, 'F3': 96, 'F4': 40, 'F5': 16, 'F6': 10, 'F7': 26, 'F8': 10, 'F9': 68}
+  DIAGNOSTIC FAMILIES (F12, F13) — separate stages: they emit measurement artifacts, not
+  14-column pool rows, so they cannot collate into discovery_master.csv. Both run on the
+  same single command with the operator --workers value and their own internal parallelism.
+  [F13] running (no provenance stamp); native _f13_shards/*.done checkpointing preserved as-is
+  [F13] scanner paths bound in-parent AND at interpreter startup for every spawned worker (['single_variable_extremes']). F13 hardcodes RESULTS_DIR/OUT_CSV/SHARD_DIR at import against the LEGACY discovery_results/; a parent-side attribute write does not survive spawn, and F13 starts its own Pool, so its workers wrote shards to a directory outside --out that did not exist. Scanners are not editable, so the startup hook is the transport.
+Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
+=== F13 SINGLE-VARIABLE EXTREMES ===
+117 variables | 30 shards (4 vars/shard) | workers 12 | resume 0/30 done
+  30/30 shards | elapsed 0:02:46 | ETA 0:00:00
+=== DONE | 5160 surfaced (>=90% WR or >=22 firings) | 0 candidates | 0 STARS | elapsed 0:02:47 ===
+  discovery\smoke\results\results_F13_single_variable_extremes.csv
+  NEGATIVE: no candidate-tier single-variable signal. Convergence is necessary.
+  [F13] COMPLETE — artifacts: results_F13_single_variable_extremes.csv | 30 shard markers
+    F13 MARKER written BY THE EXECUTION PATH: scanner_sha 7d8cba59f38b against output this run produced.
+  [F12] running (no provenance stamp); concurrence CSVs into the run tree
+Warmup-trim: Dots_InitBars floor=6900, ring-saturation bar=5204 (2026.01.23 15:23); chosen=6900
+  First scannable Time: 2026.01.26 20:54
+Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
+
+=== F12 CONCURRENCE PROFILER | FULL | start 2026-08-19 19:11:13 ===
+PRIMARY pool: 24 long-aligned + 24 short-aligned of 249 conditions (no triplet, no signal list, no survivor filter)
+Outcome-map grid (stage 4, ratified): k 1..2 x dur [1, 2] x 2 dir x 3 d2d = 24 configs | workers 8
+Stage order: 1 depth | 2 events | 3 entry_order | 4 outcome_map | 6 regimes | 5 composition (regime-aware) | 5b category_depth | 7 d2d_flips | 8 null_baseline
+
+[REGIMES] descriptive n_clusters by silhouette = 2 (sil 0.1993); gates nothing
+[STAGE 6] CAUSAL labels: burn-in fold 'Jan(19-31)' (5636 bars) fits mu/sigma + centroids; n=2 (sil 0.1991); forward-only labels on 164715 bars; burn-in fold excluded from scoring
+[STAGE 1] 170351 rows -> discovery\smoke\results\concurrence_depth_bars.csv  (0.8s)
+[STAGE 1] depth_long p5/25/50/75/90/95/99 = [2, 3, 5, 6, 8, 9, 12] | depth_short = [1, 3, 5, 7, 8, 9, 11]
+[STAGE 2] 8909 events (floors [2]) -> discovery\smoke\results\concurrence_events.csv  (0.5s)
+[STAGE 3] 258 rows -> discovery\smoke\results\concurrence_entry_order.csv  (1.3s)
+[STAGE 4] outcome map: 24 configs (k 1..2 x dur 1..2 x 2 dir x 3 d2d) across 8 chunks
+chunk 3/8 done — 3 configs, 0.1 min
+chunk 6/8 done — 3 configs, 0.1 min
+chunk 1/8 done — 3 configs, 0.1 min
+chunk 7/8 done — 3 configs, 0.1 min
+chunk 5/8 done — 3 configs, 0.1 min
+chunk 8/8 done — 3 configs, 0.1 min
+chunk 4/8 done — 3 configs, 0.1 min
+chunk 2/8 done — 3 configs, 0.1 min
+[STAGE 4] 100.0% | 24/24 | elapsed 0:00:53 | ETA 0:00:00 | 0.45/s
+[STAGE 4] 24 rows -> discovery\smoke\results\concurrence_outcome_map.csv  (0:00:53)
+[STAGE 6] 16 configs across 8 chunks
+chunk 4/8 done — 2 configs, 0.0 min
+chunk 7/8 done — 2 configs, 0.0 min
+chunk 8/8 done — 2 configs, 0.0 min
+chunk 1/8 done — 2 configs, 0.0 min
+chunk 5/8 done — 2 configs, 0.0 min
+chunk 3/8 done — 2 configs, 0.0 min
+chunk 6/8 done — 2 configs, 0.0 min
+chunk 2/8 done — 2 configs, 0.0 min
+[STAGE 6] 100.0% | 16/16 | elapsed 0:00:53 | ETA 0:00:00 | 0.30/s
+[STAGE 6] 52 rows (16 causal regime_outcome) -> discovery\smoke\results\concurrence_regimes.csv  (53.7s)
+[STAGE 5] 0 sweep rows + 6 composition rows (3 regimes incl. global -1) -> discovery\smoke\results\concurrence_composition.csv  (0.0s)
+[STAGE 5b] causal membership from burn-in fold 'Jan(19-31)' | 0 (direction x regime x cluster) categories | grid 0 configs
+[STAGE 5b] 0 scored rows + 4 cell_status -> discovery\smoke\results\concurrence_category_depth.csv  (0:00:00)
+[STAGE 7] 4321 flips + 0 candidate counter-D2D bars -> discovery\smoke\results\concurrence_d2d_flips.csv (0.5s)
+[STAGE 8] circular-shift null: 3 permutations (min shift 5000) x 2 k x 1 dur x 2 dir = 12 configs
+[STAGE 8] 12 configs across 6 chunks
+chunk 3/6 done — 2 configs, 0.0 min
+chunk 5/6 done — 2 configs, 0.0 min
+chunk 4/6 done — 2 configs, 0.0 min
+chunk 1/6 done — 2 configs, 0.0 min
+chunk 2/6 done — 2 configs, 0.0 min
+chunk 6/6 done — 2 configs, 0.0 min
+[STAGE 8] 100.0% | 12/12 | elapsed 0:00:53 | ETA 0:00:00 | 0.23/s
+[STAGE 8] 4 cells (12 permutation scores) -> discovery\smoke\results\concurrence_null_baseline.csv  (0:00:53)
+[SECONDARY] survivor-only pool: 2 long + 1 short conditions (primary: 24 + 24) | max reachable depth 2 -> ceiling does not bind: full primary k grid used
+[STAGE 4] outcome map: 24 configs (k 1..2 x dur 1..2 x 2 dir x 3 d2d) across 8 chunks
+chunk 6/8 done — 3 configs, 0.0 min
+chunk 8/8 done — 3 configs, 0.0 min
+chunk 2/8 done — 3 configs, 0.1 min
+chunk 3/8 done — 3 configs, 0.1 min
+chunk 4/8 done — 3 configs, 0.1 min
+chunk 7/8 done — 3 configs, 0.1 min
+chunk 1/8 done — 3 configs, 0.1 min
+chunk 5/8 done — 3 configs, 0.1 min
+[STAGE 4] 100.0% | 24/24 | elapsed 0:00:53 | ETA 0:00:00 | 0.45/s
+[STAGE 4] 24 rows -> discovery\smoke\results\concurrence_outcome_map_secondary.csv  (0:00:53)
+
+=== DONE | total elapsed 0:04:07 ===
+  discovery\smoke\results\concurrence_depth_bars.csv
+  discovery\smoke\results\concurrence_events.csv
+  discovery\smoke\results\concurrence_entry_order.csv
+  discovery\smoke\results\concurrence_outcome_map.csv
+  discovery\smoke\results\concurrence_composition.csv
+  discovery\smoke\results\concurrence_category_depth.csv
+  discovery\smoke\results\concurrence_regimes.csv
+  discovery\smoke\results\concurrence_d2d_flips.csv
+  discovery\smoke\results\concurrence_null_baseline.csv
+    F12 MARKER written BY THE EXECUTION PATH: scanner_sha 4d782df381e0 against output this run produced.
+  [F12] produced 10 concurrence CSVs this run: concurrence_category_depth.csv, concurrence_composition.csv, concurrence_d2d_flips.csv, concurrence_depth_bars.csv, concurrence_entry_order.csv, concurrence_events.csv, concurrence_null_baseline.csv, concurrence_outcome_map.csv, concurrence_outcome_map_secondary.csv, concurrence_regimes.csv
+  [F12] provenance stamped on THOSE FILES ONLY — never by pattern match on whatever happens to be on disk, which would launder a stale artifact from another dataset
+  DIAGNOSTIC OUTPUT VERIFICATION — after the stage ran, not before:
+    F12  OK       concurrence_depth_bars.csv — current
+    F13  OK       results_F13_single_variable_extremes.csv — current
   regime_labels.csv: 170351 rows | n_causal=2 n_desc=2 | 5636 burn-in bars unlabelled
+  worker frame _s3_frame_46586cbb1671.csv removed on S3 completion
 
 [S3B] PER-FAMILY EVIDENCE REVIEW + D2D GATE MEASUREMENT
   oracle dots_thresholds.py sha256 : 518862bf19fb
   dataset: 177,251 rows | 2026.01.19 15:49 → 2026.07.21 17:09
-  S3B already complete for this input (checkpoint) — resuming past it.
+  [1/4  25.0%] S3B D2D variants | elapsed 0:00:00 | ETA 0:00:00 | 59990.0/min | baseline_gate_on
+  S3B D2D variants complete: 1/4  in 0:00:00
+  S3B D2D variants complete: 2/4  in 0:00:00
+  S3B D2D variants complete: 3/4  in 0:00:01
+  [4/4 100.0%] S3B D2D variants | elapsed 0:00:01 | ETA 0:00:00 | 143.5/min | short_free_long_blocked
+  S3B D2D variants complete: 4/4  in 0:00:02
+  families reviewed: 14 | SELECTABLE 2 | INSUFFICIENT-EVIDENCE 10
 
 [S4] SCHEMA UNIFY
   schema-unify: orchestrator collated 386 rows → results/discovery_master.csv
@@ -112,7 +431,66 @@ Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
 
 [S5D] CATALOGUE - fourteen per-family books, every VALID signal
   oracle dots_thresholds.py sha256 : 518862bf19fb
-  S5D already complete for this input_sha - 3 catalogues on disk, RESUMING PAST IT. The per-candidate scoring loop is the longest single-threaded stage in the pipeline (F1 alone was 1:39:20 on the real pool); repeating it on every restart is a cost the operator should never pay twice.
+  ITEM 5 IN-RUN ASSERTION: 4/4 market-object modules byte-verified, episode K/E are per-bar arrays from mechanism D, rolling-2500, day-refreshed, per-bar arrays
+  TERRAIN cell W=15 K=p85 E=p75 | MARKET | raw UP 3816 DOWN 3674 | REACHABLE UP 1143 (29.95%) DOWN 1155 (31.44%)
+  regime axis: joined 170351 labelled bars from regime_labels.csv (lab_causal ONLY - lab_desc is full-sample and must never characterise a tradeable signal)
+Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
+  [1/1 100.0%] S5D F2 per-candidate scoring (14 workers) | elapsed 0:00:14 | ETA 0:00:00 | 4.1/min | 1 scored
+  S5D F2 per-candidate scoring (14 workers) complete: 1/1  in 0:00:14
+  S5D F2: ran via pool(14) - 1 candidates
+  [1/40   2.5%] S5D F2 null draw (14 workers) | elapsed 0:00:26 | ETA 0:17:24 | 2.2/min
+  [40/40 100.0%] S5D F2 null draw (14 workers) | elapsed 0:00:27 | ETA 0:00:00 | 86.1/min
+  S5D F2 null draw (14 workers) complete: 40/40  in 0:00:28
+  S5D F2 null draw: ran via pool(14) - 40 draws
+    F2   matched null: requested K=40, IN-BAND 40 (100.0% matched, 287 rejected out-of-band, targets 3244..3244 fires, tol +/-35%), direction LONG-share 1.00, VALID-passing 28, rate 0.7000 | null_too_small -> Appendix A columns BLANK
+Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
+Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
+  [1/2  50.0%] S5D F4 per-candidate scoring (14 workers) | elapsed 0:00:20 | ETA 0:00:20 | 3.0/min | 1 scored
+  [2/2 100.0%] S5D F4 per-candidate scoring (14 workers) | elapsed 0:00:20 | ETA 0:00:00 | 5.9/min | 2 scored
+  S5D F4 per-candidate scoring (14 workers) complete: 2/2  in 0:00:20
+  S5D F4: ran via pool(14) - 2 candidates
+  [1/40   2.5%] S5D F4 null draw (14 workers) | elapsed 0:00:27 | ETA 0:17:51 | 2.2/min
+  [40/40 100.0%] S5D F4 null draw (14 workers) | elapsed 0:00:28 | ETA 0:00:00 | 83.5/min
+  S5D F4 null draw (14 workers) complete: 40/40  in 0:00:28
+  S5D F4 null draw: ran via pool(14) - 40 draws
+    F4   matched null: requested K=40, IN-BAND 40 (100.0% matched, 347 rejected out-of-band, targets 2760..2760 fires, tol +/-35%), direction LONG-share 0.00, VALID-passing 28, rate 0.7000 | null_too_small -> Appendix A columns BLANK
+Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
+Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
+Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
+Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
+Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
+Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
+Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
+Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
+Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
+  [1/9  11.1%] S5D F9 per-candidate scoring (14 workers) | elapsed 0:00:25 | ETA 0:03:27 | 2.3/min | 1 scored
+  [9/9 100.0%] S5D F9 per-candidate scoring (14 workers) | elapsed 0:00:26 | ETA 0:00:00 | 20.5/min | 9 scored
+  S5D F9 per-candidate scoring (14 workers) complete: 9/9  in 0:00:26
+  S5D F9: ran via pool(14) - 9 candidates
+  [1/39   2.6%] S5D F9 null draw (14 workers) | elapsed 0:00:28 | ETA 0:17:50 | 2.1/min
+  [39/39 100.0%] S5D F9 null draw (14 workers) | elapsed 0:00:29 | ETA 0:00:00 | 79.6/min
+  S5D F9 null draw (14 workers) complete: 39/39  in 0:00:29
+  S5D F9 null draw: ran via pool(14) - 39 draws
+    F9   matched null: requested K=40, IN-BAND 39 (97.5% matched, 665 rejected out-of-band, targets 309..1431 fires, tol +/-35%), direction LONG-share 0.56, VALID-passing 20, rate 0.5128 | null_too_small -> Appendix A columns BLANK
+  CATALOGUE ROW COUNT PER FAMILY:
+    F2         1 rows | {'VALID': 1}
+    F4         2 rows | {'UNEVALUABLE': 2}
+    F9         9 rows | {'VALID': 9}
+  prefilter touch: 386 pre-filter rows -> 207 DISTINCT definitions (deduped BEFORE any mask is built; the loop shrinks by 1.86x on its own)
+  [1/207   0.5%] S5D prefilter touch (serial) | elapsed 0:00:00 | ETA 0:00:01 | 10901.4/min
+  [207/207 100.0%] S5D prefilter touch (serial) | elapsed 0:00:01 | ETA 0:00:00 | 8344.1/min
+  S5D prefilter touch (serial) complete: 207/207  in 0:00:01
+  prefilter touch: 207 definitions with at least one firing bar, mapped over 7490 episodes
+  UNCLAIMED REACHABLE: 2282 episodes (UP 1133 / DOWN 1149)
+  cohort_scored.csv: 9 cohorts (1 marked insufficient, <10 trades, retained)
+  [1/10  10.0%] S5D dilution curve (agg_pf) | elapsed 0:00:00 | ETA forming | 0.0/min
+  [10/10 100.0%] S5D dilution curve (agg_pf) | elapsed 0:00:00 | ETA forming | 0.0/min
+  S5D dilution curve (agg_pf) complete: 10/10  in 0:00:00
+  DILUTION CURVE (agg_pf): 10 admission steps
+  [1/10  10.0%] S5D dilution curve (EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF) | elapsed 0:00:00 | ETA forming | 0.0/min
+  [10/10 100.0%] S5D dilution curve (EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF) | elapsed 0:00:00 | ETA 0:00:00 | 599757.5/min
+  S5D dilution curve (EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF) complete: 10/10  in 0:00:00
+  DILUTION CURVE (EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF): 10 admission steps
 
 [S5B] SELECTION LAYER
   oracle dots_thresholds.py sha256 : 518862bf19fb
@@ -125,20 +503,20 @@ Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
     PBO (CSCV, reported not enforced, bar 0.10) = 0.4286 | constraints mcvar
     G.2 100 pairs at |r|>=0.70 of 29161, median |r| 0.0332, 126 components carry 90% variance, 175 communities | domain bridging 47 of 48 triples span >= 2 domains
   SELECTION SEARCH over 12 candidates — per-direction greedy/CELF with the lookahead-2 stopping rule, subject to the constraint references above.
-  [1/12   8.3%] S5B candidate entry masks | elapsed 0:00:00 | ETA 0:00:00 | 60104.7/min | LONG 0 SHORT 0
-  [12/12 100.0%] S5B candidate entry masks | elapsed 0:00:00 | ETA 0:00:00 | 6309.5/min | LONG 5 SHORT 5
+  [1/12   8.3%] S5B candidate entry masks | elapsed 0:00:00 | ETA forming | 0.0/min | LONG 0 SHORT 0
+  [12/12 100.0%] S5B candidate entry masks | elapsed 0:00:00 | ETA 0:00:00 | 4397.2/min | LONG 5 SHORT 5
   S5B candidate entry masks complete: 12/12  in 0:00:00
   candidate entry masks built: LONG 6 | SHORT 5
-  [1/6  16.7%] S5B greedy LONG CELF heap build | elapsed 0:00:00 | ETA 0:00:00 | 46586.1/min
-  [6/6 100.0%] S5B greedy LONG CELF heap build | elapsed 0:00:00 | ETA 0:00:00 | 156959.4/min
+  [1/6  16.7%] S5B greedy LONG CELF heap build | elapsed 0:00:00 | ETA 0:00:00 | 30002.2/min
+  [6/6 100.0%] S5B greedy LONG CELF heap build | elapsed 0:00:00 | ETA 0:00:00 | 87584.1/min
   [step 0] S5B greedy LONG admission | elapsed 0:00:00 | 0.0/min | selected 0 | heap remaining 6 | NO ETA: this loop has no fixed length, and a fabricated ETA is worse than none
     S5B greedy LONG: PLATEAU at step 0 (selected 0) - attempting size-2 escape over 6 remaining, sampling up to 5000 pairs
   S5B greedy LONG CELF heap build complete: 6/6  in 0:00:00
   S5B greedy LONG admission complete: 0 steps in 0:00:00
     LONG: selected 0 of 6 candidates | pair escapes 0 | stop: no addition of size <= 2 improves: best single 0.000e+00 <= eps 1.000e-09, best
     LONG: zero selected - EXPECTED (objective is 0 below S=5 distinct signals) and consumed by nothing.
-  [1/5  20.0%] S5B greedy SHORT CELF heap build | elapsed 0:00:00 | ETA 0:00:00 | 59818.9/min
-  [5/5 100.0%] S5B greedy SHORT CELF heap build | elapsed 0:00:00 | ETA 0:00:00 | 150064.5/min
+  [1/5  20.0%] S5B greedy SHORT CELF heap build | elapsed 0:00:00 | ETA 0:00:00 | 42517.0/min
+  [5/5 100.0%] S5B greedy SHORT CELF heap build | elapsed 0:00:00 | ETA 0:00:00 | 87753.1/min
   [step 0] S5B greedy SHORT admission | elapsed 0:00:00 | 0.0/min | selected 0 | heap remaining 5 | NO ETA: this loop has no fixed length, and a fabricated ETA is worse than none
     S5B greedy SHORT: PLATEAU at step 0 (selected 0) - attempting size-2 escape over 5 remaining, sampling up to 5000 pairs
   S5B greedy SHORT CELF heap build complete: 5/5  in 0:00:00
@@ -152,12 +530,72 @@ Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
 [S5C] WALK-FORWARD ON THE SELECTION PROCESS
   oracle dots_thresholds.py sha256 : 518862bf19fb
   dataset: 177,251 rows | 2026.01.19 15:49 → 2026.07.21 17:09
-  S5C resumed from marker: the criterion EXISTS and is evaluable (verdict=FAIL splits_with_ratio=2), every deliverable is present, and every recorded SCHEMA still matches — skipping.
+  ITEM 17 SPLIT SHAPE ASSERTED at derivation (3 splits) - not only inside the book arm, which sits behind the pool gate and does not run on a pool-less run. A key drift would otherwise surface on the one night the real run happens.
+  [1/24   4.2%] S5C null arm split 0 TRAIN batch 1 (serial) | elapsed 0:00:00 | ETA 0:00:02 | 533.3/min
+  [24/24 100.0%] S5C null arm split 0 TRAIN batch 1 (serial) | elapsed 0:00:02 | ETA 0:00:00 | 523.2/min
+  S5C null arm split 0 TRAIN batch 1 (serial) complete: 24/24  in 0:00:02
+  S5C null arm split 0 TRAIN batch 1: ran via serial - 24 signals
+  [1/8  12.5%] S5C null arm split 0 QUALIFIERS (serial) | elapsed 0:00:00 | ETA 0:00:00 | 538.8/min
+  [8/8 100.0%] S5C null arm split 0 QUALIFIERS (serial) | elapsed 0:00:00 | ETA 0:00:00 | 514.5/min
+  S5C null arm split 0 QUALIFIERS (serial) complete: 8/8  in 0:00:00
+  S5C null arm split 0 QUALIFIERS: ran via serial - 8 signals
+  [1/24   4.2%] S5C null arm split 1 TRAIN batch 1 (serial) | elapsed 0:00:00 | ETA 0:00:02 | 513.3/min
+  [24/24 100.0%] S5C null arm split 1 TRAIN batch 1 (serial) | elapsed 0:00:02 | ETA 0:00:00 | 524.7/min
+  S5C null arm split 1 TRAIN batch 1 (serial) complete: 24/24  in 0:00:02
+  S5C null arm split 1 TRAIN batch 1: ran via serial - 24 signals
+  [1/24   4.2%] S5C null arm split 1 TRAIN batch 2 (serial) | elapsed 0:00:00 | ETA 0:00:02 | 514.1/min
+  [24/24 100.0%] S5C null arm split 1 TRAIN batch 2 (serial) | elapsed 0:00:02 | ETA 0:00:00 | 499.0/min
+  S5C null arm split 1 TRAIN batch 2 (serial) complete: 24/24  in 0:00:02
+  S5C null arm split 1 TRAIN batch 2: ran via serial - 24 signals
+  [1/8  12.5%] S5C null arm split 1 QUALIFIERS (serial) | elapsed 0:00:00 | ETA 0:00:00 | 557.4/min
+  [8/8 100.0%] S5C null arm split 1 QUALIFIERS (serial) | elapsed 0:00:00 | ETA 0:00:00 | 533.8/min
+  S5C null arm split 1 QUALIFIERS (serial) complete: 8/8  in 0:00:00
+  S5C null arm split 1 QUALIFIERS: ran via serial - 8 signals
+  [1/24   4.2%] S5C null arm split 2 TRAIN batch 1 (serial) | elapsed 0:00:00 | ETA 0:00:04 | 343.5/min
+  [24/24 100.0%] S5C null arm split 2 TRAIN batch 1 (serial) | elapsed 0:00:02 | ETA 0:00:00 | 482.2/min
+  S5C null arm split 2 TRAIN batch 1 (serial) complete: 24/24  in 0:00:02
+  S5C null arm split 2 TRAIN batch 1: ran via serial - 24 signals
+  [1/24   4.2%] S5C null arm split 2 TRAIN batch 2 (serial) | elapsed 0:00:00 | ETA 0:00:02 | 472.7/min
+  [24/24 100.0%] S5C null arm split 2 TRAIN batch 2 (serial) | elapsed 0:00:02 | ETA 0:00:00 | 488.0/min
+  S5C null arm split 2 TRAIN batch 2 (serial) complete: 24/24  in 0:00:02
+  S5C null arm split 2 TRAIN batch 2: ran via serial - 24 signals
+  [1/24   4.2%] S5C null arm split 2 TRAIN batch 3 (serial) | elapsed 0:00:00 | ETA 0:00:02 | 494.7/min
+  [24/24 100.0%] S5C null arm split 2 TRAIN batch 3 (serial) | elapsed 0:00:02 | ETA 0:00:00 | 525.6/min
+  S5C null arm split 2 TRAIN batch 3 (serial) complete: 24/24  in 0:00:02
+  S5C null arm split 2 TRAIN batch 3: ran via serial - 24 signals
+  [1/8  12.5%] S5C null arm split 2 QUALIFIERS (serial) | elapsed 0:00:00 | ETA 0:00:00 | 524.8/min
+  [8/8 100.0%] S5C null arm split 2 QUALIFIERS (serial) | elapsed 0:00:00 | ETA 0:00:00 | 543.8/min
+  S5C null arm split 2 QUALIFIERS (serial) complete: 8/8  in 0:00:00
+  S5C null arm split 2 QUALIFIERS: ran via serial - 8 signals
+  ITEM 18 ARMS AGREE (asserted, abort on mismatch): persist = net>0 AND PF>=2.0 AND WR>=75.0, applied identically to train and test
+    denominator = n_traded: signals that qualified on TRAIN and FIRED AT LEAST ONCE ON TEST. A signal that never fired on test did not fail, and folding it in conflates silence with loss.
+  [1/12   8.3%] S5C scoring catalogue ONCE (serial) | elapsed 0:00:00 | ETA 0:00:01 | 372.8/min | 1 scored
+  [12/12 100.0%] S5C scoring catalogue ONCE (serial) | elapsed 0:00:02 | ETA 0:00:00 | 338.8/min | 11 scored
+  S5C scoring catalogue ONCE (serial) complete: 12/12  in 0:00:02
+  S5C scoring: ran via serial - 11 of 12 candidates
+  S5C: 1 DUPLICATE signal_id(s) in the candidate pool collapsed to one entry each - `scored` is keyed on family|signal_def|direction, so a repeated key OVERWRITES rather than adds. This is why the count reads 11 of 12 while skipped is 0: nothing was skipped, one row was absorbed. Duplicates: ['F4|VWAP_Z:hi NOT-CONFIRMED-BY Micro_VPIN:lo|SHORT']
+  S5C catalogue scored via serial: 11 of 12 candidates (1 absorbed as duplicate signal_id) | 0 skipped. A silently smaller population is the failure shape this project has met most often, so the count is printed whether or not any were dropped.
+  [1/11   9.1%] S5C split 0 VALID + persist over 11 candidates | elapsed 0:00:00 | ETA 0:00:00 | 59847.4/min | 0 admitted
+  [11/11 100.0%] S5C split 0 VALID + persist over 11 candidates | elapsed 0:00:00 | ETA 0:00:00 | 66017.4/min | 5 admitted
+  S5C split 0 VALID + persist over 11 candidates complete: 11/11  in 0:00:00
+  [1/11   9.1%] S5C split 1 VALID + persist over 11 candidates | elapsed 0:00:00 | ETA forming | 0.0/min | 0 admitted
+  [11/11 100.0%] S5C split 1 VALID + persist over 11 candidates | elapsed 0:00:00 | ETA 0:00:00 | 72243.9/min | 9 admitted
+  S5C split 1 VALID + persist over 11 candidates complete: 11/11  in 0:00:00
+  [1/11   9.1%] S5C split 2 VALID + persist over 11 candidates | elapsed 0:00:00 | ETA forming | 0.0/min | 0 admitted
+  [11/11 100.0%] S5C split 2 VALID + persist over 11 candidates | elapsed 0:00:00 | ETA 0:00:00 | 57328.9/min | 9 admitted
+  S5C split 2 VALID + persist over 11 candidates complete: 11/11  in 0:00:00
+  wf_book_arm_entities.csv: 24 rows across 3 splits
+    split 0: VALID admitted 5 on train, 1/4 persisted on test -> rate 0.25
+    split 1: VALID admitted 9 on train, 4/9 persisted on test -> rate 0.4444444444444444
+    split 2: VALID admitted 10 on train, 6/10 persisted on test -> rate 0.6
+  splits derived 3 (floor: >=60d and >=3 buckets) | embargo 1440 bars | oracle causal True
+  null arm (MEASUREMENT, not a pass criterion): split 0 3/8=0.375 | split 1 0/8=0.0 | split 2 3/8=0.375
+  attestation records 3 (repeat groups 0) | pass criterion: FAIL
 
 [S7] CONTENDER HEAD-TO-HEAD
   S7 six portfolio scores: started
-  [1/6  16.7%] S7 six portfolio scores | elapsed 0:00:00 | ETA 0:00:01 | 239.9/min | C0
-  [6/6 100.0%] S7 six portfolio scores | elapsed 0:00:01 | ETA 0:00:00 | 214.0/min | C5
+  [1/6  16.7%] S7 six portfolio scores | elapsed 0:00:00 | ETA 0:00:01 | 216.1/min | C0
+  [6/6 100.0%] S7 six portfolio scores | elapsed 0:00:01 | ETA 0:00:00 | 221.4/min | C5
   S7 six portfolio scores complete: 6/6  in 0:00:01
     C0 Flat book (1-lot, no conviction/gaps)        net $  60130 (Δ  +60130) wd -617.0 OOS-PF 2.67
     C1 + S.20 conviction (Hurst/recentFB longs)     net $  75222 (Δ  +15092) wd -639.1 OOS-PF 2.98
@@ -178,8 +616,12 @@ Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
   S8B cluster basis profiling: started
   oracle dots_thresholds.py sha256 : 518862bf19fb
   dataset: 177,251 rows | 2026.01.19 15:49 → 2026.07.21 17:09
-  S8B already complete for this input (checkpoint) — resuming past it.
-  S8B cluster basis profiling: complete in 0:00:00
+  S8B standalone: S8 output unavailable, rebuilding the committed trade list.
+  vocabulary: 249 conditions | eligible universe 103,214 bars | book events 2729 | qualifying events 8273
+  cluster sets 12/12 | elapsed 0:00:18
+  reach: D.0.1 18 rows | D.0.2/D.2 60 rows | D.0 decomposition 8 rows
+  wrote 2988 rows → discovery\smoke\cluster_participation_profile.csv
+  S8B cluster basis profiling: complete in 0:00:24
 
 [S9] REPORT & SPLIT
   S9 report assembly: started
@@ -425,7 +867,7 @@ Condition pool: 90x2 FEAT_ (hi/lo) + 69 equality = 249 conditions
   BOOK GRAMMAR: all 44 rows are three-condition F0 triples - no sequential members, so build_book writes nothing back into the frame.
   GATE MASKS: HU90 9.7478%  FB20 80.1874%  ATS90 6.2217%  HU90&ATS90 0.6838%
   POPULATION: 673 FULL rows -> 135 BOOK-only (538 gap fillers excluded). The spec quotes BOOK-only.
-    arm     44:    135 trades  WR  100.0  PF     nan  net    15,078.00  events    0  days   0  (2.0s)
+    arm     44:    135 trades  WR  100.0  PF     nan  net    15,078.00  events    0  days   0  (1.6s)
   §4.5 QUALITY ARMS  percentile of the SURVIVING pool, PER DIRECTION, applied AFTER the four absolute criteria. Measured on FULL-SAMPLE statistics - one step from the look-ahead the pre-filter had - so it is emitted as ARMS and the OPERATOR RULES.
     arm       book size
     null             44
@@ -506,19 +948,19 @@ C:\Users\d\AppData\Local\Programs\Python\Python312\Lib\site-packages\numpy\_core
   BOOK GRAMMAR: all 8 rows are three-condition F0 triples - no sequential members, so build_book writes nothing back into the frame.
   GATE MASKS: HU90 9.7478%  FB20 80.1874%  ATS90 6.2217%  HU90&ATS90 0.6838%
   POPULATION: 546 FULL rows -> 3 BOOK-only (543 gap fillers excluded). The spec quotes BOOK-only.
-    arm      8:      3 trades  WR  100.0  PF     nan  net       112.00  events    0  days   0  (1.5s)
+    arm      8:      3 trades  WR  100.0  PF     nan  net       112.00  events    0  days   0  (1.4s)
   BOOK GRAMMAR: all 16 rows are three-condition F0 triples - no sequential members, so build_book writes nothing back into the frame.
   GATE MASKS: HU90 9.7478%  FB20 80.1874%  ATS90 6.2217%  HU90&ATS90 0.6838%
   POPULATION: 548 FULL rows -> 9 BOOK-only (539 gap fillers excluded). The spec quotes BOOK-only.
-    arm     16:      9 trades  WR  100.0  PF     nan  net     5,272.00  events    0  days   0  (1.6s)
+    arm     16:      9 trades  WR  100.0  PF     nan  net     5,272.00  events    0  days   0  (1.4s)
   BOOK GRAMMAR: all 32 rows are three-condition F0 triples - no sequential members, so build_book writes nothing back into the frame.
   GATE MASKS: HU90 9.7478%  FB20 80.1874%  ATS90 6.2217%  HU90&ATS90 0.6838%
   POPULATION: 588 FULL rows -> 48 BOOK-only (540 gap fillers excluded). The spec quotes BOOK-only.
-    arm     32:     48 trades  WR  100.0  PF     nan  net     5,109.00  events    0  days   0  (1.6s)
+    arm     32:     48 trades  WR  100.0  PF     nan  net     5,109.00  events    0  days   0  (1.5s)
   BOOK GRAMMAR: all 44 rows are three-condition F0 triples - no sequential members, so build_book writes nothing back into the frame.
   GATE MASKS: HU90 9.7478%  FB20 80.1874%  ATS90 6.2217%  HU90&ATS90 0.6838%
   POPULATION: 673 FULL rows -> 135 BOOK-only (538 gap fillers excluded). The spec quotes BOOK-only.
-    arm     44:    135 trades  WR  100.0  PF     nan  net    15,078.00  events    0  days   0  (1.7s)
+    arm     44:    135 trades  WR  100.0  PF     nan  net    15,078.00  events    0  days   0  (1.6s)
   §4.5 QUALITY ARMS  percentile of the SURVIVING pool, PER DIRECTION, applied AFTER the four absolute criteria. Measured on FULL-SAMPLE statistics - one step from the look-ahead the pre-filter had - so it is emitted as ARMS and the OPERATOR RULES.
     arm       book size
     null             44
@@ -528,11 +970,11 @@ C:\Users\d\AppData\Local\Programs\Python\Python312\Lib\site-packages\numpy\_core
 
   SIX-ARM TABLE
       signals   trades     WR%       PF         net $  EVENTS   days   worstDay   secs
-            4        0     0.0                   0.00       0      0       0.00    1.4
-            8        3   100.0      nan        112.00       0      0     112.20    1.5
-           16        9   100.0      nan      5,272.00       0      0     119.10    1.6
-           32       48   100.0      nan      5,109.00       0      0      63.90    1.6
-           44      135   100.0      nan     15,078.00       0      0     101.50    1.7
+            4        0     0.0                   0.00       0      0       0.00    1.3
+            8        3   100.0      nan        112.00       0      0     112.20    1.4
+           16        9   100.0      nan      5,272.00       0      0     119.10    1.4
+           32       48   100.0      nan      5,109.00       0      0      63.90    1.5
+           44      135   100.0      nan     15,078.00       0      0     101.50    1.6
     emitted book_size = 32  (SEED=0, fingerprint 394270bd2d2a6466)
   SELECT ARTIFACTS:
     signals    32_signals.csv                   32 rows  sha 97bf1689fdb4
@@ -541,8 +983,8 @@ C:\Users\d\AppData\Local\Programs\Python\Python312\Lib\site-packages\numpy\_core
   smoke non-empty assertion EXTENDED TO THE SELECT ARTIFACTS: all have rows.
 
 [S10] COLLECT - every analysis artifact into one flat folder, split for upload
-  sweep coverage: 73 of 73 artifacts present
-  sweep_report.csv: 74 artifacts audited, 17 escalated finding(s). THE PROVENANCE RECORD FOR EVERY ARTIFACT IN THE TREE, emitted as a file rather than printed to a terminal that closes - six inert-artifact defects reached the operator before this existed.
+  sweep coverage: 72 of 72 artifacts present
+  sweep_report.csv: 73 artifacts audited, 17 escalated finding(s). THE PROVENANCE RECORD FOR EVERY ARTIFACT IN THE TREE, emitted as a file rather than printed to a terminal that closes - six inert-artifact defects reached the operator before this existed.
   S10 COLLECT: 87 files, 255.8 MB -> discovery\smoke\data_for_analysis
     copied 87 | skipped 75 (chunks, markers, provenance, shards, temporaries)
     split 0 files -> 0 parts | largest 23.8 MB | ALL UNDER 30 MB: yes
@@ -550,30 +992,30 @@ C:\Users\d\AppData\Local\Programs\Python\Python312\Lib\site-packages\numpy\_core
 
 STAGE TIMING TABLE (run log only — never an artifact, never a CSV)
   stage         seconds     pct  status  note
-  SELECT         157.48  78.33%  ok      smoke: select & score (capped)
-  S5B             23.65  11.76%  ok      selection layer
-  S1               9.70   4.82%  ok      adaptive thresholds
-  S0               3.62   1.80%  ok      ingest & validate
-  S7               2.92   1.45%  ok      contenders
-  S10              1.49   0.74%  ok      collect & split for upload
-  S2B              1.39   0.69%  ok      market terrain map
-  S3               0.49   0.24%  ok      family discovery
-  S2               0.24   0.12%  ok      pool & anchors
-  S5               0.02   0.01%  ok      candidate filter
-  S3B              0.01   0.00%  ok      family evidence + D2D
-  S5D              0.01   0.00%  ok      catalogue emission
-  S5C              0.01   0.00%  ok      walk-forward
-  S8B              0.01   0.00%  ok      cluster profile
+  S3             642.68  58.30%  ok      family discovery
+  SELECT         165.65  15.03%  ok      smoke: select & score (capped)
+  S5D            152.71  13.85%  ok      catalogue emission
+  S5C             50.71   4.60%  ok      walk-forward
+  S5B             34.25   3.11%  ok      selection layer
+  S8B             24.30   2.20%  ok      cluster profile
+  S1              11.30   1.03%  ok      adaptive thresholds
+  S3B             10.85   0.98%  ok      family evidence + D2D
+  S0               3.45   0.31%  ok      ingest & validate
+  S7               2.88   0.26%  ok      contenders
+  S2B              1.96   0.18%  ok      market terrain map
+  S10              1.25   0.11%  ok      collect & split for upload
+  S2               0.37   0.03%  ok      pool & anchors
+  S5               0.02   0.00%  ok      candidate filter
+  S9               0.01   0.00%  ok      report
   S4               0.00   0.00%  ok      schema unify
   S6               0.00   0.00%  ok      full-field scoring regen
   S8               0.00   0.00%  ok      committed scoring
-  S9               0.00   0.00%  ok      report
-  TOTAL 201.04s
-  GENUINELY CONCURRENT: 3.43s of 201.04s = 1.7% of total runtime runs on more than one core. The remainder is sequential and is where the next parallelism pass should look — measured, not guessed.
-  TIMING TABLE TOTAL 201.04s vs MASTER COMPLETE wall clock 201.15s | unaccounted 0.11s (0.1%). Anything unaccounted is work outside a stage wrapper - banner, sacred verify, frame binding, argument parsing.
+  TOTAL 1102.39s
+  GENUINELY CONCURRENT: 848.98s of 1102.39s = 77.0% of total runtime runs on more than one core. The remainder is sequential and is where the next parallelism pass should look — measured, not guessed.
+  TIMING TABLE TOTAL 1102.39s vs MASTER COMPLETE wall clock 1118.31s | unaccounted 15.92s (1.4%). Anything unaccounted is work outside a stage wrapper - banner, sacred verify, frame binding, argument parsing.
   run_log.txt RE-COPIED into data_for_analysis after the timing table. S10 runs BEFORE the run ends, so the copy it made stopped at S9 and could never contain S10 itself, the stage timing table or MASTER COMPLETE - the one artifact needed to size the next parallelism pass.
 
 ════════════════════════════════════════════════════════════════════
-MASTER COMPLETE in 0:03:21 | out: discovery\smoke
+MASTER COMPLETE in 0:18:38 | out: discovery\smoke
 ════════════════════════════════════════════════════════════════════
 PS C:\Users\d\Documents\GitHub\DOT_deploy\dot_master_discovery>
