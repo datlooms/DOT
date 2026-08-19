@@ -1530,11 +1530,46 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
     else:
         lines.append(f'  OOS (final third)   : UNEVALUABLE - {r["oos_prop_days"]} trading days, '
                      f'below the floor of {MIN_FOLD_DAYS}')
-    canary = (frozen and os.path.basename(book_file) == 'book50_signals.csv'
-              and r['trades'] == 2698 and abs(r['net'] - 92347) < 1)
-    if canary:
-        lines.append('')
-        lines.append('  US30 baseline canary: $92,347 / 2,698 tr — engine intact')
+    # THE CANARY WAS INERT, NOT BROKEN. It required trades == 2698 and net == 92347 -
+    # figures from an OLDER ENGINE CONFIGURATION - while BOOK-50 now scores 3,101 and
+    # $97,675. The basename matched all along; the assertion had been silently skipping
+    # its own print since the engine changed. AN ENGINE CHECK THAT FAILS BY SAYING
+    # NOTHING IS WORSE THAN NO CHECK AT ALL, and two literals in a condition is how it
+    # went stale unnoticed.
+    #
+    # So: the reference lives in config (arch.canary), a MISMATCH PRINTS LOUDLY, and a
+    # missing reference says so by name rather than passing quietly. Substituting new
+    # literals here would rebuild the same defect with fresher numbers.
+    canary = False
+    if frozen and os.path.basename(book_file or '') == 'book50_signals.csv':
+        _ref = None
+        try:
+            _refcfg = json.load(open(os.path.join(_HERE, 'engine', 'canary_reference.json'),
+                                     encoding='utf-8'))
+            _ref = _refcfg.get('book50')
+        except Exception as _exc:
+            lines.append(f'  *** CANARY REFERENCE UNAVAILABLE: engine/canary_reference.json '
+                         f'({type(_exc).__name__}). THE PER-SESSION ENGINE CHECK DID NOT RUN. '
+                         f'This is not a pass. ***')
+        if _ref:
+            _dt = int(r['trades']) - int(_ref['trades'])
+            _dn = float(r['net']) - float(_ref['net'])
+            canary = (_dt == 0 and abs(_dn) < 1.0)
+            lines.append('')
+            if canary:
+                lines.append(f'  US30 baseline canary: ${_ref["net"]:,} / {_ref["trades"]:,} tr '
+                             f'- ENGINE INTACT (reference {_ref.get("recorded", "?")})')
+            else:
+                lines.append(f'  *** CANARY MISMATCH - THE ENGINE HAS MOVED. BOOK-50 scored '
+                             f'{r["trades"]:,} tr / ${r["net"]:,} against the recorded '
+                             f'reference {_ref["trades"]:,} tr / ${_ref["net"]:,} '
+                             f'(delta {_dt:+,} tr / {_dn:+,.2f}). Either an engine change is '
+                             f'unintended, or the reference is stale and must be re-ratified '
+                             f'in engine/canary_reference.json. DO NOT IGNORE THIS LINE. ***')
+        elif _ref is None and 'CANARY REFERENCE UNAVAILABLE' not in ''.join(lines[-1:]):
+            lines.append('  *** CANARY REFERENCE ABSENT: engine/canary_reference.json has no '
+                         '"book50" entry. THE ENGINE CHECK DID NOT RUN. ***')
+
     for _bl in breakdown_report(df, executed, book, gates=_LAST_GATES, cfg=_cfg):
         lines.append(_bl)
     tr = executed.copy()

@@ -1,0 +1,10 @@
+{
+  "book50": {
+    "trades": 3101,
+    "net": 97675,
+    "WR": 90.6,
+    "PF": 4.81,
+    "recorded": "2026-08-19, adopted engine: FLOORED, floor 3/3, cap 21, recentfb=False, 1.0 lot",
+    "_note": "THE PER-SESSION ENGINE CHECK. Re-ratify ONLY on an authorised engine change, and record the date and configuration. The previous form hardcoded 2698/92347 in a condition and went silently inert when the engine moved - a mismatch skipped its own print rather than shouting."
+  }
+}
