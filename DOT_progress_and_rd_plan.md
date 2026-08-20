@@ -2563,6 +2563,286 @@ reached `MASTER COMPLETE` — **it just did not run most of them.** The tell is 
 ~14. **The cold-run rule applied to smoke: a stage that always resumes has never been tested.** Recorded in
 `QUICK_START.md`, which previously stated the smoke tree "needs no cleanup."
 
+## 2026-08-21 — THE SELECTION PROBLEM: SOLVED AS A PROCEDURE, OPEN AS AN OPTIMISATION
+
+Fourteen approaches were measured against one question: can the 297-signal book be regenerated from data by a
+deterministic procedure? The answer is that it cannot, and the reason is structural rather than a failure of
+search — **the 297 is a four-way set union and no single objective recovers a union.** What emerged instead
+is a two-objective procedure that produces books beating the incumbent on loss events, tail and margin, and
+losing to it on days traded and net.
+
+**Six systems now exist, all documented, all carrying a section 0 that names what would make them wrong.**
+
+### 12a. THE PROVENANCE WAS PRINTED ON EVERY ROW AND NOBODY HAD PARSED IT
+
+Spec v3 §4.3 carries a SOURCE column on all 297 rows. Three seats parsed it independently and agreed to the
+digit:
+
+| source | memberships |
+|---|---|
+| S0-120 | 120 — ALL of it |
+| OPTION-B | 119 of 120 |
+| 60-priced | 60 — ALL of it |
+| BOOK-50 | 48 of 50 — the two F1 pairs dropped on measurement |
+| **TOTAL** | **347 across 297 unique rows** |
+
+**And it reconciles to §135's own correction: v1 said 386 memberships, it was 350, and the two dropped rows
+carried three memberships. 350 − 3 = 347.** 253 rows sit in exactly one source, 38 in two, 6 in three.
+
+**A parse hazard worth recording: a naive regex also matches thirteen rows of §8.1's cap table and returns
+310 rows / 360 memberships. Any parser must whitelist the four source tags.**
+
+### 12b. FOURTEEN APPROACHES, AND EVERY FAILURE IS THE SIGNATURE OF A UNION
+
+| approach | result |
+|---|---|
+| rank by solo statistics | best rule recalls 78 of 280 against a chance 10.4 |
+| rank by co-fire depth | 20 of 280 |
+| leave-one-out contribution | split-half rho = −0.060 |
+| random-subset ablation | no superadditive structure |
+| co-fire affinity, maximised | selects near-duplicates — depth 114 on 137 bars |
+| affinity under a redundancy ceiling | anti-coupled sets, loses to random at every ceiling 0.02–0.20 |
+| loss-day decorrelation | 12% membership overlap between two disjoint halves of one market |
+| chance-pricing `E_dir` | **60 of 60 exact, zero false picks, frame-stable** |
+| a supervised separator | AUC 0.80 held-out, **0.45 against near-misses** |
+| the "region" it defined | loses to its own size-matched random band |
+| full universe at floor 3 | PF 1.39 ungated, 6.17 with six derived gates |
+| full universe at matched floor | margin 32.75 but 210 concurrent positions, −$45,900 worst bar |
+| direction balance as a constraint | buys nothing; worst day and losing weeks both WORSE balanced |
+| solo persistence (objective E) | **ZERO of 1,818 clear all three scales** |
+
+**These are not fourteen failures. They are fourteen measurements of one fact: the region has structure and
+the membership does not.** Members at median rank ~2,000 of 8,016, `d_net` split-half at −0.060, the set at
+the 4th percentile of random draws, and four source objectives differing by only 1.7× — every one of those is
+what a union looks like when you search it for a single rule.
+
+**The stated design reason, from the record: "four different objectives means four different error modes, and
+a union has a chance of covering what each one misses."** Searching for the single rule was searching for the
+thing that was deliberately not used.
+
+### 12c. THE TWO OBJECTIVES RECOVERED FROM SOURCE
+
+**LOSS-DAY DECORRELATION** — recovered as executed code from two seats independently:
+
+```
+piv  = pivot(index='day', columns='signal_name', values='pnl', aggfunc='sum').fillna(0)
+loss = (piv < 0).astype(int)
+first = max(cols, key=lambda c: net[c] - 50*loss[c].sum())      # deterministic seed
+while len(chosen) < n:
+    overlap = ((loss[c]==1) & (covered>0)).sum()                # CUMULATIVE boolean
+    score   = (overlap, -net[c])                                # fewest NEW spoiled days, then most net
+```
+
+**DAYS not bars, keyed on the EXIT date. Cumulative coverage, not pairwise — a day spoiled by five members
+costs exactly what a day spoiled by one costs. `net > 0` pool, per direction, fixed-count termination, no RNG
+anywhere.** That distinction changes the answer and is easy to get wrong.
+
+**CHANCE-PRICING** — `E` is the EXPECTED NUMBER OF ROWS in that family at or above this PF under 4,652
+rarity-matched nulls. Not a p-value. Floor is `n_family / K` = 0.391 for F0. The 60 are `E < 1`; within them
+35 sit at `E == 0` and are unrankable, and Benjamini-Yekutieli at `q < 0.10` selects **exactly those same 35
+and none of the 25** — two independent methods agreeing set-identically.
+
+**And it is direction-blind by construction.** `n_trials_family = 1,840` multiplies every row, and the null is
+drawn at `long_share = 0.7951`, so **every SHORT signal is priced against a null that is four-fifths LONG.**
+Per-direction correction moves the split from 9.0:1 to 4.5:1 and is now the adopted form.
+
+**`FUSED-50` IS 97 SIGNALS, NOT 50.** Two independently-selected parents of 50 with 3 overlapping. The
+recorded finding: **"method diversity fuses; book count does not"** — fusing two different objectives beat
+both parents; fusing nine greedy variants of one field added almost nothing.
+
+### 12d. THE LOSS-DAY MATRIX WAS CONTAMINATED, AND THE CONTAMINATION WAS THE BATCH SIZE
+
+Two seats implemented the identical greedy — all four rules confirmed from source on both sides — and got
+different books at the same size. The divergence was not the greedy and not the cap:
+
+**One seat built the per-signal daily P&L in batches of 120. In a 120-signal batch the jar binds, so a
+signal's "solo" losing days depend on which 119 others shared its batch. The matrix was never solo.** 2,324
+trades deleted, 1.2% of solo volume, decisive in effect.
+
+| matrix | K | events | worst day | losing wks | PF |
+|---|---|---|---|---|---|
+| batch-120, cap 21 | 45 | 16 | −$918 | 2 | 9.17 |
+| **true-solo, unbounded** | 45 | **12** | **−$612** | **1** | **13.90** |
+
+**The clean matrix wins on every axis, and the exclusion of objective A — made because it "cost margin faster
+than it bought days" — was made on contaminated data and is withdrawn.** The correct build is
+`MAX_POSITIONS` high enough that the jar never binds; batch size is then irrelevant and the run costs 78
+seconds.
+
+### 12e. THE ADVERSARIAL REVIEW — TWO ATTACKS RUN, ONE LANDED
+
+Independent reviews by two outside models produced three architecture-specific attacks. Two were runnable.
+
+**ATTACK A — IS DEPTH JUST VOLATILITY WEARING A CONSENSUS MASK?** Stratify entry bars by volatility and
+measure the depth-outcome relationship within each stratum.
+
+| stratum | Spearman(depth, pnl) | p | n |
+|---|---|---|---|
+| ALL POOLED | **+0.1370** | 1.4e-25 | 5,776 |
+| Q1 low | **−0.1050** | 0.00061 | 1,062 |
+| Q2 | **−0.1352** | 1.6e-05 | 1,012 |
+| Q3 | −0.0272 | 0.362 | 1,125 |
+| Q4 | +0.1516 | 6.0e-08 | 1,266 |
+| Q5 high | **+0.2360** | 4.7e-18 | 1,311 |
+
+**The pooled figure is Simpson's paradox.** Depth is negatively associated with outcome in the bottom two
+volatility quintiles and strongly positive in the top two. **The kill condition — "depth 3 and depth 20 score
+alike once volatility is held constant" — was NOT met; the ladder survives and strengthens where volatility is
+high.** But depth is not a property of depth alone: it interacts with volatility and changes sign.
+
+**Three attempts to exploit the reversal all failed, and all for the same reason.** A 12-cell conditional
+stack starved the power floor; a 27-point parametric surface landed on the same monotone line; and a
+single-parameter volatility shift on the intact stack died on split-half at Spearman −0.400 after a
+0.06-margin "win" drawn from 45 trials. **There are 42 loss events and every conditioning scheme that splits
+them produces cells too thin to support a threshold.**
+
+**ATTACK B — IS DEPTH 20 ACTUALLY TWENTY DETECTORS?** The 297 use **105 distinct base variables of the 117
+available**, effective count `e^H = 83.2` against a 105 ceiling, most frequent variable at 4.3% of slots.
+**The kill condition was "reduces to four or five features." It does not. PASSED.** The firing-matrix half —
+effective dimensionality of the signal-by-bar incidence matrix on deep bars — remains unrun.
+
+**ATTACK C — IS THE BAR BOUNDARY THE SIGNAL?** Recorded as IMPRACTICAL rather than untested. The EA computes
+every variable from bar-1 data through the stateful shift chain and MT4 has no offset bars; testing it means
+re-exporting all 172 columns at a different clock.
+
+### 12f. THE POWER FAILURE IS A DEFECT CLASS
+
+**SHORT d4 and SHORT d5+ were adopted FREE because they carried 4 and 2 loss events, and "20 hand-relocations
+found nothing" was recorded as a finding about the short side.** It was not. On larger books those same cells
+carry 68, 70, 141 and 805 events, and gates derive on them readily.
+
+**Every "no effect" result in this project measured on fewer than 20 events is a candidate for the same
+defect.** Two are named and both are live in the adopted stack's justification: **`Bar_Range > p95` at LONG d3
+(cited as a reason a gate was REJECTED) and `VolOfVol > p20` at LONG d5+ (cited as a reason one was
+RETAINED).** Neither has had its event count checked. The sweep is outstanding.
+
+### 12g. THE SIX SYSTEMS
+
+| system | n | events | worst bar | worst day | −wks | days | PF | MARGIN | net |
+|---|---|---|---|---|---|---|---|---|---|
+| QUANT A30+B L6/S4 | 138 | 14 | −$612 | **−$391** | 0 | 86 | 29.86 | **45.85** | $122,221 |
+| MANAGER A+B L8/S5 | 197 | **10** | −$773 | −$637 | 0 | 88 | 22.53 | 32.74 | $105,611 |
+| QUANT B+D L3/S3 | 116 | 21 | −$918 | −$452 | 0 | 92 | 13.25 | 34.38 | $100,652 |
+| MANAGER B K=50 | 100 | 14 | −$644 | −$612 | 0 | 95 | 13.30 | 29.15 | $61,406 |
+| WHOLE DOT L7/S4 | 297 | 16 | −$1,224 | — | 0 | 110 | 25.91 | 38.25 | $70,614 |
+| **WHOLE DOT L3/S3** | 297 | 42 | −$1,224 | −$347 | 0 | **119** | 14.53 | 33.07 | **$284,974** |
+
+**Every one holds zero losing weeks. The incumbent owns days and net; the new systems own events, tail and
+margin. Nothing deployed has changed.**
+
+**And the binding constraint is the losing week, not the event count.** `A30+B` at L8/S5 gives 6 loss events
+and L10/S6 gives 1 — both carry a losing week. **L6/S4 at 14 events with zero weeks was chosen by rule, not by
+argmax.**
+
+### 12h. THE FLOOR IS THE LARGEST LEVER AND IT IS FREE
+
+Identical members, only the floor moving:
+
+| floor | events | MARGIN |
+|---|---|---|
+| L3/S3 | 25 | 36.65 |
+| L6/S4 | 14 | 45.85 |
+| L8/S5 | 6 | 49.13 |
+| L10/S6 | 1 | 61.12 |
+
+**The union buys reach and the floor buys back the tail.** The same effect holds on the incumbent — L3/S3 to
+L7/S4 takes PF 14.53 to 25.91 and margin 33.07 to 38.25 on unchanged membership.
+
+**AND AT HIGH FLOORS MOST GATES ARE DEAD CODE.** Both hybrids found it independently: at L6/S4 with
+`tier = min(depth,5)`, every LONG trade lands in tier 5 and every SHORT in tier 4–5. **`Micro_Hurst > p90` —
+the only CONFIRMED gate in the project — fires ZERO times, three of six cells never fire, and 60% of trades
+run through no tier gate at all.** Same shape as v3's L7/S4 variant finding.
+
+### 12i. FIFTEEN THINGS CLOSED WITH THE MEASUREMENT THAT KILLED EACH
+
+```
+per-signal ranking            lost to 12 of 12 random draws on a holdout
+d_net leave-one-out           split-half rho = -0.060; measures floor-criticality, not quality
+co-fire affinity              statistic PERSISTS at +0.4892 (p = 9.6e-240) and every objective
+                                built on it fails — 3 attempts, opposite failure modes
+affinity under a ceiling      anti-coupled sets below pool baseline; loses to random 0.02-0.20
+direction balance             buys nothing; worst day and losing weeks both WORSE balanced
+coverage as an objective      98% of terrain reachable by firing almost everywhere
+coverage as a constraint      Spearman with loss events -0.184 p=0.663; correlates with a
+                                DEEPER worst day at +0.764, p = 0.027
+participation as a constraint ~1 day of headroom at n=297
+large book at a high floor    depth does not scale with size; 94-of-4,000 never occurs in
+                                177,251 bars
+floor sweep on a random pool  buys days, never buys quality; best margin 24.65 vs 33.07
+L2/S2 on a small book         21 events -> 201; a floor of 2 on 116 signals admits nearly
+                                every bar where any pair agrees
+E_dir < 3                     all eight cells at -$1,760 to -$2,261 worst day
+objective E, solo persistence ZERO of 1,818 clear folds AND weeks AND days. At <=1 losing week,
+                                57 signals produced a book with TWO losing weeks.
+                                SOLO PERSISTENCE IS NOT A BOOK-LEVEL PROPERTY.
+b_S volatility-conditional    split-half rho = -0.400; cross-application landed BELOW baseline
+terrain size above ~75        SATURATES — T75/55 identical to T90/65 on every figure
+```
+
+### 12j. THE PROCEDURE, AS IT STANDS
+
+```
+1  SCREEN      the VALID field, train-window only, N holdout months from config
+               NEVER a sub-slice: decorrelation breaks on a filtered field
+               (worst day -$341 -> -$3,213 measured on the raw scan, because
+                loss-day decorrelation minimises the NUMBER of losing days,
+                not their SIZE)
+2  OBJECTIVE A loss-day decorrelation, per direction, TRUE-SOLO matrix
+3  OBJECTIVE B chance-pricing, E_dir per direction, floors n_dir/K
+4  UNION
+5  EXECUTE     floor from config, cap 21, gates frozen
+6  SCORE       report the frontier, not a point
+```
+
+**Two free parameters: target size per objective, and the floor. Everything else from config, no literals.**
+
+**AND THE ALONE-FIRST GATE IS BINDING AND IS THE MOST TRANSFERABLE PART OF THE DESIGN: no objective enters a
+union until it has beaten size-matched random draws as a standalone book, with gates derived per draw.** It
+killed co-fire affinity before the union carried it, and it killed terrain coverage on one seat's field while
+passing it on another's — which is how the field question was found.
+
+### 13a. STANDING BEFORE THE NEXT SESSION
+
+**SETTLED:** the 297's provenance; the two objectives as executable code; the matrix contamination and its
+fix; the direction-blind pricing defect; that no single objective recovers a union; that solo persistence is
+not a book-level property; that the floor is the largest lever available; and that most gates are dead code
+at high floors.
+
+**OPEN:**
+
+1. **The `MIN_TRADES = 10` blindness.** Fourteen of the 297 appear in NO scanner output and cannot be reached
+   by any scan-based procedure. Eight SHORT orphans contribute exactly zero trades; **six LONG orphans
+   contribute 157 trades directly, but removing all fourteen costs $3,923 and three trading days — more than
+   their own trades earn, because they raise depth and let other signals clear the floor.** A signal that is
+   rare on this frame may be common in another regime, so **any procedure built on scan statistics inherits
+   this blindness.** Either the floor comes off the scan or the limitation is stated in the specification.
+
+2. **Finalise SELECT.** Objective A is back in play on the clean matrix and both hybrids must be rebuilt on
+   it. Outstanding on both: the anti-system, gates derived rather than inherited, and 500-draw controls — the
+   Quant's hybrid ran 100, resolution floor 0.0099, **"directionally decisive and formally underpowered" in
+   its own words.** And the Quant hybrid's split-half degrades materially — margin 30.71, ONE losing week,
+   worst day −$1,224 against −$391 on the full frame — **the softest number in any of the four new
+   documents.**
+
+3. **The frontier as one object.** From one loss event to forty-two, tightest to widest, with events, tail,
+   losing weeks, days and net at 1.0 lot on every row, so the operator's pick is a selection from a table
+   rather than an argument.
+
+4. **The adaptive convergence engine.** Strict gating, any valid signal at depth X passes, no book and no
+   membership. The evidence is mixed and specific: all 19,754 at floor 3 ungated gives PF 1.39, and six
+   properly-derived gates recover ONE margin point; a matched-rarity floor reaches margin 32.75 but with 210
+   concurrent positions and a −$45,900 worst bar. **But the floor is a free dial on every book measured, and
+   at high floors most gates are already dead. THE QUESTION IS THE MINIMUM GATE SET THAT MAKES A FLOOR-ONLY
+   SYSTEM WORK, AND AT WHAT FLOOR** — a two-dimensional sweep on a universe with thousands of loss events,
+   where every conditioning scheme that starved at 42 events becomes measurable.
+
+5. **Standing items:** determinism on emitted artifacts at two worker counts (never measured); a cold smoke
+   with the tree deleted, then a full unrestricted run; the power-failure sweep across every historical "no
+   effect" result on fewer than 20 events; Attack B part 2; and the Friday export, after which everything
+   re-runs on seven months. **Chance-pricing is frame-stable by construction and loss-day decorrelation is
+   not — 12% membership overlap between two disjoint halves of the same market — so the two objectives will
+   behave differently on the new frame and that difference is itself a measurement.**
+
 ### 14. STATUS
 
 The Whole DOT is specified and the research is closed. What remains is engineering: S8 cannot yet score
