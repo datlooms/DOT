@@ -35,13 +35,13 @@ GAP_LOCK = 3.0
 D2D_HURST_PCT = 0.30
 D2D_ADX_MIN = 30.0
 D2D_GAP_LOTS = 2.0
-MAX_POSITIONS = 6
+MAX_POSITIONS = None      # PARAMETER - caller must set. Adopted: 21. Was 6.
 ELIG_ADX = 15.0
 ELIG_VOL = 50.0
 FRIDAY_CUT = True
 SOLO_TICK_GATE = True
-ADMISSION_RULE = 'CURRENT'
-ADM_FLOOR = {1: 3, -1: 3}
+ADMISSION_RULE = None     # PARAMETER - caller must set. Adopted: 'FLOORED'. Was 'CURRENT'.
+ADM_FLOOR = None          # PARAMETER - caller must set. Adopted: {1: 3, -1: 3}.
 ADM_TIERGATES = None
 ADM_SUBFLOOR = ()
 ADM_GATES = None
@@ -168,8 +168,37 @@ class Trade:
         self.lag = lag
         self.lots = lots
 
+ADM_REQUIRED = ('ADMISSION_RULE', 'MAX_POSITIONS', 'ADM_FLOOR')
+
+
+def _assert_admission_configured():
+    """EXPLICIT OR ABORT. THE DEFAULTS WERE WRONG FOR EVERY CURRENT CONFIGURATION.
+
+    adm_engine shipped MAX_POSITIONS = 6 and ADMISSION_RULE = 'CURRENT' while the adopted
+    system is 21 and FLOORED. THAT HAS ALREADY COST A CONTROL RUN: a seat set ADM_FLOOR
+    and ADM_TIERGATES correctly, did not set ADMISSION_RULE, and L312's
+    `if ADMISSION_RULE != 'CURRENT'` SILENTLY SKIPPED THE ENTIRE FLOORED BLOCK - 18,416
+    trades against 5,776, and it looked like a real result until the control was checked.
+
+    A wrong default that produces a plausible number is worse than a crash. These are now
+    None and raise BY PARAMETER NAME.
+    """
+    missing = [n for n in ADM_REQUIRED if globals().get(n) is None]
+    if missing:
+        raise SystemExit(
+            f'ABORT [adm_engine] admission parameter(s) not set by the caller: {missing}. '
+            f'These have NO DEFAULT because the previous defaults (MAX_POSITIONS=6, '
+            f'ADMISSION_RULE=\'CURRENT\') are wrong for every current configuration and an '
+            f'unset ADMISSION_RULE silently skips the FLOORED block - 18,416 trades against '
+            f'5,776, indistinguishable from a real result. Set them explicitly: adopted is '
+            f'ADMISSION_RULE=\'FLOORED\', MAX_POSITIONS=21, ADM_FLOOR={{1: 3, -1: 3}}.')
+    print(f'  [adm_engine] rule={ADMISSION_RULE} cap={MAX_POSITIONS} floor={ADM_FLOOR} '
+          f'tier-gates={0 if not ADM_TIERGATES else len(ADM_TIERGATES)}', flush=True)
+
+
 def run_portfolio(df, signals_df, mask_window=None, adaptive=None, structural=None, conviction=None,
                   warmup=None, verbose=True):
+    _assert_admission_configured()
     if adaptive is None:
         adaptive = dt.compute_adaptive_thresholds(df)
     if structural is None:

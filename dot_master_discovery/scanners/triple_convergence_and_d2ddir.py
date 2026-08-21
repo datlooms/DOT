@@ -38,11 +38,42 @@ EMIT_ALL = False
 # THAT CANNOT SEE THEM IS STRUCTURALLY BLIND TO A REAL PART OF THE BOOK.
 
 
+MIN_PF = 2.0
+# 2.0, NOT 4.0. THE EFFECTIVE VALUE LIVED IN THREE PLACES AND THIS FILE DISAGREED WITH ALL
+# OF THEM: discovery_orchestrator set F0_MIN_PF_OVERRIDE = 2.0, run_f0_full.py set
+# f0.MIN_PF = 2.0, the non-negotiables and master_stage_spec both record 2.0 - and an
+# analyst reading THIS file saw 4.0 and concluded the field was PF-gated at 4. One already
+# did. THE 19,754 WERE PRODUCED UNDER 2.0, so setting it here and removing the override
+# machinery changes no output; it makes the effective threshold visible where it is read.
+OVERLAP_THRESHOLD = 0.80
+
+
 def _min_trades():
     """0 under --emit-all, so every signal is emitted regardless of trade count."""
     return 0 if EMIT_ALL else MIN_TRADES
-MIN_PF = 4.0
-OVERLAP_THRESHOLD = 0.80
+
+
+def _min_pf():
+    """0.0 under --emit-all. LIFTING MIN_TRADES ALONE DEFEATS THE FLAG: a sub-10-trade
+    signal whose PF sits below the threshold stays invisible, which is exactly the
+    population the 14 orphans live in."""
+    return 0.0 if EMIT_ALL else MIN_PF
+
+
+def _overlap_threshold():
+    """1.01 under --emit-all - above any achievable overlap ratio, so nothing is dropped.
+
+    DEDUP DOES DROP SIGNALS: deduplicate() writes deduped_survivors.csv and discards any
+    signal sharing more than OVERLAP_THRESHOLD of its entry bars with a higher-PF one. An
+    orphan that survives the trade and PF gates could still vanish here, so --emit-all
+    lifts it. The DEFAULT path is untouched and still dedups at 0.80, and run_search's own
+    output is unaffected either way - dedup writes a SEPARATE artifact.
+    """
+    # 1.01, NOT 1.00: the test is `> threshold`, and a signal whose entry set is a strict
+    # subset of a kept one gives a ratio of exactly 1.0. At 1.00 that comparison is False
+    # and the signal survives by luck of the operator; at 1.01 nothing can exceed it and
+    # the lift is total. ABOVE ANY ACHIEVABLE RATIO, NOT EQUAL TO IT.
+    return 1.01 if EMIT_ALL else OVERLAP_THRESHOLD
 CHUNK_SIZE = 10000
 
 EQUALITY_CANDIDATES = [
@@ -405,7 +436,7 @@ def run_search(df, feature_conditions, all_features, entry_allowed, d2d_dir, arr
                         if metrics['sl_wins'] > 0:
                             print(f"\nFATAL BUG: {metrics['sl_wins']} SL wins on {fi}+{fj}+{fk}")
                             sys.exit(1)
-                        if metrics['pf'] >= MIN_PF:
+                        if metrics['pf'] >= _min_pf():
                             survivors.append({
                                 'feat_1': fi, 'thresh_1': li,
                                 'feat_2': fj, 'thresh_2': lj,
@@ -424,7 +455,7 @@ def run_search(df, feature_conditions, all_features, entry_allowed, d2d_dir, arr
             last_report = now
     elapsed = time.time() - t_start
     print(f"\nSearch complete in {elapsed:.1f}s")
-    print(f"Tested: {tested:,} | Simulated: {simulated:,} | Passed PF>={MIN_PF}: {passed}")
+    print(f"Tested: {tested:,} | Simulated: {simulated:,} | Passed PF>={_min_pf()}: {passed}")
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     raw_path = os.path.join(OUTPUT_DIR, "raw_survivors.csv")
     if survivors:
@@ -448,7 +479,7 @@ def deduplicate(survivors):
         es = entry_sets[idx]
         is_dup = False
         for ks in keep_sets:
-            if len(es) == 0 or len(es & ks) / len(es) > OVERLAP_THRESHOLD:
+            if len(es) == 0 or len(es & ks) / len(es) > _overlap_threshold():
                 is_dup = True; break
         if not is_dup:
             keep.append(s); keep_sets.append(es)
@@ -465,7 +496,7 @@ def final_report(survivors):
     print("FINAL REPORT")
     print("=" * 60)
     if not survivors:
-        print(f"No signals found meeting PF >= {MIN_PF}."); return
+        print(f"No signals found meeting PF >= {_min_pf()}."); return
     longs = sum(1 for s in survivors if s['direction'] == 'LONG')
     shorts = sum(1 for s in survivors if s['direction'] == 'SHORT')
     print(f"Total unique signals: {len(survivors)} (LONG: {longs}, SHORT: {shorts})")
@@ -592,14 +623,14 @@ def main():
     _a, _ = _p.parse_known_args()
     if _a.emit_all:
         EMIT_ALL = True
-        print('  *** --emit-all: MIN_TRADES gating DISABLED at all five sites. Every signal '
+        print('  *** --emit-all: MIN_TRADES gating DISABLED at all five sites, MIN_PF lifted to 0.0, and dedup OVERLAP_THRESHOLD lifted above any achievable ratio. Every signal '
               'is emitted regardless of trade count, and the `trades` column is populated on '
               'every row so a downstream screen applies its OWN threshold rather than '
               'inheriting the scanner\'s. THIS OUTPUT IS NOT THE 19,754-ROW BASELINE. ***',
               flush=True)
     print("equiDOT — Triple-Convergence Discovery (117 candidates, mechanism-D oracle)")
     print(f"Config: risk={RISK_MULT}, step={STEP_PCT}, min_trades={MIN_TRADES}, "
-          f"min_PF={MIN_PF}, dedup={OVERLAP_THRESHOLD}")
+          f"min_PF={_min_pf()}, dedup={_overlap_threshold()}")
     df = load_sealed_baseline()
     warmup = warmup_floor(df)
     feat_candidates, equality_candidates = build_candidates(df)

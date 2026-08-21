@@ -45,6 +45,6 @@ Total files: 102 — NEW 3, MODIFIED 6, UNCHANGED FROM MAIN 93 (of which 60 are 
 | `scanners/single_variable_extremes.py` | `7d8cba59f38b` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
 | `scanners/state_transition.py` | `8cb42c9d9891` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
 | `scanners/threshold_crossing.py` | `147deb44d1b5` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
-| `scanners/triple_convergence_and_d2ddir.py` | `c83edfd35e55` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
+| `scanners/triple_convergence_and_d2ddir.py` | `8e433ec74de1` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
 
 60 `discovery_results/_f13_shards/shard_*.csv|.done` files: all UNCHANGED FROM MAIN, F13 crash-resume intermediates.

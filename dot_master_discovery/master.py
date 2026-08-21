@@ -1249,8 +1249,13 @@ def _assert_fork_parity(df, sigs, ad, st, w, conv, window=None):
     # of the threshold layer, which is exactly what must not exist.
     d = df.copy()
     _keep = dict(rule=_adm.ADMISSION_RULE, mx=_adm.MAX_POSITIONS, tg=_adm.ADM_TIERGATES,
-                 gt=_adm.ADM_GATES)
+                 gt=_adm.ADM_GATES, fl=_adm.ADM_FLOOR)
+    # 'CURRENT', 6 IS CORRECT HERE AND IS NOT A DEFECT: this is the fork-parity check and
+    # it deliberately matches the SACRED engine's own configuration. ADM_FLOOR must now be
+    # set explicitly too - it has no default since an unset admission parameter silently
+    # skipped the FLOORED block once - and CURRENT admission never reads it.
     _adm.ADMISSION_RULE, _adm.MAX_POSITIONS = 'CURRENT', 6
+    _adm.ADM_FLOOR = {1: 3, -1: 3}
     _adm.ADM_TIERGATES, _adm.ADM_GATES = None, None
     try:
         a = _sac.run_portfolio(d, sigs, adaptive=ad, structural=st, warmup=w, verbose=False,
@@ -1259,6 +1264,7 @@ def _assert_fork_parity(df, sigs, ad, st, w, conv, window=None):
                                verbose=False, conviction=conv)
     finally:
         _adm.ADMISSION_RULE, _adm.MAX_POSITIONS = _keep['rule'], _keep['mx']
+        _adm.ADM_FLOOR = _keep['fl']
         _adm.ADM_TIERGATES, _adm.ADM_GATES = _keep['tg'], _keep['gt']
     ha, hb = _canon_trade_sha(a), _canon_trade_sha(b)
     print(f'  FORK PARITY ({len(d):,} bars, full frame): sacred {ha} | adm_engine(CURRENT) {hb} '

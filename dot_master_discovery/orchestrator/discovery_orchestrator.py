@@ -393,15 +393,18 @@ def f0_combo_count(kw, lo, hi):
 
 
 F0_MIN_TRADES_OVERRIDE = 30
-F0_MIN_PF_OVERRIDE = 2.0
+# F0_MIN_PF_OVERRIDE REMOVED: the scanner now carries MIN_PF = 2.0 as its own
+# default, so the effective threshold is visible in the file an analyst reads.
+# It lived in three places and the source disagreed with all of them; one
+# analyst read 4.0 and concluded the field was PF-gated at 4.
 F0_ASYMMETRY_NOTE = (
     'F0 POOL PROPERTY — RECORDED, NOT HIDDEN. F0 candidates pass an APPROXIMATE PF pre-screen that '
     'F2-F11 candidates never face. F0 first scores every triple with its own fast single-pass scorer '
     '(same SPREAD 3.0, same BE trigger, same BE/LF/SL/FC exit types, walking real bars to real exits, '
     'but strictly one-position-at-a-time with NO jar, NO conviction sizing and NO gap fillers), so the '
     'TRADE COUNT IS EXACT while the PF is a flat-1-lot no-jar proxy. Only triples clearing that proxy '
-    f'PF >= {F0_MIN_PF_OVERRIDE} and trades >= {F0_MIN_TRADES_OVERRIDE} are re-scored through the '
-    'ratified engine. The PF gate is deliberately LOOSE (the scanner default is 4.0; it is overridden '
+    f'PF >= {f0m.MIN_PF} and trades >= {F0_MIN_TRADES_OVERRIDE} are re-scored through the '
+    'ratified engine. The PF gate is deliberately LOOSE (and it is now the scanner OWN overridden '
     'DOWN to 2.0) because pre-gating hard on an approximated metric would discard candidates the '
     'ratified engine might rate well. Consequence for selection: a triple the proxy rates below 2.0 '
     'never reaches the pool even if the ratified engine would have rated it higher.')
@@ -409,7 +412,6 @@ F0_ASYMMETRY_NOTE = (
 
 def run_f0_chunk(df, adaptive, structural, warmup, kw, lo, hi):
     import itertools as _it
-    f0m.MIN_PF = F0_MIN_PF_OVERRIDE
     f0m.MIN_TRADES = F0_MIN_TRADES_OVERRIDE
     orig_comb = f0m.combinations
 
