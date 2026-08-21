@@ -5,7 +5,7 @@ Inventory and reconciliation of the `dot_master_discovery` pack. Every sha256 be
 **Entry point:** `master.py` is the single command that runs the whole pipeline (S0→S9). See **master_guide.md** to run it. This map is the file inventory; the build contract is **master_stage_spec.md**.
 
 
-**2026-07-18 rename + Windows-UTF8 + verdict-softening pass.** Program renamed `stage8_discovery` → `dot_master_discovery`. All text file I/O now carries `encoding='utf-8'` (Windows cp1252 crashes on `→`/`×`/`≥`). S8 verdict softened to a quiet US30-baseline canary. The 5 sacred files stay **byte-identical** (their historical "Stage-8" phase comments are preserved under byte-lock — those name the dev phase, not the directory). Non-sacred scripts touched this pass (new shas above): master.py `aa08a4cceaad`, run_full_analysis `886ea8ca17fa`, analysis_engine `d9acd1ddc3fe`, single_variable_extremes `37e3a9075aea`, run_f1_parallel `230427fcbd04`, concurrence_profiler `554019e93069`. master.py also received later post-ratification patches (Windows UTF-8 file-I/O + natural-sort/S0 header-handling for >9 split parts + rebuild.py integration via shared `_packutil.py`) — committed-path logic unchanged, $92,347 re-verified REPRODUCED. **The Auditor-ratified master.py sha was `aa08a4cceaad`; it is superseded by the current `db8957587844` — a fresh Auditor pass on `db8957587844` is pending.**
+**2026-07-18 rename + Windows-UTF8 + verdict-softening pass.** Program renamed `stage8_discovery` → `dot_master_discovery`. All text file I/O now carries `encoding='utf-8'` (Windows cp1252 crashes on `→`/`×`/`≥`). S8 verdict softened to a quiet US30-baseline canary. The 5 sacred files stay **byte-identical** (their historical "Stage-8" phase comments are preserved under byte-lock — those name the dev phase, not the directory). Non-sacred scripts touched this pass (new shas above): master.py `47e8c14d6c97`, run_full_analysis `886ea8ca17fa`, analysis_engine `d9acd1ddc3fe`, single_variable_extremes `37e3a9075aea`, run_f1_parallel `230427fcbd04`, concurrence_profiler `554019e93069`. master.py also received later post-ratification patches (Windows UTF-8 file-I/O + natural-sort/S0 header-handling for >9 split parts + rebuild.py integration via shared `_packutil.py`) — committed-path logic unchanged, $92,347 re-verified REPRODUCED. **The Auditor-ratified master.py sha was `47e8c14d6c97`; it is superseded by the current `db8957587844` — a fresh Auditor pass on `db8957587844` is pending.**
 
 Headline reconciliation: the ratified scripts (engines, oracle, 13 scanners, orchestrator) are byte-identical between the pack and the project files. `master.py` orchestrates them and never rewrites them.
 
@@ -161,8 +161,8 @@ Oracle / wf / core are byte-identical to the project copies (§7) and must stay 
 | `engine/core.py` | `6530e2508b17` | MATCH |
 | `engine/dots_thresholds.py` | `518862bf19fb` | MATCH |
 | `engine/book50_signals.csv` | `e86a52244501` | MATCH |
-| `orchestrator/discovery_orchestrator.py` | `0a0c75f4f3ae` | MATCH |
-| `scanners/triple_convergence_and_d2ddir.py` (F0) | `eb3f58ad19fa` | MATCH |
+| `orchestrator/discovery_orchestrator.py` | `14aa5323cb46` | MATCH |
+| `scanners/triple_convergence_and_d2ddir.py` (F0) | `562db4436bb7` | MATCH |
 | `scanners/sequential_temporal.py` (F1) | `6c89c865fff1` | MATCH |
 | `scanners/state_transition.py` (F2) | `8cb42c9d9891` | MATCH |
 | `scanners/conditional_interaction.py` (F3) | `7908ed0c5fbc` | MATCH |
@@ -173,12 +173,12 @@ Oracle / wf / core are byte-identical to the project copies (§7) and must stay 
 | `scanners/cross_variable_structure.py` (F8) | `5594fa73a7d3` | MATCH |
 | `scanners/session_temporal.py` (F9) | `2e5f1703aaa2` | MATCH |
 | `scanners/rolling_leadlag.py` (F11) | `08848774ca1c` | MATCH |
-| `scanners/concurrence_profiler.py` (F12) | `a120f75fe5d3` | MATCH |
-| `scanners/single_variable_extremes.py` (F13) | `37e3a9075aea` | MATCH |
+| `scanners/concurrence_profiler.py` (F12) | `4d782df381e0` | MATCH |
+| `scanners/single_variable_extremes.py` (F13) | `7d8cba59f38b` | MATCH |
 | `scanners/f0_to_schema.py` | `f878d3b46c8b` | MATCH |
-| `scanners/run_f0_full.py` | `8a8a276cfbef` | MATCH |
+| `scanners/run_f0_full.py` | `af8e1497ffbb` | MATCH |
 | `scanners/run_f1_parallel.py` | `230427fcbd04` | MATCH |
-| `master.py` | `aa08a4cceaad` | run entry point (S0 re-ingests split parts, natural-sort) |
+| `master.py` | `47e8c14d6c97` | run entry point (S0 re-ingests split parts, natural-sort) |
 | `rebuild.py` | `609580a417fe` | data-prep entry point (raw export → data/) |
 | `engine/family_evidence.py` | *(see manifest)* | S3B per-family evidence review + D2D gate measurement (spec A.1–A.5, E.1) |
 | `engine/selection.py` | *(see manifest)* | S5B selection layer: objective, per-direction greedy, constraints, hygiene (spec C, D.1–D.2, G, H) |
@@ -232,7 +232,7 @@ Deprecated figures (not files): modelled `$90,103` (S.20 harness) / `$92,567` (D
 **CARRY** — `master.py` orchestrates all of these (byte-identical):
 - **Sacred (5):** `dots_thresholds.py` `518862bf19fb`, `wf.py` `4ac888f3af9d`, `core.py` `6530e2508b17`, `portfolio_simulation_engine.py` `7f66273011a2`, `conviction.py` `27af7acee824`.
 - **Scoring:** `score_g.py` `61299d41d864`, `score_book50.py` `1bdf9ceec75f`, `analysis_engine.py` `6e1009d7f03b`, `run_full_analysis.py` `9c719b39dd72`.
-- **13 scanners + runners:** F0–F13 per §3/§10 of the spec; `run_f0_full.py` `8a8a276cfbef`, `run_f1_parallel.py` `230427fcbd04`, `f0_to_schema.py` `f878d3b46c8b`; `discovery_orchestrator.py` `0a0c75f4f3ae`.
+- **13 scanners + runners:** F0–F13 per §3/§10 of the spec; `run_f0_full.py` `af8e1497ffbb`, `run_f1_parallel.py` `230427fcbd04`, `f0_to_schema.py` `f878d3b46c8b`; `discovery_orchestrator.py` `14aa5323cb46`.
 - **Book + entry:** `book50_signals.csv` `e86a52244501` (frozen US30 book); `master.py` (folds in `reproduce_dot.py`'s S8 logic).
 
 **DROP** — never carried:
@@ -250,6 +250,6 @@ Deprecated figures (not files): modelled `$90,103` (S.20 harness) / `$92,567` (D
 ## Resolution status (all reconciled in the master build)
 1. **F10** — FOLDED INTO F0 (concurrence lens null; F12 profiler is the diagnostic remnant). Not a gap; the family set is complete.
 2. **`dots_results/`** — `master.py` materialises the F0 outputs under `/discovery/` on a discover-fresh run (S3→S4).
-3. **`signal_full_records.csv` / `signal_per_day_pnl.jsonl` (stale)** — `master.py` S6 REGENERATES them fresh under the current engine; the stale copies (`aa08a4cceaad` / `0910f360a628`) are never carried.
+3. **`signal_full_records.csv` / `signal_per_day_pnl.jsonl` (stale)** — `master.py` S6 REGENERATES them fresh under the current engine; the stale copies (`47e8c14d6c97` / `0910f360a628`) are never carried.
 4. **Canonical splitter** — `master.py` S9 auto-split (see §4).
 5. **Docs** — `master_guide.md` (run) + `discovery_map.md` (inventory) + `master_stage_spec.md` (build contract) are the current surface; `RUN_STAGE8.md` / `DOT_stage8_program_map.md` / `stage8.py` are retired (§7e).

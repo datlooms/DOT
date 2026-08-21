@@ -1169,7 +1169,7 @@ $258,236. **1.0 is a ceiling by construction, not a tuning choice.**
 earlier draft listed only four short conditions where there are eight.
 
 **All trade-management work ran on a research copy. The sacred
-`portfolio_simulation_engine.py` is byte-identical at `bb498eb13ce3`.**
+`portfolio_simulation_engine.py` is byte-identical at `7f66273011a2`.**
 
 
 

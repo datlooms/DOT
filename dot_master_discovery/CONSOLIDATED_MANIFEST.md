@@ -22,9 +22,9 @@ Total files: 102 — NEW 3, MODIFIED 6, UNCHANGED FROM MAIN 93 (of which 60 are 
 | `engine/selection.py` | `02cd79ad914b` | NEW | S5B selection layer (spec C, D.1-D.2, G, H) |
 | `engine/wf.py` | `4ac888f3af9d` | UNCHANGED FROM MAIN | SACRED walk-forward folds (month-literal; never imported by selection) |
 | `engine/wf_selection.py` | `e0a6d884e477` | NEW | S5C walk-forward on the selection process (spec I) |
-| `master.py` | `3416a3d71d12` | MODIFIED | SINGLE ENTRY POINT — orchestrates S0-S9 incl. S3B/S5B/S5C/S8B |
+| `master.py` | `47e8c14d6c97` | MODIFIED | SINGLE ENTRY POINT — orchestrates S0-S9 incl. S3B/S5B/S5C/S8B |
 | `master_guide.md` | `88a814f96554` | MODIFIED | full operator guide: every stage, every output |
-| `orchestrator/discovery_orchestrator.py` | `f181e72a6779` | UNCHANGED FROM MAIN | drives the family scanners (S3) |
+| `orchestrator/discovery_orchestrator.py` | `14aa5323cb46` | UNCHANGED FROM MAIN | drives the family scanners (S3) |
 | `raw/.gitkeep` | `e3b0c44298fc` | UNCHANGED FROM MAIN | drop the raw EA export here |
 | `raw/readme.txt` | `bbde30c0aa32` | UNCHANGED FROM MAIN | drop the raw EA export here |
 | `rebuild.py` | `609580a417fe` | UNCHANGED FROM MAIN | data-prep: raw EA export -> validated 171-col baseline -> data/ |
@@ -38,13 +38,13 @@ Total files: 102 — NEW 3, MODIFIED 6, UNCHANGED FROM MAIN 93 (of which 60 are 
 | `scanners/mean_reversion.py` | `868bc7edf5fe` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
 | `scanners/persistence_autocorr.py` | `cd3afbfe6994` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
 | `scanners/rolling_leadlag.py` | `08848774ca1c` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
-| `scanners/run_f0_full.py` | `8a8a276cfbef` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
+| `scanners/run_f0_full.py` | `af8e1497ffbb` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
 | `scanners/run_f1_parallel.py` | `230427fcbd04` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
 | `scanners/sequential_temporal.py` | `6c89c865fff1` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
 | `scanners/session_temporal.py` | `2e5f1703aaa2` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
 | `scanners/single_variable_extremes.py` | `7d8cba59f38b` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
 | `scanners/state_transition.py` | `8cb42c9d9891` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
 | `scanners/threshold_crossing.py` | `147deb44d1b5` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
-| `scanners/triple_convergence_and_d2ddir.py` | `8e433ec74de1` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
+| `scanners/triple_convergence_and_d2ddir.py` | `562db4436bb7` | UNCHANGED FROM MAIN | family scanner (F0-F13) |
 
 60 `discovery_results/_f13_shards/shard_*.csv|.done` files: all UNCHANGED FROM MAIN, F13 crash-resume intermediates.
