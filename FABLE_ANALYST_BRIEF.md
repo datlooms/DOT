@@ -420,3 +420,197 @@ say no.**
 matrix, three wrong p-values in a ratified spec, a canary that had been silently dead for weeks, a provenance
 column that had been printed on 297 rows the whole time. THE MACHINERY IS THE POINT. Use it on your own work
 first.**
+
+---
+
+# 14. SUPERVISOR ADDENDUM — 2026-08-21
+
+**Added by the Supervisor seat after the emit-all scan was launched. These are OPEN QUESTIONS with the
+measurement each one needs, not findings. Every figure below was re-derived this session from source or
+from the record, and each says which.**
+
+### 14.1 — THE 297 HAS NEVER BEEN MEASURED OUT OF SAMPLE
+
+There is no OOS figure for the 297 anywhere in the record. Its entire frame — Jan 19 to Jul 21, 132 days —
+is in-sample. `5,776 / PF 14.53 / $284,974` is an in-sample number and should be labelled as one on every
+report.
+
+**The project's only true out-of-sample event is step 17k**, and it went badly:
+
+```
+BOOK-50   overlap Apr08-Jun25    975 tr   PF 6.08   WR 92.1%   worst day -$204
+BOOK-50   NEW     Jun25-Jul21    375 tr   PF 2.19   WR 81.1%   worst day -$565
+```
+
+Profitable, survived, did NOT invert — and PF fell by two thirds. **Trade rate was unchanged at ~20/day, so
+nothing throttled it in the weaker regime.** That table is the clearest existing statement of the problem the
+adaptive engine exists to solve: the signals kept firing and nothing told them the moment had changed.
+
+**AND THE 297 SCORES PF 40.69 IN JULY — the same 18 days on which BOOK-50 collapsed.** That is not the 297
+being better. It is the definition of in-sample, stated in the book's own monthly table. The seventh month is
+the only real test either the book or the engine will ever get.
+
+### 14.2 — JUNE IS THE CASE STUDY, AND THE FORENSIC THAT CLEARED IT WAS UNDERPOWERED
+
+Monthly, L3/S3, cap 21, frozen gates, 1.0 lot:
+
+| month | trades | bars | WR% | PF | events | worst day | losing days | MARGIN |
+|---|---|---|---|---|---|---|---|---|
+| 2026.05 | 659 | 111 | 98.18 | **60.64** | 2 | -$73.30 | 1 | **51.11** |
+| 2026.06 | 965 | 164 | 91.19 | **5.34** | **14** | **-$346.60** | **4** | 25.20 |
+
+**June carries 14 of the book's 42 loss events — one third — on 17% of the entry population, owns the worst
+day, and 4 of the 7 losing days. It is the only month below 96% WR. An 11x PF swing between consecutive
+months.** It still made $32,591; there is no losing month in the book.
+
+The earlier June forensic found **no bar-level signature** — elevation uniform across BASE 2.65x, MOM 1.56x,
+LONG 2.55x, SHORT 1.80x; eleven variables plus two path controls and two direction controls separated
+nothing. May is the flattest month by ATR (9.07) and the best by PF, which kills the flatness hypothesis.
+
+**THAT FORENSIC RAN ON 14 LOSS EVENTS ACROSS ELEVEN VARIABLES AND FOUR CONTROLS.** Per 12f, a no-effect
+result on fewer than 20 events is a candidate for the power-failure defect class, not a negative. **June is
+therefore OPEN, and it is the single best test of the gate thesis available** — on a field with thousands of
+events the same question is answerable for the first time. Find what separates June, or establish AT PROPER
+POWER that nothing does. If nothing does, the gate thesis has a ceiling and its location is the finding.
+
+**EDGE-MONTH CAVEAT:** January is 5 trading days (frame starts 2026.01.19) and July is 13. January's PF 19.49
+rests on ONE loss event and July's 40.69 on THREE. Both are counts. Decline the rates on those two rows.
+
+### 14.3 — THE GATE HIERARCHY IS FOUR TIERS, NOT A FLAT LIST OF SEVEN
+
+The operator's framing, recorded because prior passes treated all seven gates as peers:
+
+```
+PARTICIPATION   ADX >= 15 · ATR_1M >= 20 · ticks > 50 · post-warmup · not Friday-close
+                ONE precondition expressed three ways — "do not trade a market that is not
+                moving". NOT a gate. Not tunable at the low end. The tick gate is already
+                measured REDUNDANT against ATR_1M >= 20 (98.3% overlap).
+                ATR only becomes a DIAL above 20, where it stops asking "is the market alive"
+                and starts asking "how big is this move". Keep those two questions apart or
+                the sweep will re-derive the floor and call it a finding.
+
+STATE           D2D direction agreement — THE FRAME, not a filter.
+                Raw D2D flip + ADX>=15 + ticks>=300 = 77.7% WR, PF ~1.7 on its own.
+                Everything else operates INSIDE this window.
+
+EVENT           depth — where inside that window is the move LARGE.
+                State alone 77.7% / PF 1.7. State + depth-3 stacking 96.12% / PF 14.53.
+                DEPTH-WITHIN-STATE IS WHAT TAKES 1.7 TO 14.53.
+
+CONFIRM         Micro_Hurst · Micro_FailedBreak · higher ATR · higher ticks
+                needed at SHALLOW depth, inert at depth 6.
+```
+
+**THE CORRECTION THAT MATTERS: Hurst is not weak and it is not decoration.** Hurst and FailedBreak are the two
+strongest variables in the 172 and run PF 4+ as solo triggers. Hurst guides solos, duals and triples well. It
+fires zero times at L6/S4 **because depth has already answered the question, not because the gate is weak.**
+Any report stating "the gates are decoration" is misreading a depth result as a gate result.
+
+**THE UNASKED HYPOTHESIS:** every prior pass tested descriptors as a FLAT screen at fixed depth. **Nobody has
+tested a gate whose REQUIREMENT SCALES WITH DEPTH.** Hurst load-bearing at 1-3 and released at 6 is a
+different object from Hurst as a flat screen, and it is not covered by the null that closed the flat version.
+
+### 14.4 — WHAT REOPENS AND WHAT DOES NOT
+
+```
+adaptive engine "dead three ways"   REOPENABLE. Measured at floor 3 on a PF-gated field.
+                                    Floor 3 on 297 signals and floor 3 on a large field are
+                                    different objects. Matched-entry-bar floor took the SAME
+                                    universe 6.17 -> 32.75 margin. The deciding dial was
+                                    never moved. BUT: PF 1.29 (Phase 8) and PF 1.39
+                                    (floor-3 ungated, months later) are the same answer twice,
+                                    independently. If the matched-floor sweep on the
+                                    unfiltered field lands near 1.3 again, that is THREE and
+                                    the door shuts properly. Say so if it does.
+
+single-descriptor gates             HARD TO REOPEN. The rarity-matched null put the expected
+                                    number of hits from that search at 0.70 and ONE was found.
+                                    That is chance, not underperformance, and a different floor
+                                    does not change the arithmetic. What the null does NOT
+                                    cover: a descriptor applied CONDITIONALLY ON DEPTH. Only
+                                    the flat form was searched.
+
+stacked descriptor states           CLOSED on the intersection curve collapsing at 3-4.
+                                    That is a finding about STACKING, not about conditional use.
+
+L2/S2 on a small book               CLOSED. A property of 116 signals making many pairs.
+```
+
+### 14.5 — QUALIFY THE VARIABLES, NOT JUST THE SIGNALS
+
+`172 = Time + 171`. `171 - 54 EXCLUDE_REFERENCE = 117 candidates = 90 percentile-scanned + 27 equality`,
+producing 249 scan conditions. **The 54 excluded are structural, never quality:** non-stationary raw price
+levels (their `*_Dist_ATR` counterparts ARE candidates), exact twins (`KAMA_Side`/`Harmonic_Sign` are
+sign-twins; `OBVf_DirStep` is byte-identical to `D2D_DirStep`), dead columns, and `D2D_Trend_Dir` which is
+excluded because it IS the gate. **That trim is finished and correct. The quality question has never been
+asked.**
+
+Measured this session from `engine/whole_dot_signals.csv`:
+
+```
+297 signals x 3 conditions        891 slots
+distinct base variables           105 of 117
+effective count (e^H)             83.2 against a 105 ceiling
+most frequent variable            AT_Slope_ST at 4.3% of slots
+variables appearing exactly once  7
+twelve of the 117 never appear in the book at all
+```
+
+**A curve-fit book CONCENTRATES — it reuses the four variables that worked in the window. This one spreads
+across 90% of the vocabulary with a 4.3% maximum and no concentration anywhere.** That is what you would
+expect if the identity of the three conditions never mattered and the EVENT is what is being detected. It is
+the strongest structural evidence in the project that the book is not fitted, and it has been sitting
+uncomputed.
+
+**THE TEST FOR TRIMMING IS NOT "IS THIS VARIABLE A GOOD TRIGGER."** Per mantra 4.2 the regime dominates the
+signal — at depth 8+ the worst signal in the book still wins 81%. **The test is: does this variable go extreme
+when a large price event is happening.** Three counts on the emit-all field, no trades, no engine, cheap:
+
+```
+1  does it appear in any signal at all
+2  how often does it appear on bars reaching depth 3+ / 6+
+3  drop it and re-count — does the depth histogram move
+```
+
+Two ways it lands and both are useful: a real tail that can be cut, or everything participates evenly — which
+would mean **breadth IS the mechanism**, and that is why depth measures a large event rather than a repeated
+opinion.
+
+### 14.6 — THE FIELD YOU ARE GETTING, AND WHAT STILL FILTERS IT
+
+The emit-all F0 scan lifts THREE filters. **The operative trade floor was 30, not 10** — `F0_MIN_TRADES_OVERRIDE = 30`
+at `discovery_orchestrator.py` L395, assigned at L415, three times stricter than the number quoted in this
+brief, the R&D plan, TOMORROW_PLAN and all four non-negotiables. **The 19,754 was screened at 30 trades and
+MIN_PF 2.0.** Under `--emit-all` the override is BYPASSED rather than lifted — `_min_trades()` returns
+`0 if EMIT_ALL` before it ever reads the constant — so the run is correct, but a rewrite as
+`min(MIN_TRADES, ...)` brings the 30 straight back.
+
+```
+LIFTED    MIN_TRADES (effective 30) · MIN_PF (2.0) · dedup OVERLAP_THRESHOLD (0.80 -> 1.01)
+KEPT      ADX >= 15 · Volume > 50 · D2D_Trend_Dir agreement · post-warmup · not Friday-close
+```
+
+**The kept set is the definition of a valid bar and must not be lifted.** Note that `ATR_1M >= 20` lives in the
+engine's admission chain and NOT in the scanner's line, so **the catalogue will contain signals whose entries
+sit on sub-20-ATR bars the engine would never trade.** Not a defect — the field is slightly wider than the
+tradeable universe and the ATR floor applies at scoring time. Do not read a row count as "signals we can
+trade".
+
+**DEDUP IS NOT A PERFORMANCE FILTER AND LIFTING IT HAS A CONSEQUENCE.** It removes near-duplicates, and
+near-duplicates INFLATE DEPTH. A floor doing the selecting over a duplicated field measures REDUNDANCY rather
+than event size. Dedup is post-hoc on emitted rows, so **recompute the 0.80 dedup in post from the 1.01 output
+and difference the two depth histograms.** If depth at the matched floor drops materially, the floor was
+counting clones. If it barely moves, depth is real and **that difference IS Attack B part 2**, which is
+recorded NOT RUN and arrives free.
+
+### 14.7 — PRE-REGISTRATION IS THE DELIVERABLE, NOT THE REPORT
+
+**The success test is not "does it beat the 297 on net". It is: DOES A RULE STATED TODAY STILL ADMIT CORRECTLY
+ON DATA THAT DOES NOT EXIST YET.**
+
+A rule written after seeing the result is not a rule. The pre-registration discipline that produced
+`gates.preregistered` applies to the WHOLE gate set here, not to individual candidates. **Whatever the sweep
+settles on is written down and FROZEN before the seventh month of data arrives.** That freeze is the only test
+this architecture can actually fail, and it is the only one worth passing.
+
+**Both the incumbent and the engine are unvalidated out of sample. The seventh month tests both at once.**
