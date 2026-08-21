@@ -745,7 +745,8 @@ def s3_discovery(out, workers, input_sha, scope, df=None, ad=None, st=None, w=No
     print('   and re-scans only the incomplete ones, so the worst case loss is ONE family, not the whole stage.)')
     orch.orchestrate(scope, workers=workers, df=df, adaptive=ad, structural=st, warmup=w,
                      frame_path=frame_path, input_sha=input_sha, limit=limit,
-                     emit_all=globals().get('EMIT_ALL_F0', False))
+                     emit_all=globals().get('EMIT_ALL_F0', False),
+                     only_families=globals().get('ONLY_FAMILIES'))
     run_diagnostic_families(results, workers, input_sha, df=df)
     orch.verify_diagnostic_outputs(results, input_sha)
     emit_regime_labels(df, results, out, input_sha)
@@ -4092,6 +4093,11 @@ def main():
     ap.add_argument('--market-label', default='US30 (sealed baseline)')
     ap.add_argument('--parity', default=None,
                     help="run the chunking parity harness and exit: a family (e.g. F0) or 'all'")
+    ap.add_argument('--family', default=None,
+                    help='Run ONLY these families this pass, comma-separated (e.g. F0). '
+                         'Every other family is SKIPPED. F1 alone is 1,713,630 candidates '
+                         'and roughly eight hours, so an F0-only catalogue must not require '
+                         'running all fourteen.')
     ap.add_argument('--emit-all', action='store_true',
                     help='F0 emits EVERY signal: MIN_TRADES, MIN_PF and the dedup '
                          'OVERLAP_THRESHOLD all lifted. Use a DISTINCT --out so the '
@@ -4108,6 +4114,12 @@ def main():
     ap.add_argument('--parity-limit', type=int, default=200,
                     help='cap each family to the first N axis units, applied to BOTH parity legs')
     args = ap.parse_args()
+    if getattr(args, 'family', None):
+        globals()['ONLY_FAMILIES'] = [x.strip().upper() for x in args.family.split(',')
+                                      if x.strip()]
+        print(f"  *** --family {globals()['ONLY_FAMILIES']}: a RESTRICTED pass. Every "
+              f"other family is skipped and the results directory will be PARTIAL. ***",
+              flush=True)
     if getattr(args, 'emit_all', False):
         globals()['EMIT_ALL_F0'] = True
         print('  *** --emit-all: the F0 scan will emit every signal regardless of trade '

@@ -1297,7 +1297,7 @@ def _parity_estimate(fam, n_units, n_full):
 
 def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=None,
                 warmup=None, frame_path=None, input_sha=None, diagnostics=('F12', 'F13'),
-                limit=0, emit_all=False):
+                limit=0, emit_all=False, only_families=None):
     os.makedirs(RESULTS_DIR, exist_ok=True)
     # --emit-all reaches the scanner through here. It existed only in the scanner's own
     # main(), so the ORCHESTRATED F0 path - the one that writes F0_CSV - could not reach
@@ -1326,10 +1326,32 @@ def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=Non
         structural = dt.compute_structural_gates(df)
     builders = _scope(scope)
     f1_csv_present = os.path.exists(os.path.join(RESULTS_DIR, F1_CSV))
-    pool_queued = [f[0] for f in FAMILIES if not (f[0] == 'F1' and f1_csv_present)]
-    verify_family_coverage(pool_queued, list(diagnostics), input_sha, RESULTS_DIR)
+    # --family restricts the pass to a named subset. F1 ALONE IS 1,713,630 CANDIDATES
+    # AND ROUGHLY EIGHT HOURS, so an operator who wants only the F0 catalogue must not
+    # be made to run all fourteen. SKIPPED ENTIRELY - not run at reduced scope and not
+    # run then discarded.
+    _only = None
+    if only_families:
+        _only = {str(x).upper() for x in only_families}
+        _known = {f[0] for f in FAMILIES} | set(diagnostics)
+        _bad = sorted(_only - _known)
+        if _bad:
+            raise SystemExit(f'ABORT [--family] unknown family/families {_bad}. Known: '
+                             f'{sorted(_known)}')
+        diagnostics = tuple(d for d in diagnostics if d in _only)
+        print(f'  *** --family {sorted(_only)}: every other family is SKIPPED. The results '
+              f'directory will contain ONLY these, so any later stage that ingests the full '
+              f'family set will see a partial pool. ***', flush=True)
+    pool_queued = [f[0] for f in FAMILIES if not (f[0] == 'F1' and f1_csv_present)
+                   and (_only is None or f[0] in _only)]
+    if _only is None:
+        verify_family_coverage(pool_queued, list(diagnostics), input_sha, RESULTS_DIR)
+    else:
+        print(f'  family-coverage verification SKIPPED - it asserts the FULL family set and '
+              f'this is a restricted pass by request.', flush=True)
     schedule = [(fam, script, mod, fmt) for fam, script, mod, fmt in FAMILIES
-                if not (fam == 'F1' and f1_csv_present)]
+                if not (fam == 'F1' and f1_csv_present)
+                and (_only is None or fam in _only)]
     total = len(schedule)
     pending = []
     resumed = []
