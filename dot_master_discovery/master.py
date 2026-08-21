@@ -1753,6 +1753,15 @@ LOADER_ALLOWLIST = {
     # and adm_engine.run_portfolio takes df as its first argument. Allowed on that
     # basis: same count, same shape, same reason as the file it forks.
     'engine/adm_engine.py': 2,
+    # scanners/triple_convergence_and_d2ddir.py: TWO SITES, BOTH engine.load_sealed_baseline().
+    #   L612 main()        - the standalone entry point
+    #   L647 run_density() - the density-sweep entry point
+    # It previously had FOUR: a LOCAL def at L118 that SHADOWED the patched engine loader,
+    # two bare local calls, and the deferral into dot_frame_binding that made the local def
+    # safe. THE LOCAL DEFINITION WAS THE DEFECT and it is gone - both calls now reach the
+    # bound loader, so there is no second loader here that can drift from it.
+    # A COUNT GETS BUMPED; A REASON GETS READ. This entry says what each site is, so the
+    # next person to touch the file has to justify a third rather than increment a number.
     'engine/analysis_engine.py': 2, 'engine/portfolio_simulation_engine.py': 2,
     'engine/run_full_analysis.py': 1, 'engine/score_book50.py': 1, 'engine/score_g.py': 1,
     'engine/wf.py': 1, 'orchestrator/discovery_orchestrator.py': 2,
@@ -1763,7 +1772,7 @@ LOADER_ALLOWLIST = {
     'scanners/run_f1_parallel.py': 1, 'scanners/sequential_temporal.py': 1,
     'scanners/session_temporal.py': 1, 'scanners/single_variable_extremes.py': 1,
     'scanners/state_transition.py': 1, 'scanners/threshold_crossing.py': 1,
-    'scanners/triple_convergence_and_d2ddir.py': 3,
+    'scanners/triple_convergence_and_d2ddir.py': 2,
 }
 
 

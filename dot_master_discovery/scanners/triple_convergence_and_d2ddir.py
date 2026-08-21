@@ -115,64 +115,22 @@ EXCLUDE_REFERENCE = {
 #  8-PART SEALED-BASELINE LOADER (shared, identical across tools)
 # ═══════════════════════════════════════════════════════════════
 
-def load_sealed_baseline(verbose=True):
-    """PERMISSIVE-FALLBACK TRAP, CLOSED.
-
-    dot_frame_binding.install() patches portfolio_simulation_engine.load_sealed_baseline.
-    THIS MODULE DEFINES ITS OWN OF THE SAME NAME AT MODULE SCOPE, WHICH SHADOWS THE
-    PATCHED ONE - the scanner imports `portfolio_simulation_engine as engine` but calls
-    the bare local name at L618 and L653, so the binding never applies and this reaches
-    for the hardcoded equiDOT_recon171_step7_part*.csv instead.
-
-    On this box those files are absent and it dies with FileNotFoundError. IF THEY HAD
-    BEEN PRESENT IT WOULD HAVE PRODUCED A PLAUSIBLE CATALOGUE ON THE WRONG 152,983-ROW
-    DATASET WITH NO ERROR AT ALL. That is the fourth instance of the permissive-fallback
-    class and it is the dangerous shape: a wrong answer, not a crash.
-
-    So: if the frame binding is configured, DEFER TO IT. Only fall through to the parts
-    when nothing has been bound, and say which happened.
-    """
-    try:
-        import dot_frame_binding as _fb
-        if _fb.is_configured():
-            _df = _fb.install()
-            if verbose:
-                print(f"  frame from dot_frame_binding: {len(_df):,} rows x "
-                      f"{_df.shape[1]} cols (NOT the hardcoded baseline parts)", flush=True)
-            return _df
-    except SystemExit:
-        raise
-    except Exception as _exc:
-        raise SystemExit(
-            f'ABORT [F0 frame] dot_frame_binding is configured but did not bind: '
-            f'{type(_exc).__name__}: {str(_exc)[:100]}. REFUSING to fall through to the '
-            f'hardcoded equiDOT_recon171_step7_* parts, which are a DIFFERENT DATASET '
-            f'(152,983 rows) and would produce a plausible catalogue on the wrong frame.')
-    if not os.path.exists(PARTS[0]):
-        raise SystemExit(
-            f'ABORT [F0 frame] no frame bound and {PARTS[0]} is absent. This entry point '
-            f'has no usable dataset. Run it through master.py so S0 ingest binds the '
-            f'frame:\n'
-            f'    python master.py --data data --workers 14 --out <dir> --stage S3 '
-            f'--family F0 [--emit-all]')
-    hdr = list(pd.read_csv(PARTS[0], nrows=0).columns)
-    frames = [pd.read_csv(PARTS[0])]
-    for p in PARTS[1:]:
-        frames.append(pd.read_csv(p, header=None, names=hdr))
-    df = pd.concat(frames, ignore_index=True)
-    assert df.shape == (152983, 171), f"baseline shape {df.shape} != (152983, 171)"
-    times = df['Time'].values
-    assert (times[1:] > times[:-1]).all(), "Time not strictly increasing"
-    assert int(df.duplicated().sum()) == 0, "duplicate rows present"
-    assert int(df.isna().sum().sum()) == 0, "NaN present in baseline"
-    vsa = pd.Series(dt._vwap_sigma_atr(df, df['ATR_1M'].values.astype(float)),
-                    index=df.index, name='VWAP_Sigma_ATR')
-    df = pd.concat([df, vsa], axis=1)
-    if verbose:
-        print(f"Baseline loaded: {df.shape[0]} rows x 171 cols (+VWAP_Sigma_ATR derived)")
-        print(f"  Time strictly increasing: OK | 0 duplicate rows | 0 NaN")
-        print(f"  Range: {df['Time'].iloc[0]} -> {df['Time'].iloc[-1]}")
-    return df
+# THE SEALED-BASELINE LOADER IS NOT DEFINED HERE. THE LOCAL DEFINITION WAS THE DEFECT.
+#
+# dot_frame_binding.install() patches the loader on portfolio_simulation_engine. This
+# module defined its own of the same name at module scope, which SHADOWED the patched
+# one - the scanner imports `portfolio_simulation_engine as engine` but called the bare
+# local name, so the binding never applied and the scanner reached for the hardcoded
+# equiDOT_recon171_step7_part*.csv: a DIFFERENT 152,983-row dataset. On a box where
+# those files exist it would have produced a plausible catalogue on the WRONG FRAME with
+# no error at all.
+#
+# Calling through `engine.` removes the shadow, so the binding lands and there is no
+# longer a second loader here that can drift from the bound one.
+#
+# NOTE FOR THE LOADER AUDIT: it counts raw occurrences of the symbol name in this file,
+# so prose mentioning it inflates the count. This comment deliberately avoids the bare
+# literal - two occurrences remain and both are real call sites (main, run_density).
 
 def warmup_floor(df, verbose=True):
     eligible = (df['ADX_Value'].values >= 15) & (df['Volume'].values > 50)
@@ -654,7 +612,7 @@ def density_sweep(df, signals_df, k_bands, adaptive, structural, warmup):
 
 
 def run_density(signals_path):
-    df = load_sealed_baseline()
+    df = engine.load_sealed_baseline()
     warmup = warmup_floor(df)
     adaptive = dt.compute_adaptive_thresholds(df)
     structural = dt.compute_structural_gates(df)
@@ -689,7 +647,7 @@ def main():
     print("equiDOT — Triple-Convergence Discovery (117 candidates, mechanism-D oracle)")
     print(f"Config: risk={RISK_MULT}, step={STEP_PCT}, min_trades={MIN_TRADES}, "
           f"min_PF={_min_pf()}, dedup={_overlap_threshold()}")
-    df = load_sealed_baseline()
+    df = engine.load_sealed_baseline()
     warmup = warmup_floor(df)
     feat_candidates, equality_candidates = build_candidates(df)
     adaptive = dt.compute_adaptive_thresholds(df)
