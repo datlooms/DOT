@@ -155,12 +155,21 @@ DOTS triple-convergence signal architecture are the foundation. ResizeAndSmartSh
 as sole shift authority, one shift per new bar, zero terminal overrides, the SACRED
 calculation pass order, strict write-authority. Triple-convergence is irreducible:
 density or minimum-convergence variants do not reproduce the edge. The triple-
-convergence ARCHITECTURE is sacred. Stage-8 discovery is COMPLETE: the signal SET is now
-LOCKED to the ratified BOOK-50 roster (S.11) -- 48 F0 same-bar triples + 2 F1 sequential
-fills. The prior 76-signal set lived on broken (delta+2 / cold-start) data and is a benchmark
-only. The project is now in STAGE 9 (EA build): the engine is UNFROZEN for the build,
-governed by the normal full pipeline (Developer -> Supervisor -> Auditor -> human confirm +
-MetaEditor 0/0). The "no EA changes during discovery freeze" directive is RETIRED and
+convergence ARCHITECTURE is sacred. Stage-8 discovery is COMPLETE: the ADOPTED BOOK OF
+RECORD is THE WHOLE DOT (S.11) -- 297 F0 same-bar triples, 191 LONG / 106 SHORT, depth floor
+LONG >= 3 / SHORT >= 3 under FLOORED admission, MAX_POSITIONS 21, at 1.0 lot. The prior
+76-signal set lived on broken (delta+2 / cold-start) data and is a benchmark only. The
+project is in the DISCOVERY / SELECT / ADAPTIVE-CONVERGENCE-ENGINE program on the 177,251-bar
+stitched frame; the EA build is NOT the live stage. Any EA window is governed by the normal
+full pipeline (Developer -> Supervisor -> Auditor -> human confirm + MetaEditor 0/0).
+CORRECTION 2026-08-21: this paragraph previously read "the signal SET is now LOCKED to the
+ratified BOOK-50 roster (S.11) -- 48 F0 same-bar triples + 2 F1 sequential fills" and "The
+project is now in STAGE 9 (EA build)". Both were superseded and neither was true. BOOK-50 was
+superseded by OPTION-B, then by the four-way union of 299, reduced to 297 at execution-
+sequence step 28a. The project left the Stage-9 build path when discovery reopened. A seat
+reading the prior text asserted BOOK-50 as the book -- a live trap in the highest-priority
+document. Human-authorized correction; roster lock and stage marker ONLY, no sacred
+architecture clause touched. The "no EA changes during discovery freeze" directive is RETIRED and
 replaced with: build changes go through the full pipeline; the sealed clean baseline
 (152,983 x 171) remains the validation reference of record. No signal is added, removed, or
 substituted without the full pipeline AND explicit human confirmation.
@@ -318,8 +327,27 @@ S.10 — THE FEATURE SYSTEM & UNIFIED-THRESHOLD INFRASTRUCTURE:
   new combination of existing candidates) reopens a Stage-3-style EA change + re-export;
   it is out of scope without human authorization.
 
-S.11 — THE RATIFIED SIGNAL SET: BOOK-50 (FINAL):
-Discovery is COMPLETE. The ratified engine of record is BOOK-50: 50 signals = 48 F0 same-bar
+S.11 — THE ADOPTED SIGNAL SET: THE WHOLE DOT, 297 F0 TRIPLES (BOOK-50 IS THE CANARY):
+THE ADOPTED BOOK OF RECORD is THE WHOLE DOT: 297 F0 same-bar triple-convergence signals,
+191 LONG / 106 SHORT, floor LONG >= 3 / SHORT >= 3 (FLOORED admission), MAX_POSITIONS 21,
+1.0 lot, on the 177,251-bar stitched frame -- 5,776 trades, 973 entry bars, 119 of 132 days,
+WR 96.12%, PF 14.53, 42 LOSS EVENTS on 35 days, worst bar -$1,224, worst day -$346.60, ZERO
+losing weeks of 26, MARGIN 33.07, net $284,974. Specification: The_Whole_DOT_spec_v3.txt.
+Membership is a FOUR-WAY SET UNION (S0-120 / OPTION-B / 60-priced / BOOK-50) -- 347
+memberships across 297 unique rows -- and no single objective recovers it; fourteen
+approaches have been measured and all failed, which is the signature of a union, not of a
+failed search. THE FLOOR, THE GATES AND THE CAP ARE ONE OBJECT and none of the three may be
+carried across configurations.
+BOOK-50 IS RETAINED AS THE STANDING CANARY, NOT AS THE BOOK: 3,101 trades, WR 90.6%,
+PF 4.81, net $97,675 -- verified to the cent after every pipeline change, alongside the
+297's own figures. Its historical description follows and is preserved for the S.12 / S.13 /
+S.15-S.21 derivations that were made on it.
+CORRECTION 2026-08-21: this section previously read "S.11 - THE RATIFIED SIGNAL SET: BOOK-50
+(FINAL) / Discovery is COMPLETE. The ratified engine of record is BOOK-50". It was superseded
+by execution-sequence steps 20, 28 and 28a and was never updated. Human-authorized
+correction; roster lock ONLY. The BOOK-50 figures below are UNCHANGED and remain the canary
+reference and the derivation basis for S.12, S.13 and S.15-S.21.
+The superseded roster, preserved: BOOK-50 is 50 signals = 48 F0 same-bar
 triple-convergence (35L/13S) + 2 F1 sequential structure-fills (2L) = 37L / 13S, covering
 8/8 DOTS market structures (TREND_CONTINUATION 15, MOMENTUM_IGNITION 14, BREAKOUT_EXPANSION 8,
 STRUCTURAL_ENTRY 6, PRICE_ACTION 4, SQUEEZE_BREAKOUT 1, TREND_EXHAUSTION 1, VOLUME_CONFIRMED 1).
@@ -329,8 +357,12 @@ PF 5.15, March-bear PF 5.23 / net $13,698, OOS PF 6.54, OOS WR 92.0%, OOS net $1
 S.7-base (no runner): PF 5.60, net $55,240, worst-day -$127.5, OOS PF 5.90. The 2 F1 fills:
   SQUEEZE_BREAKOUT: Sqz_Val:hi ->13-> Micro_OrderFlowDelta:lo  [LONG]
   TREND_EXHAUSTION: ADX_Rising:==0 ->8-> D2D_DirStep:==-1       [LONG]
-The BOOK-50 roster is now FIXED. No signal may be added, removed, or substituted without the
-full pipeline (Developer -> Supervisor -> Auditor) AND explicit human confirmation.
+BOOK-50 is a CLOSED HISTORICAL ROSTER and the standing canary; it is not the book. The
+ADOPTED book is the 297 (above). No signal is added, removed, or substituted in EITHER set
+without the full pipeline (Developer -> Supervisor -> Auditor) AND explicit human
+confirmation.
+CORRECTION 2026-08-21: previously "The BOOK-50 roster is now FIXED." Superseded at
+execution-sequence step 28; human-authorized, roster lock ONLY.
 
 S.12 — THE MOMENTUM-CONDITIONAL RUNNER TM (VALIDATED UPGRADE; SACRED ONCE BUILT):
 A validated upgrade to the LeapFrog trail ONLY. Exact rule, assigned once at entry:

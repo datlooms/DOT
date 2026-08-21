@@ -15,9 +15,9 @@ SECTION B — FILE ACCESS (STRICT — this is what makes the audit blind)
 The project folder contains both raw evidence AND prior instances' conclusions. You must operate ONLY on the evidence until you have formed and stated your own independent verdict.
 
 B.1 — ALLOWED (the evidence — read and use freely):
-  - signal_full_records.csv          (the gated F0 signal field — 2,420 survivors, 68 cols, per-signal stats)
+  - signal_full_records.csv          (a gated F0 signal field from the SUPERSEDED 152,983-bar sealed baseline — 2,420 survivors, 68 cols. SUPERSEDED GENERATION: see B.4)
   - signal_per_day_pnl.jsonl         (per-signal per-day P&L vectors — the anti-fabrication ground truth)
-  - results_F0_triple_convergence_and_d2ddir.csv   (the raw F0 candidate field, 51,311)
+  - results_F0_triple_convergence_and_d2ddir.csv   (the raw F0 candidate field. CURRENT FILE IS 19,754 ROWS on the 177,251-bar stitched frame; the 51,311 figure was the superseded sealed-baseline scan — see B.4)
   - F1_part1.csv, F1_part2.csv       (the raw F1 sequential candidate field)
   - dots_thresholds.py               (the threshold oracle — SACRED, use, do not modify)
   - portfolio_simulation_engine.py   (the ratified sim engine — use run_portfolio, do not reconstruct)
@@ -27,18 +27,39 @@ B.1 — ALLOWED (the evidence — read and use freely):
 
 B.2 — FORBIDDEN until you have stated your own independent verdict (these contain the answer — reading them destroys the blind test). This list was REBUILT 2026-07-17 to the current DOT_-prefixed filenames (the prior equiDOT_/DOT50_ names are retired):
   STATE / CONCLUSION DOCS (state the answer directly):
-  - DOT_progress_and_rd_plan.md, DOT_execution_sequence.md          (full conclusion + BOOK-50 identity + S.20/S.21 + $92,347 crown jewel)
+  - DOT_progress_and_rd_plan.md, DOT_execution_sequence.md          (full conclusion + the ADOPTED 297-signal book + BOOK-50 as canary + S.20/S.21 + $92,347 crown jewel)
   - DOT_rule_master_spec.txt, DOT_dev_plan.txt                       (the spec + build changes — state the book + all sacred changes)
   - DOT_d2d_integration_blueprint.md                                (the D2D crown-jewel build contract — states the config + $92,347)
-  - DOT_performance_record.xlsx, DOT_signal_dictionary.xlsx, DOT_signal_overview.xlsx   (the record set — states BOOK-50 + stats directly)
+  - DOT_performance_record.xlsx, DOT_signal_dictionary.xlsx, DOT_signal_overview.xlsx   (the BOOK-50-era record set — states BOOK-50 + stats directly; it does NOT describe the adopted 297)
   - DOT_handover_blueprint.txt, DOT_backtest_guide.txt, DOT_codebase_map.md, DOT_linear_development_schedule.txt, DOT_post_update_checklist.txt, DOT_anti_curvefit_guide.md, DOT_readme.md   (carry the conclusion / framing)
   THE ANSWER ITSELF (the signal book + its scorers — reading these IS reading the answer):
-  - book50_signals.csv                                              (the 50 signal definitions — THE book, literally)
-  - score_g.py, score_book50.py, conviction.py                      (encode the book + S.20/S.21 sizing — the answer in code)
+  - whole_dot_signals.csv                                           (297 rows, trigger/direction/signal_def — THE ADOPTED BOOK, literally)
+  - foundational_documents/possible_systems/The_Whole_DOT_spec_v3.txt, The_Whole_DOT_spec_v3_L7S4.txt   (the adopted specification and its floor variant)
+  - foundational_documents/QUANT_HYBRID_SPEC.md, MANAGER_HYBRID_SPEC.md, QUANT_SYSTEM_SPEC.md, MANAGER_SYSTEM_SPEC.md   (the four newer systems + the six-system frontier)
+  - FABLE_ANALYST_BRIEF.md, TOMORROW_PLAN_*.md, anti_curve_fit_mantra.md, DOT_signal_discovery_mantra.md   (carry the arc, the frontier table and the closed doors)
+  - book50_signals.csv                                              (the 50 BOOK-50 definitions — the CANARY roster, superseded as the book)
+  - score_g.py, score_book50.py, conviction.py, engine/adm_engine.py, engine/canary_reference.json   (encode the books + S.20/S.21 sizing + the acceptance figures — the answer in code)
   - DOT_stage8_program_map.md, RUN_STAGE8.md                        (describe the built book + pack)
   SEAT DOCS (carry framing + the sacred registry S.1-S.21):
   - non_negotiables_developer.txt, non_negotiables_supervisor.txt, non_negotiables_auditor.txt, non_negotiables_quant_analyst.txt
   Do NOT open any of these in Phase 1. You may open them ONLY in Phase 3 (reconciliation), after your own independent verdict is locked. If any OTHER file names or states the chosen signal book, its scorers, or the crown-jewel numbers, it is implicitly FORBIDDEN under this section even if not listed by name — the test is: would reading it reveal the conclusion? If yes, it is Phase-3-only.
+
+B.4 — CORRECTION 2026-08-21 (§0 style — what this replaced and why):
+  This document described BOOK-50 as "the project's stated engine" and book50_signals.csv as
+  "THE book, literally". BOTH WERE SUPERSEDED at execution-sequence steps 20 / 28 / 28a and
+  neither was corrected. The adopted book is THE WHOLE DOT, 297 F0 triples; BOOK-50 is the
+  standing canary. AN AUDITOR IS DELIBERATELY BLIND AND CANNOT SELF-CORRECT A WRONG POINTER:
+  a Supervisor would notice the numbers disagreed with the live book, but a blind seat told
+  BOOK-50 is the engine would RATIFY against the wrong record set, and its verdict is binding.
+  ALSO CORRECTED: the B.2 forbidden list named only the BOOK-50 artifacts. whole_dot_signals.csv,
+  The_Whole_DOT_spec_v3.txt, the four newer system specs, the analyst brief and the two mantras
+  all state the conclusion and were reachable in Phase 1 under the named list, protected only by
+  the implicit catch-all. They are now named.
+  OUTSTANDING, NOT CORRECTED HERE — REQUIRES AN OPERATOR RULING: B.1 points the audit at the
+  SUPERSEDED 152,983-bar sealed baseline and its 2,420-survivor / 51,311-candidate generation.
+  The live frame is the 177,251-bar stitched series and the current F0 field is 19,754 rows.
+  WHICH FRAME A BLIND AUDIT RE-DERIVES ON IS A METHODOLOGICAL DECISION, NOT A LABEL FIX, so the
+  labels above are marked SUPERSEDED and the choice is left open rather than made silently.
 
 B.3 — If a needed piece of evidence is absent (e.g. the F1 scored field signal_full_records_F1.csv may not be present), state that you cannot verify that portion from source and flag it as a gap — do NOT substitute a prose claim for missing data.
 
@@ -64,7 +85,7 @@ PHASE 2 — ADVERSARIAL CHALLENGE:
   Try to break your own Phase-1 book AND stress every open question: are the entry gates (ADX>=15, vol>=50 concurrent / >=300 solo, D2D direction) correct and optimal, or can added/tuned gating reduce the SL-hit population without over-fitting? Is the trade management optimal, or can it be improved / made more adaptive (momentum-conditional or otherwise) — challenge it, don't assume it. Where does the book's edge erode first? What have the builders likely NOT asked?
 
 PHASE 3 — RECONCILIATION (now you may open Section B.2):
-  Compare your independent verdict to the project's stated engine (BOOK-50). State plainly: do you confirm it, confirm-with-caveats, or dissent? Where you differ, show the data. Verify the DOT50 record documents for accuracy against source. Deliver a completeness sweep: everything that must be true before a build, and anything not yet covered.
+  Compare your independent verdict to the project's ADOPTED BOOK OF RECORD: THE WHOLE DOT — 297 F0 triples, 191L/106S, floor L3/S3 under FLOORED admission, MAX_POSITIONS 21, 1.0 lot (The_Whole_DOT_spec_v3.txt). BOOK-50 is the standing CANARY, not the engine. State plainly: do you confirm it, confirm-with-caveats, or dissent? Where you differ, show the data. Verify the record documents against source and state plainly which of them still describe BOOK-50 rather than the adopted 297. Deliver a completeness sweep: everything that must be true before a build, and anything not yet covered.
 
 ═══════════════════════════════════════════════════════════════
 SECTION E — OUTPUT DISCIPLINE
