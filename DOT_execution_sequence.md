@@ -847,6 +847,58 @@
   box); and the repo tidy. **THEN the full `--stage SELECT` run, and only after that do the foundational
   documents get rewritten around the new system.**
 
+- [ ] **48. THE SEVEN-MONTH EXPORT — AND THE THRESHOLD PARITY GATE CLOSED IN THE SAME RUN.**
+  **DO BOTH IN ONE PASS. The threshold snapshot and the data must be taken at the same point in time or they
+  are not comparable, and a snapshot run on its own would compare the EA at one bar against the oracle at
+  another, which proves nothing.**
+
+  **THE SEQUENCE, IN THIS ORDER:**
+  ```
+  1  set  Dots_ExportThresholds = true      DOT.cs L1718, currently false
+  2  attach the EA to US30.cash M1
+     -> ExportDotsThresholdSnapshots() fires at INIT (L426), writes to MQL4\Files\
+        alongside equiDOT_KAMA_US30.cash_1.bin
+  3  run the full data export -> the seven-month dataset
+  4  set  Dots_ExportThresholds = false     and record that it is back off
+  ```
+
+  **WHY THE GATE IS OPEN AT ALL: `dots_thresholds.py` is a Python REIMPLEMENTATION of what the EA computes,
+  not a copy of it. Its own header states the EA is the authority and the oracle must match bit-for-bit. The
+  parity proof on record is S.6 at 88/88 to 6dp — AND IT WAS ESTABLISHED ON THE 152,983-ROW SEALED BASELINE,
+  NOT ON THE 177,251-ROW FRAME EVERY CURRENT SYSTEM IS SCORED ON.** Six specifications, six books and every
+  threshold in all of them rest on a proof taken against a different dataset.
+
+  **THIS IS A STALE PROOF, NOT A KNOWN DEFECT. The computation is identical and only the input changed. The
+  only ways it can diverge are warmup boundaries, data gaps and day-refresh edges — and none of those is added
+  to the overlapping range by extending the frame. LOW RISK, CHEAP TO CLOSE, AND EVERYTHING DOWNSTREAM ASSUMES
+  IT.**
+
+  **THE VALIDATION IS DOCUMENTED AND ALREADY SPECIFIED:** `non_negotiables_supervisor.txt` L333 and L806, and
+  `non_negotiables_auditor.txt` L243 — *"the EA exports its live dots_threshold p80/p20 for every D candidate;
+  `dots_thresholds.py` must match."* **Run it against the oracle recomputed ON THE SAME FRAME and report the
+  match count and the worst absolute difference.**
+
+  **AND ONE CHECK THAT COSTS NOTHING AND CONFIRMS THE PROPERTY THE WHOLE THING RESTS ON: the thresholds are
+  `_ROLL_CAP = 2500` rolling percentiles, day-refreshed, so the threshold at bar N depends only on bars
+  N−2500 to N and NOT on total history. AN EXTRA MONTH ADDS BARS AT THE END, SO EVERY BAR IN THE OVERLAPPING
+  RANGE MUST CARRY IDENTICAL FEATURE VALUES TO THE CURRENT EXPORT.** Diff the overlap. **If it holds, the
+  computation is confirmed stable across chart length and that is the property the parity proof actually
+  depends on. If it does not, the divergence is located before any book is re-scored.**
+
+  **BEFORE DOING ANY OF IT: LOOK IN `MQL4\Files\` FIRST.** The switch was flipped once at some point and the
+  snapshot was written then. **If that file is still there, note its timestamp — it may date the last time
+  parity was checkable, and it costs one directory listing to find out.**
+
+- [ ] **49. THEN RE-RUN EVERYTHING ON SEVEN MONTHS, AND EXPECT THE TWO OBJECTIVES TO BEHAVE DIFFERENTLY.**
+  **Chance-pricing is frame-stable by construction — `E_dir` is a within-family rank against matched nulls and
+  never reads the calendar, so the same signals are selected on any window. Loss-day decorrelation is NOT —
+  it churns 88% of membership between two disjoint halves of the same market.**
+
+  **THAT DIFFERENCE IS ITSELF A MEASUREMENT AND IT IS THE FIRST REAL TEST OF WHICH OBJECTIVE BELONGS IN A
+  MONTHLY STAGE. Report membership churn and quality change separately for each — 12% overlap with unchanged
+  quality is a completely different finding from 12% overlap with degraded quality, and only one of them
+  disqualifies the objective.**
+
 ---
 
 *Locked-for-real once the EA is frozen (step 9). Inventing a genuinely new variable past that point — not a new combination of the 117 — reopens a Stage-3-style EA change and another re-export loop, and requires human authorization.*
