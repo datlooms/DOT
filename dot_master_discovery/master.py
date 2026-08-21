@@ -744,7 +744,8 @@ def s3_discovery(out, workers, input_sha, scope, df=None, ad=None, st=None, w=No
     print('   .done marker carrying the row count and CSV sha256. A restart re-reads any complete family from disk')
     print('   and re-scans only the incomplete ones, so the worst case loss is ONE family, not the whole stage.)')
     orch.orchestrate(scope, workers=workers, df=df, adaptive=ad, structural=st, warmup=w,
-                     frame_path=frame_path, input_sha=input_sha, limit=limit)
+                     frame_path=frame_path, input_sha=input_sha, limit=limit,
+                     emit_all=globals().get('EMIT_ALL_F0', False))
     run_diagnostic_families(results, workers, input_sha, df=df)
     orch.verify_diagnostic_outputs(results, input_sha)
     emit_regime_labels(df, results, out, input_sha)
@@ -4091,6 +4092,10 @@ def main():
     ap.add_argument('--market-label', default='US30 (sealed baseline)')
     ap.add_argument('--parity', default=None,
                     help="run the chunking parity harness and exit: a family (e.g. F0) or 'all'")
+    ap.add_argument('--emit-all', action='store_true',
+                    help='F0 emits EVERY signal: MIN_TRADES, MIN_PF and the dedup '
+                         'OVERLAP_THRESHOLD all lifted. Use a DISTINCT --out so the '
+                         'emit-all catalogue and the default catalogue coexist.')
     ap.add_argument('--smoke', action='store_true',
                     help='SMOKE RUN: every stage S0-S10 executes, same functions, same stage '
                          'order, same pool spawn - only the WORK is reduced. Finishes in '
@@ -4103,6 +4108,11 @@ def main():
     ap.add_argument('--parity-limit', type=int, default=200,
                     help='cap each family to the first N axis units, applied to BOTH parity legs')
     args = ap.parse_args()
+    if getattr(args, 'emit_all', False):
+        globals()['EMIT_ALL_F0'] = True
+        print('  *** --emit-all: the F0 scan will emit every signal regardless of trade '
+              'count, PF or dedup overlap. THE ARTIFACT IS NOT THE 19,754-ROW BASELINE - '
+              'use a DISTINCT --out. ***', flush=True)
     if args.smoke:
         import concurrence_profiler as _cpx
         import triple_convergence_and_d2ddir as _f0x

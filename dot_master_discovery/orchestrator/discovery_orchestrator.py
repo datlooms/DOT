@@ -1297,8 +1297,17 @@ def _parity_estimate(fam, n_units, n_full):
 
 def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=None,
                 warmup=None, frame_path=None, input_sha=None, diagnostics=('F12', 'F13'),
-                limit=0):
+                limit=0, emit_all=False):
     os.makedirs(RESULTS_DIR, exist_ok=True)
+    # --emit-all reaches the scanner through here. It existed only in the scanner's own
+    # main(), so the ORCHESTRATED F0 path - the one that writes F0_CSV - could not reach
+    # it and `master.py --stage S3 --emit-all` was rejected by the parser.
+    if emit_all:
+        f0m.EMIT_ALL = True
+        f0m.OUTPUT_DIR = RESULTS_DIR
+        print(f'  *** --emit-all: F0 emits EVERY signal - MIN_TRADES, MIN_PF and the dedup '
+              f'OVERLAP_THRESHOLD all lifted. Scanner writes into {RESULTS_DIR}. THIS IS NOT '
+              f'THE 19,754-ROW BASELINE. ***', flush=True)
     print(f"equiDOT — discovery orchestrator | scope={scope} | workers={workers} | target lot 1.0", flush=True)
     if df is None:
         print("  no frame injected — loading the sealed baseline from the working directory", flush=True)

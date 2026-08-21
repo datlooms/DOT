@@ -16,6 +16,10 @@ import wf
 
 PARTS = [f"equiDOT_recon171_step7_part{i}.csv" for i in range(1, 9)]
 OUTPUT_DIR = "dots_results"
+# A PARAMETER, NOT A FIXED DIRECTORY. Every write goes through _output_dir(), so a caller
+# can point the scanner somewhere and an emit-all run CANNOT SILENTLY OVERWRITE a prior
+# run's raw_survivors.csv / deduped_survivors.csv. Set via --out-dir or by assigning
+# OUTPUT_DIR before calling.
 DOTS_INITBARS = 6900
 SPREAD = 3.0
 RISK_MULT = 2.0
@@ -46,6 +50,14 @@ MIN_PF = 2.0
 # did. THE 19,754 WERE PRODUCED UNDER 2.0, so setting it here and removing the override
 # machinery changes no output; it makes the effective threshold visible where it is read.
 OVERLAP_THRESHOLD = 0.80
+
+
+def _output_dir():
+    """The write target. Kept as a function so nothing writes to a module constant
+    captured at import."""
+    d = OUTPUT_DIR
+    os.makedirs(d, exist_ok=True)
+    return d
 
 
 def _min_trades():
@@ -457,7 +469,7 @@ def run_search(df, feature_conditions, all_features, entry_allowed, d2d_dir, arr
     print(f"\nSearch complete in {elapsed:.1f}s")
     print(f"Tested: {tested:,} | Simulated: {simulated:,} | Passed PF>={_min_pf()}: {passed}")
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    raw_path = os.path.join(OUTPUT_DIR, "raw_survivors.csv")
+    raw_path = os.path.join(_output_dir(), "raw_survivors.csv")
     if survivors:
         pd.DataFrame([{k: v for k, v in s.items() if k != 'entry_indices'} for s in survivors]).to_csv(raw_path, index=False)
         print(f"Raw survivors saved: {raw_path}")
@@ -486,7 +498,7 @@ def deduplicate(survivors):
         if (idx + 1) % 1000 == 0:
             print(f"  Processed {idx+1}/{len(survivors)}, kept {len(keep)}")
     print(f"Before dedup: {len(survivors)} | After dedup: {len(keep)}")
-    dedup_path = os.path.join(OUTPUT_DIR, "deduped_survivors.csv")
+    dedup_path = os.path.join(_output_dir(), "deduped_survivors.csv")
     pd.DataFrame([{k: v for k, v in s.items() if k != 'entry_indices'} for s in keep]).to_csv(dedup_path, index=False)
     print(f"Saved: {dedup_path}")
     return keep
@@ -617,10 +629,17 @@ def main():
     global EMIT_ALL
     import argparse as _ap
     _p = _ap.ArgumentParser(add_help=False)
+    _p.add_argument('--out-dir', default=None,
+                    help='Write target. Defaults to the module OUTPUT_DIR; set it so an '
+                         'emit-all run cannot overwrite a prior run.')
     _p.add_argument('--emit-all', action='store_true',
                     help='Emit EVERY signal regardless of trade count. DEFAULTS OFF: the '
                          'default path must reproduce the 19,754-row output byte-for-byte.')
     _a, _ = _p.parse_known_args()
+    if _a.out_dir:
+        global OUTPUT_DIR
+        OUTPUT_DIR = _a.out_dir
+        print(f'  scanner OUTPUT_DIR -> {OUTPUT_DIR}', flush=True)
     if _a.emit_all:
         EMIT_ALL = True
         print('  *** --emit-all: MIN_TRADES gating DISABLED at all five sites, MIN_PF lifted to 0.0, and dedup OVERLAP_THRESHOLD lifted above any achievable ratio. Every signal '
