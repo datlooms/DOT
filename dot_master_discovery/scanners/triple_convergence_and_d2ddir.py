@@ -24,6 +24,23 @@ STEP_PCT = 0.30
 BE_TRIG_FRAC = 1.0
 LOCK_FRAC = 1.0
 MIN_TRADES = 10
+EMIT_ALL = False
+# --emit-all. DEFAULTS OFF AND THE DEFAULT PATH MUST STAY BYTE-REPRODUCIBLE: six
+# specifications and every figure in the R&D plan rest on the 19,754-row output, so if it
+# moves they all become unverifiable.
+#
+# WHY IT EXISTS: 14 of the adopted 297 signals appear in NO scanner output at all - no
+# agg_pf, no folds_plus, no trade count, not a row in any file - because they fire fewer
+# than MIN_TRADES times. Every analysis seat that looked for them burned turns concluding
+# they "do not exist". AND SIX OF THE FOURTEEN ARE LOAD-BEARING: spec v3 §4.2 measures
+# removing all fourteen at $3,923 and three trading days, more than their own trades earn,
+# because they raise depth and let other signals clear the floor. A SELECTION PROCEDURE
+# THAT CANNOT SEE THEM IS STRUCTURALLY BLIND TO A REAL PART OF THE BOOK.
+
+
+def _min_trades():
+    """0 under --emit-all, so every signal is emitted regardless of trade count."""
+    return 0 if EMIT_ALL else MIN_TRADES
 MIN_PF = 4.0
 OVERLAP_THRESHOLD = 0.80
 CHUNK_SIZE = 10000
@@ -234,7 +251,7 @@ def simulate_signal(entry_indices, direction, highs, lows, closes, atrs, day_of_
     return trades
 
 def compute_metrics(trades):
-    if len(trades) < MIN_TRADES:
+    if len(trades) < _min_trades():
         return None
     pnls = np.array([t['pnl'] for t in trades])
     gross_wins = pnls[pnls > 0].sum()
@@ -324,7 +341,7 @@ def parity_check(df, feature_conditions, entry_allowed, d2d_dir, arrays, n_signa
         direction = 1 if rng.randint(2) == 0 else -1
         mask = m1 & m2 & m3 & entry_allowed & (d2d_dir == direction)
         ei = np.where(mask)[0]
-        if len(ei) < MIN_TRADES:
+        if len(ei) < _min_trades():
             continue
         inline = simulate_signal(ei, direction, highs, lows, closes, atrs, dow, hr, mn)
         ok = True
@@ -378,7 +395,7 @@ def run_search(df, feature_conditions, all_features, entry_allowed, d2d_dir, arr
                         tested += 1
                         signal_mask = base & (d2d_dir == direction)
                         entry_indices = np.where(signal_mask)[0]
-                        if len(entry_indices) < MIN_TRADES:
+                        if len(entry_indices) < _min_trades():
                             continue
                         simulated += 1
                         trades = simulate_signal(entry_indices, direction, highs, lows, closes, atrs, dow, hr, mn)
@@ -543,10 +560,10 @@ def density_sweep(df, signals_df, k_bands, adaptive, structural, warmup):
         print(f"\n  {direction} subset ({len(sub)} signals, D2D=confirm):")
         for k in k_bands:
             mw = cnt >= k
-            if mw.sum() < MIN_TRADES:
+            if mw.sum() < _min_trades():
                 continue
             sc = _score_set(df, sub, mw, month, adaptive, structural, warmup)
-            if sc['trades'] < MIN_TRADES:
+            if sc['trades'] < _min_trades():
                 continue
             surv = 'PASS' if sc['survive'] else 'REJECT'
             print(f"    count>={k:<2} [{surv:6}] bars {int(mw.sum()):>6} | trades {sc['trades']:>4} | "
@@ -566,6 +583,20 @@ def run_density(signals_path):
 
 
 def main():
+    global EMIT_ALL
+    import argparse as _ap
+    _p = _ap.ArgumentParser(add_help=False)
+    _p.add_argument('--emit-all', action='store_true',
+                    help='Emit EVERY signal regardless of trade count. DEFAULTS OFF: the '
+                         'default path must reproduce the 19,754-row output byte-for-byte.')
+    _a, _ = _p.parse_known_args()
+    if _a.emit_all:
+        EMIT_ALL = True
+        print('  *** --emit-all: MIN_TRADES gating DISABLED at all five sites. Every signal '
+              'is emitted regardless of trade count, and the `trades` column is populated on '
+              'every row so a downstream screen applies its OWN threshold rather than '
+              'inheriting the scanner\'s. THIS OUTPUT IS NOT THE 19,754-ROW BASELINE. ***',
+              flush=True)
     print("equiDOT — Triple-Convergence Discovery (117 candidates, mechanism-D oracle)")
     print(f"Config: risk={RISK_MULT}, step={STEP_PCT}, min_trades={MIN_TRADES}, "
           f"min_PF={MIN_PF}, dedup={OVERLAP_THRESHOLD}")
