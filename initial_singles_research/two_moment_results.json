@@ -1,0 +1,80 @@
+[
+ {
+  "tag": "WHOLE DOT L3/S3 (control, IN-SAMPLE)",
+  "loss_events": 42,
+  "worst_bar": -1224.0,
+  "worst_day": -346.6,
+  "losing_weeks": 0,
+  "weeks": 26,
+  "days": 119,
+  "entry_bars": 973,
+  "trades": 5776,
+  "WR": 96.12,
+  "PF": 14.53,
+  "MARGIN": 33.07,
+  "net": 284974.0,
+  "breach_2500": 0,
+  "coverage": [
+   {
+    "direction": "LONG",
+    "entry_bars": 601,
+    "M1_turn": 257,
+    "M2_lead": 113,
+    "neither": 231,
+    "M1_universe": 1056,
+    "M2_universe": 1092
+   },
+   {
+    "direction": "SHORT",
+    "entry_bars": 372,
+    "M1_turn": 84,
+    "M2_lead": 112,
+    "neither": 176,
+    "M1_universe": 719,
+    "M2_universe": 1516
+   }
+  ],
+  "n_signals": 297
+ },
+ {
+  "tag": "UNION ARM decorr70/50 + priced60, L3/S3 + 297 gates (IN-SAMPLE)",
+  "loss_events": 25,
+  "worst_bar": -2380.0,
+  "worst_day": -1896.7,
+  "losing_weeks": 1,
+  "weeks": 25,
+  "days": 94,
+  "entry_bars": 598,
+  "trades": 3744,
+  "WR": 96.47,
+  "PF": 14.33,
+  "MARGIN": 30.84,
+  "net": 177672.8,
+  "breach_2500": 0,
+  "coverage": [
+   {
+    "direction": "LONG",
+    "entry_bars": 396,
+    "M1_turn": 177,
+    "M2_lead": 100,
+    "neither": 119,
+    "M1_universe": 1056,
+    "M2_universe": 1092,
+    "M1_ratio_vs_297": 0.689,
+    "M2_ratio_vs_297": 0.885
+   },
+   {
+    "direction": "SHORT",
+    "entry_bars": 202,
+    "M1_turn": 8,
+    "M2_lead": 100,
+    "neither": 94,
+    "M1_universe": 719,
+    "M2_universe": 1516,
+    "M1_ratio_vs_297": 0.095,
+    "M2_ratio_vs_297": 0.893
+   }
+  ],
+  "n_signals": 169
+ }
+]

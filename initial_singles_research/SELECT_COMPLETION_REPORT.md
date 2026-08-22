@@ -1,0 +1,61 @@
+# SELECT — DETERMINISTIC AND COMPLETE: WHAT WAS BUILT, WHAT IT MEASURES, WHAT IT STILL CANNOT DO
+**LINE ONE — WHAT VERIFIES AT HEAD `1c8f29d80cd4`.** The operator pushed my durability and Part-B artifacts **flat** into `initial_singles_research/` (not in `hold/` and `partB/` subdirectories as I reported). Re-sha'd this turn: `m1_three_population_lift.csv` `489ef21b9f89`, `additions_results.csv` `2c71a848cde8`, `AB_results.csv` `b6951af9cc95` — **identical to my local copies**; `ADDITIONS_PREREG.md` `9ff230fe2d0c` and `RULE_B_PREREG.md` `92df8a56ecff` at HEAD. Everything I reported from those files verifies. **This turn's work is NOT at HEAD** — push fails on credentials as always; two `git am`-able patches on base `1c8f29d`: `0001` = `SELECT/SELECT2_PREREG.md` + the two modules (`7e7ed51`, 12:31:30 UTC, **before** any union-arm scoring), `0002` = the solo matrix, the union arm, the two-moment results and the `m2` fix (`109ac5f`). Nothing below verifies until they land.
+
+Quant seat · 2026-08-22 · frame `46586cbb1671` · oracle `518862bf19fb` imported everywhere · `[adm_engine] rule=FLOORED cap=21 floor=… tier-gates=…` read on every run and quoted per arm · 1.0 lot.
+**Trials.** Engine: 6 scored arm runs this report (control ×2, L7/S4, 297−14, BOOK-50 at the 297's object, union arm) + 1 BOOK-50 canary through `master.py` = 7 → **cumulative 200**. The true-solo matrix is 1,818 single-signal runs, counted as the objective's input, not as selection trials. Statistical: 0 new → **18,841**.
+Control reproduced to the cent (`42 · −1,224 · −346.60 · 0 of 26 · 119 · 973 · 5,776 · 96.12 · 14.53 · 33.07 · $284,974`) — twice. BOOK-50 canary through the sacred path: **`3,101 tr / $97,675 / PF 4.81` — engine intact.** **Every 297 figure here is IN-SAMPLE.**
+
+Read before acting: `SELECT_PROVENANCE_AND_COMPLETION.md` (all 430 lines, tags respected below — nothing RECORDED is used as evidence), `FABLE_ANALYST_BRIEF.md` §14.1/§14.6/§14.7, `anti_curve_fit_mantra.md` §4.3–4.7, `non_negotiables_quant_analyst.txt`.
+
+## 1. THE TWO-MOMENT COVERAGE CHECK — `dot_master_discovery/two_moment_check.py`, definitions v1
+**Spec (frozen in the file header; computable from the frame alone at check time):**
+```
+PARTICIPATION   entry_ok (ADX>=15, Volume>50, post-warmup, not Fri-close) ∧ ATR_1M>=20 ∧ D2D_Trend_Dir==d
+MOMENT 1 TURN   >= 2 of T_d       T_d  = RULE_PREREG.md full-frame turn set (6 per side)
+MOMENT 2 LEAD   turn<=1 ∧ >=2 of L_d   L_d = top-6 hour-matched lift on 297\A vs eligible-untraded, >=20 bars, excluding T_d
+                LONG  KAMA_Dist:lo · KAMA_Slope:lo · ST_Flip_Event:==-1 · OBV_Macd:lo · AT_Score_LT:lo · PrevDay_Low_Side:==-1
+                SHORT OBV_Velocity:hi · Sqz_Val:hi · KAMA_Dist:hi · Momentum_Value:hi · KAMA_Slope:hi · AT_Slope_ST:hi
+M1 ∩ M2 = ∅ by construction. Universe: M1 LONG 1,056 / SHORT 719 · M2 LONG 1,092 / SHORT 1,516 bars.
+OUTPUT per arm, per direction: entry bars in M1, in M2, in NEITHER; ratio of M1 and M2 counts to the incumbent's.
+CONSTRAINT (in the spec): a COUNT and a COVERAGE RATIO, never a score. The description behind both moments churns month to
+month (m3: TURN Jaccard 0.00-0.50 LONG, 0.00 in five of six folds SHORT); optimising this count would be a third objective on an
+unstable description. The DEFINITIONS were derived from the incumbent's bars (book-dependent at derivation, frozen by version);
+the CHECK reads only the frame.
+```
+**Run on every arm whose membership exists at HEAD:**
+```
+arm                                            signals events worstBar worstDay -wks days  bars  trades  WR    PF    MARGIN  net$     | LONG  M1 / M2 / neither  (ratio)      | SHORT M1 / M2 / neither  (ratio)
+WHOLE DOT L3/S3 control (IN-SAMPLE)              297     42   -1,224   -346.6    0   119   973  5,776  96.12 14.53 33.07 284,974   | 257 / 113 / 231                       |  84 / 112 / 176
+WHOLE DOT L7/S4 (IN-SAMPLE)                      297     16   -1,224   -478.8    0   109   558  4,045  97.40 25.91 38.25 227,860   | 152 /  43 /  42  (.59 / .38)          |  80 / 102 / 139  (.95 / .91)
+297 minus the fourteen, L3/S3 (IN-SAMPLE)        283     41   -1,224   -827.4    1   116   905  5,389  96.07 14.27 32.94 273,409   | 248 / 105 / 223  (.97 / .93)          |  83 /  97 / 149  (.99 / .87)
+BOOK-50 canary, sacred path (master S8)           50    235     -382   -565.3    1   123 2,231  3,101  90.58  4.81 23.92  97,675   | 303 / 213 / 1,096 (1.18 / 1.89)       |  44 / 145 / 430  (.52 / 1.30)
+BOOK-50 at the 297's object L3/S3 (not canary)    50      2     -336   -336.0    2    36    69    370  (2 ev)              24,493   |  50 /  12 /   6                       |   0 /   1 /   0
+UNION ARM decorr70/50 + priced60, L3/S3+297 gates 169     25   -2,380 -1,896.7    1    94   598  3,744  96.47 14.33 30.84 177,673   | 177 / 100 / 119  (.69 / .89)          |   8 / 100 /  94  (.10 / .89)
+```
+What the table shows: (a) the incumbent's own bars split 257 / 113 / 231 LONG and 84 / 112 / 176 SHORT — **M2 as a k-of-6 reaches only 113 of the 348 LONG and 112 of the 288 SHORT `297\A` bars; a third of the book is in neither moment.** The second moment is no better described by a k-of-n than the first was. (b) L7/S4 keeps 95% / 91% of SHORT coverage and cuts LONG to 59% / 38% — the floor move is a LONG-side amputation, invisible in its PF. (c) **The union arm has the incumbent's PF and margin and reaches 8 of the incumbent's 84 SHORT turn bars (10%).** That is exactly the animal the check exists to expose: best-looking margin, half the coverage on one side.
+**Not run, files requested:** QUANT A30+B L6/S4, MANAGER A+B L8/S5, QUANT B+D L3/S3, MANAGER B K=50 (100 signals) — no membership file for any of them exists at HEAD (`git ls-files` searched for book/arm/A30/fused/option/select). I did not reconstruct them. Each needs a file and a line.
+
+## 2. THE FOURTEEN — rule-ready numbers (§9.2); the operator rules
+The fourteen = the 297 rows absent from the 19,754 field: book indices 37, 38, 48, 84, 149, 181 (LONG) and 205, 208, 226, 230, 231, 256, 270, 296 (SHORT).
+**Inside the control they trade.** 248 trades on 218 bars, +$10,886, 9 losing trades — LONG six: 31/41/28/8/29/26 trades, +$8,544; **SHORT eight: 9/21/12/19/6/3/3/12 trades = 85 trades, +$2,342.** The recorded line *"eight SHORT orphans contribute exactly zero trades"* (§5.4, book-level at cap 21) is **contradicted at this exact control** — same book, same object, trades 5,776 to the cent. Re-tag it.
+**EXCLUDE them (297 → 283, measured, row 3 above):** loss events 42 → 41 · worst day −346.60 → **−827.40** · **losing weeks 0 → 1** · days 119 → 116 · entry bars 973 → 905 · net −$11,565 (recorded −$3,923; re-derived here) · M1/M2 coverage 0.97/0.93 LONG, 0.99/0.87 SHORT. 91 control bars vanish (+$9,620 in the control), 23 new bars appear. **Depth mechanism, measured:** without them 14 SHORT control bars drop below floor 3 (12 sat at depth exactly 3 with an orphan among the three), 1 LONG bar does; SHORT orphans fire on 80 of 372 control bars, LONG on 169 of 601. The cost is the losing week, and it is mostly SHORT depth.
+**INCLUDE them:** SELECT's field must then carry rows at proxy PF 1.35–1.96 (§5.2 MEASURED by the previous seat; not re-derived here — I measured their book-level trades, not their solo scan PF), which no performance floor admits; and the only way they enter the field is the emit-all run, which has not happened (§9.1, ~100 min). Until it runs, `SELECT` cannot emit them by procedure at all — the include branch is currently unimplementable, not merely undesirable.
+
+## 3. THE TWO OBJECTIVES, WIRED — `dot_master_discovery/select_two_objectives.py`
+**Loss-day decorrelation**, §2.1 verbatim: **TRUE-SOLO matrix, one signal per `run_portfolio` call** — all 1,818 VALID catalogue rows, each alone at `FLOORED floor {1:1,-1:1} cap 21 ATR>=20 tier-gates=0` (that admission line printed 1,818 times), P&L keyed on EXIT date, 127 exit-days; resumable, no RNG, no batch. Solo medians: 71 trades, 7 loss-days; 1,818 of 1,818 net > 0; 0 zero-trade signals. Pool net>0 per direction (1,445 L / 373 S); seed = argmax(net − 50·loss_days); greedy add = fewest already-covered loss days (CUMULATIVE boolean), ties by net then index; fixed K = 70 LONG / 50 SHORT (pre-registered). Result: 120 signals; loss-days covered by ≥ 1 member 96 / 127 LONG, 103 / 127 SHORT.
+**Chance-pricing:** `EXPECTED_ROWS_AT_OR_ABOVE_THIS_PF < 1` → 60 rows (54 L / 6 S), resolution floor 0.9504 — the 60-priced source exactly, 60 of 60 in the 297. **Direction correction NOT applied, and why:** `catalogue.py::pricing_columns` persists only `pf_null_p50/p90/p99_family` — the 4,652-value null PF vector is never written, so `E_dir = n_trials_dir × exceedance_dir` cannot be computed from anything on disk. Re-drawing a direction-matched null is a `draw_matched_null_masks` run of 4,652 simulations per direction; not done this turn. The module takes `--null-by-direction <json>` and applies the correction when that vector exists; until then it prints the WARN line quoted in the log. The recorded 0.3106 / 0.0802 floors are RECORDED, not used.
+**Union arm:** 169 unique signals (116 L / 53 S): 109 DECORR-only (37 in the 297), 49 PRICED-only (49 in the 297), 11 both (11 in the 297) — 97 of the 169 are incumbent members. Emitted as `SELECT/select2/union_arm_book.csv` with a `source` column alongside. **Scored at the pre-registered default object (L3/S3, cap 21, the 297's tier gates — NOT derived for this arm; relocation-only derivation per arm is outside this turn and is said so):** row 6 of §1 — 25 events · **worst bar −$2,380** · worst day −$1,896.70 · **1 losing week** · 94 days · 598 bars · PF 14.33 · margin 30.84 · $177,673 · SHORT turn coverage 10%. No breach of −$2,500; the worst single bar is $120 from the ceiling. IN-SAMPLE: the catalogue feeding both objectives was built on the whole frame. Nothing from §3 was implemented; FUSED-50 was not reconstructed.
+**Pre-flight from §9.1, in the spec:** any emit-all run must show `min_trades=0 min_pf=0.0 overlap_threshold=1.01` on the first chunk's console line before it is allowed to continue; `min_pf=2.0` there means the transport failed and the run is void.
+
+## 4. WHAT SELECT STILL CANNOT DO
+- **The field.** The 51,311 → 19,754 anomaly (§8) is OPEN. Every output in §1–§3 is computed on the 19,754 field or its 1,818 VALID catalogue: the union arm, the solo matrix, the pricing, and the fourteen's absence are all **field-dependent** and would have to be re-run on a re-derived field. Two things do **not** depend on it: the two-moment check's definitions and universe (bar-truth on the frame), and the control's own figures.
+- **Emit-all has not run**, so the fourteen cannot enter the procedure; §9.2 is a ruling the operator can make now but `SELECT` cannot execute either branch until §9.1 completes.
+- **Pricing is direction-blind** until `catalogue.py` persists the null PF vector per direction (one added column set in `pricing_columns`); the module is ready to consume it.
+- **Gates per arm are not derived**; the union arm is scored under the incumbent's object, which §4.5 of the mantra says is a specification error for anything but a reading. The reading is what was taken.
+- **Four of the six §4 arms** cannot be checked for coverage without their membership files.
+- **No OOS exists** for any arm here, and the union arm was selected on a full-frame catalogue; the walk-forward pre-registration for it (derive the solo matrix and E on a prefix, score on the fold) is written nowhere yet and is the next thing to write before anyone scores it again.
+
+**Housekeeping done:** `m2_book_vs_signals_monthly.csv` re-issued without `median_signal_PF` (the PF-undefined sentinel that was being medianed); `measure_hold.py` no longer emits it. Conclusions rested on `share_positive` and are unchanged.
+
+## ARTIFACTS (`SELECT/`)
+`SELECT2_PREREG.md` · `select2/solo_daily.jsonl` (1,818 records, per-signal exit-day P&L) · `select2/union_arm_signals.csv` / `union_arm_book.csv` · `two_moment/two_moment_results.json` (5 arms with coverage) · `two_moment/book50_canary_coverage.json` · `two_moment/run1.log`, `run_union.log` (every admission line) · modules `dot_master_discovery/select_two_objectives.py`, `two_moment_check.py` · patches `0001`, `0002` · corrected `m2_book_vs_signals_monthly.csv`.
