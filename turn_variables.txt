@@ -1,0 +1,22 @@
+LONG — the turn, six conditions:
+
+AT_Score_ST:lo       lift x8.9    73 bars    12.1% vs  1.4%
+Slope_EMA_ST:lo           x8.3   174 bars    29.0% vs  3.5%
+D2D_Signal:==1            x7.4   118 bars    19.6% vs  2.7%
+D2D_Up_Count:hi           x7.2   121 bars    20.1% vs  2.8%
+EMA_Oscillator:lo         x6.9    44 bars     7.3% vs  1.1%
+AT_Slope_ST:lo            x6.8   192 bars    31.9% vs  4.7%
+
+SUPPRESSED
+Micro_FailedBreak:lo      x0.16   19 bars     3.2% vs 20.1%
+
+SHORT — the mirror, and weaker:
+
+AT_Score_LT:hi              x4.5    79 bars
+D2D_Signal:==-1             x3.6    36 bars
+VAL_Side:==0                x3.6    42 bars
+D2D_Dn_Count:hi             x3.4    37 bars
+EMA_Oscillator:hi           x3.3    27 bars
+D2D_Dynamic_Sensitivity:lo  x3.2   104 bars
+
+no suppressor qualifies
