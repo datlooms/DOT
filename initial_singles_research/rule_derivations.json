@@ -1,0 +1,1024 @@
+{
+ "FULL": {
+  "LONG": {
+   "status": "OK",
+   "traded_bars": 601,
+   "untraded_bars": 13559,
+   "n_candidates": 212,
+   "T": [
+    {
+     "condition": "AT_Score_ST:lo",
+     "lift": 8.913,
+     "traded_true": 73,
+     "traded_rate": 0.1215,
+     "untraded_rate": 0.0136
+    },
+    {
+     "condition": "Slope_EMA_ST:lo",
+     "lift": 8.315,
+     "traded_true": 174,
+     "traded_rate": 0.2895,
+     "untraded_rate": 0.0348
+    },
+    {
+     "condition": "D2D_Signal:==1",
+     "lift": 7.374,
+     "traded_true": 118,
+     "traded_rate": 0.1963,
+     "untraded_rate": 0.0266
+    },
+    {
+     "condition": "D2D_Up_Count:hi",
+     "lift": 7.217,
+     "traded_true": 121,
+     "traded_rate": 0.2013,
+     "untraded_rate": 0.0279
+    },
+    {
+     "condition": "EMA_Oscillator:lo",
+     "lift": 6.88,
+     "traded_true": 44,
+     "traded_rate": 0.0732,
+     "untraded_rate": 0.0106
+    },
+    {
+     "condition": "AT_Slope_ST:lo",
+     "lift": 6.839,
+     "traded_true": 192,
+     "traded_rate": 0.3195,
+     "untraded_rate": 0.0467
+    }
+   ],
+   "S": [
+    {
+     "condition": "Micro_FailedBreak:lo",
+     "lift": 0.157,
+     "traded_true": 19,
+     "traded_rate": 0.0316,
+     "untraded_rate": 0.2014
+    }
+   ]
+  },
+  "SHORT": {
+   "status": "OK",
+   "traded_bars": 372,
+   "untraded_bars": 16389,
+   "n_candidates": 213,
+   "T": [
+    {
+     "condition": "AT_Score_LT:hi",
+     "lift": 4.463,
+     "traded_true": 79,
+     "traded_rate": 0.2124,
+     "untraded_rate": 0.0476
+    },
+    {
+     "condition": "D2D_Signal:==-1",
+     "lift": 3.57,
+     "traded_true": 36,
+     "traded_rate": 0.0968,
+     "untraded_rate": 0.0271
+    },
+    {
+     "condition": "VAL_Side:==0",
+     "lift": 3.569,
+     "traded_true": 42,
+     "traded_rate": 0.1129,
+     "untraded_rate": 0.0316
+    },
+    {
+     "condition": "D2D_Dn_Count:hi",
+     "lift": 3.375,
+     "traded_true": 37,
+     "traded_rate": 0.0995,
+     "untraded_rate": 0.0295
+    },
+    {
+     "condition": "EMA_Oscillator:hi",
+     "lift": 3.259,
+     "traded_true": 27,
+     "traded_rate": 0.0726,
+     "untraded_rate": 0.0223
+    },
+    {
+     "condition": "D2D_Dynamic_Sensitivity:lo",
+     "lift": 3.16,
+     "traded_true": 104,
+     "traded_rate": 0.2796,
+     "untraded_rate": 0.0885
+    }
+   ],
+   "S": []
+  }
+ },
+ "2026.02": {
+  "LONG": {
+   "status": "OK",
+   "traded_bars": 32,
+   "untraded_bars": 361,
+   "n_candidates": 30,
+   "T": [
+    {
+     "condition": "VWAP_Side:==-1",
+     "lift": 1.524,
+     "traded_true": 21,
+     "traded_rate": 0.6562,
+     "untraded_rate": 0.4305
+    },
+    {
+     "condition": "Harmonic_D2D_Concordance:==0",
+     "lift": 1.365,
+     "traded_true": 24,
+     "traded_rate": 0.75,
+     "untraded_rate": 0.5495
+    },
+    {
+     "condition": "Harmonic_OBVf_Concordance:==0",
+     "lift": 1.365,
+     "traded_true": 24,
+     "traded_rate": 0.75,
+     "untraded_rate": 0.5495
+    },
+    {
+     "condition": "OR_High_Side:==-1",
+     "lift": 1.267,
+     "traded_true": 28,
+     "traded_rate": 0.875,
+     "untraded_rate": 0.6906
+    },
+    {
+     "condition": "Sqz_State:==1",
+     "lift": 1.205,
+     "traded_true": 22,
+     "traded_rate": 0.6875,
+     "untraded_rate": 0.5704
+    },
+    {
+     "condition": "PrevDay_Close_Side:==-1",
+     "lift": 1.194,
+     "traded_true": 29,
+     "traded_rate": 0.9062,
+     "untraded_rate": 0.759
+    }
+   ],
+   "S": [
+    {
+     "condition": "ADX_Value:hi",
+     "lift": 0.122,
+     "traded_true": 1,
+     "traded_rate": 0.0312,
+     "untraded_rate": 0.2552
+    },
+    {
+     "condition": "AT_Lookback_LT:hi",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.0724
+    },
+    {
+     "condition": "Micro_FailedBreak:lo",
+     "lift": 0.132,
+     "traded_true": 1,
+     "traded_rate": 0.0312,
+     "untraded_rate": 0.2372
+    },
+    {
+     "condition": "Micro_Lambda:hi",
+     "lift": 0.165,
+     "traded_true": 1,
+     "traded_rate": 0.0312,
+     "untraded_rate": 0.1893
+    },
+    {
+     "condition": "MultiDay_Position:hi",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.0724
+    },
+    {
+     "condition": "OBVf_DirStepCount:hi",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.2031
+    },
+    {
+     "condition": "RangeOsc_State:==1",
+     "lift": 0.199,
+     "traded_true": 3,
+     "traded_rate": 0.0938,
+     "untraded_rate": 0.4712
+    },
+    {
+     "condition": "RangeOsc_Val:hi",
+     "lift": 0.194,
+     "traded_true": 2,
+     "traded_rate": 0.0625,
+     "untraded_rate": 0.3227
+    },
+    {
+     "condition": "Session_High_Dist_ATR:lo",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.1908
+    },
+    {
+     "condition": "VWAP_Z:hi",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.0724
+    },
+    {
+     "condition": "Volume_Ratio_10:hi",
+     "lift": 0.219,
+     "traded_true": 1,
+     "traded_rate": 0.0312,
+     "untraded_rate": 0.1425
+    }
+   ]
+  },
+  "SHORT": {
+   "status": "UNDERIVABLE",
+   "traded_bars": 8,
+   "untraded_bars": 493,
+   "n_candidates": 0,
+   "T": [],
+   "S": [
+    {
+     "condition": "ADX_Value:lo",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.1275
+    },
+    {
+     "condition": "AT_Lookback_ST:hi",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.1771
+    },
+    {
+     "condition": "AT_Score_LT:lo",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.0786
+    },
+    {
+     "condition": "Bars_Since_Flip:hi",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.1935
+    },
+    {
+     "condition": "Bars_Since_Flip:lo",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.2556
+    },
+    {
+     "condition": "Body_Size:lo",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.0688
+    },
+    {
+     "condition": "KAMA_Dist:hi",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.0527
+    },
+    {
+     "condition": "Micro_AutoCorr:lo",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.1363
+    },
+    {
+     "condition": "Micro_BarOverlap:hi",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.19
+    },
+    {
+     "condition": "Micro_FractalDim:hi",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.1041
+    },
+    {
+     "condition": "Micro_Lambda:lo",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.1884
+    },
+    {
+     "condition": "Micro_Rejection:hi",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.2096
+    },
+    {
+     "condition": "OBV_Macd:hi",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.095
+    },
+    {
+     "condition": "OR_High_Dist_ATR:hi",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.0668
+    },
+    {
+     "condition": "Round_1000_Dist_ATR:hi",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.0848
+    },
+    {
+     "condition": "Session_High_Dist_ATR:hi",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.1143
+    },
+    {
+     "condition": "VAH_Side:==0",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.071
+    }
+   ]
+  }
+ },
+ "2026.03": {
+  "LONG": {
+   "status": "OK",
+   "traded_bars": 148,
+   "untraded_bars": 2202,
+   "n_candidates": 170,
+   "T": [
+    {
+     "condition": "D2D_Up_Count:hi",
+     "lift": 8.33,
+     "traded_true": 28,
+     "traded_rate": 0.1892,
+     "untraded_rate": 0.0227
+    },
+    {
+     "condition": "D2D_Signal:==1",
+     "lift": 8.204,
+     "traded_true": 26,
+     "traded_rate": 0.1757,
+     "untraded_rate": 0.0214
+    },
+    {
+     "condition": "AT_Score_ST:lo",
+     "lift": 7.377,
+     "traded_true": 23,
+     "traded_rate": 0.1554,
+     "untraded_rate": 0.0211
+    },
+    {
+     "condition": "Slope_EMA_ST:lo",
+     "lift": 5.795,
+     "traded_true": 50,
+     "traded_rate": 0.3378,
+     "untraded_rate": 0.0583
+    },
+    {
+     "condition": "AT_Slope_ST:lo",
+     "lift": 5.786,
+     "traded_true": 56,
+     "traded_rate": 0.3784,
+     "untraded_rate": 0.0654
+    },
+    {
+     "condition": "AT_Score_LT:lo",
+     "lift": 3.632,
+     "traded_true": 30,
+     "traded_rate": 0.2027,
+     "untraded_rate": 0.0558
+    }
+   ],
+   "S": [
+    {
+     "condition": "AT_Score_LT:hi",
+     "lift": 0.093,
+     "traded_true": 1,
+     "traded_rate": 0.0068,
+     "untraded_rate": 0.0726
+    },
+    {
+     "condition": "AT_Slope_LT:hi",
+     "lift": 0.21,
+     "traded_true": 9,
+     "traded_rate": 0.0608,
+     "untraded_rate": 0.29
+    },
+    {
+     "condition": "Dist_To_PoC_ATR:hi",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.167
+    },
+    {
+     "condition": "Micro_FailedBreak:lo",
+     "lift": 0.118,
+     "traded_true": 4,
+     "traded_rate": 0.027,
+     "untraded_rate": 0.2284
+    },
+    {
+     "condition": "OBVf_DirStepCount:hi",
+     "lift": 0.228,
+     "traded_true": 7,
+     "traded_rate": 0.0473,
+     "untraded_rate": 0.2078
+    },
+    {
+     "condition": "PrevDay_High_Side:==1",
+     "lift": 0.073,
+     "traded_true": 2,
+     "traded_rate": 0.0135,
+     "untraded_rate": 0.185
+    },
+    {
+     "condition": "RangeOsc_Val:hi",
+     "lift": 0.239,
+     "traded_true": 15,
+     "traded_rate": 0.1014,
+     "untraded_rate": 0.4245
+    },
+    {
+     "condition": "Session_Low_Dist_ATR:hi",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.1505
+    },
+    {
+     "condition": "Slope_EMA_LT:hi",
+     "lift": 0.194,
+     "traded_true": 8,
+     "traded_rate": 0.0541,
+     "untraded_rate": 0.2782
+    },
+    {
+     "condition": "VAH_Dist_ATR:hi",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.1701
+    },
+    {
+     "condition": "VAL_Dist_ATR:hi",
+     "lift": 0.0,
+     "traded_true": 0,
+     "traded_rate": 0.0,
+     "untraded_rate": 0.1483
+    },
+    {
+     "condition": "VWAP_Z:hi",
+     "lift": 0.212,
+     "traded_true": 5,
+     "traded_rate": 0.0338,
+     "untraded_rate": 0.1596
+    }
+   ]
+  },
+  "SHORT": {
+   "status": "OK",
+   "traded_bars": 69,
+   "untraded_bars": 3027,
+   "n_candidates": 121,
+   "T": [
+    {
+     "condition": "Sqz_Val:hi",
+     "lift": 3.001,
+     "traded_true": 27,
+     "traded_rate": 0.3913,
+     "untraded_rate": 0.1304
+    },
+    {
+     "condition": "Momentum_Value:hi",
+     "lift": 2.92,
+     "traded_true": 20,
+     "traded_rate": 0.2899,
+     "untraded_rate": 0.0993
+    },
+    {
+     "condition": "Micro_Hurst:hi",
+     "lift": 2.361,
+     "traded_true": 26,
+     "traded_rate": 0.3768,
+     "untraded_rate": 0.1596
+    },
+    {
+     "condition": "OBVf_Signal:==1",
+     "lift": 2.16,
+     "traded_true": 35,
+     "traded_rate": 0.5072,
+     "untraded_rate": 0.2349
+    },
+    {
+     "condition": "OBVf_Trend_Dir:==1",
+     "lift": 2.16,
+     "traded_true": 35,
+     "traded_rate": 0.5072,
+     "untraded_rate": 0.2349
+    },
+    {
+     "condition": "Trend_Concordance:==0",
+     "lift": 2.16,
+     "traded_true": 35,
+     "traded_rate": 0.5072,
+     "untraded_rate": 0.2349
+    }
+   ],
+   "S": []
+  }
+ },
+ "2026.04": {
+  "LONG": {
+   "status": "OK",
+   "traded_bars": 297,
+   "untraded_bars": 6706,
+   "n_candidates": 200,
+   "T": [
+    {
+     "condition": "AT_Score_ST:lo",
+     "lift": 7.645,
+     "traded_true": 34,
+     "traded_rate": 0.1145,
+     "untraded_rate": 0.015
+    },
+    {
+     "condition": "Slope_EMA_ST:lo",
+     "lift": 7.583,
+     "traded_true": 72,
+     "traded_rate": 0.2424,
+     "untraded_rate": 0.032
+    },
+    {
+     "condition": "D2D_Up_Count:hi",
+     "lift": 7.519,
+     "traded_true": 58,
+     "traded_rate": 0.1953,
+     "untraded_rate": 0.026
+    },
+    {
+     "condition": "D2D_Signal:==1",
+     "lift": 7.505,
+     "traded_true": 56,
+     "traded_rate": 0.1886,
+     "untraded_rate": 0.0251
+    },
+    {
+     "condition": "AT_Slope_ST:lo",
+     "lift": 6.778,
+     "traded_true": 83,
+     "traded_rate": 0.2795,
+     "untraded_rate": 0.0412
+    },
+    {
+     "condition": "KAMA_Dist:lo",
+     "lift": 4.158,
+     "traded_true": 27,
+     "traded_rate": 0.0909,
+     "untraded_rate": 0.0219
+    }
+   ],
+   "S": [
+    {
+     "condition": "AT_Score_LT:hi",
+     "lift": 0.154,
+     "traded_true": 4,
+     "traded_rate": 0.0135,
+     "untraded_rate": 0.0876
+    },
+    {
+     "condition": "Micro_FailedBreak:lo",
+     "lift": 0.149,
+     "traded_true": 9,
+     "traded_rate": 0.0303,
+     "untraded_rate": 0.2033
+    },
+    {
+     "condition": "PrevDay_Low_Dist_ATR:hi",
+     "lift": 0.231,
+     "traded_true": 12,
+     "traded_rate": 0.0404,
+     "untraded_rate": 0.1748
+    }
+   ]
+  },
+  "SHORT": {
+   "status": "OK",
+   "traded_bars": 164,
+   "untraded_bars": 8602,
+   "n_candidates": 191,
+   "T": [
+    {
+     "condition": "D2D_Signal:==-1",
+     "lift": 6.102,
+     "traded_true": 22,
+     "traded_rate": 0.1341,
+     "untraded_rate": 0.022
+    },
+    {
+     "condition": "D2D_Dn_Count:hi",
+     "lift": 5.755,
+     "traded_true": 22,
+     "traded_rate": 0.1341,
+     "untraded_rate": 0.0233
+    },
+    {
+     "condition": "AT_Score_LT:hi",
+     "lift": 3.91,
+     "traded_true": 28,
+     "traded_rate": 0.1707,
+     "untraded_rate": 0.0437
+    },
+    {
+     "condition": "KAMA_Dist:hi",
+     "lift": 3.739,
+     "traded_true": 25,
+     "traded_rate": 0.1524,
+     "untraded_rate": 0.0408
+    },
+    {
+     "condition": "D2D_Dynamic_Sensitivity:lo",
+     "lift": 3.63,
+     "traded_true": 32,
+     "traded_rate": 0.1951,
+     "untraded_rate": 0.0537
+    },
+    {
+     "condition": "OBV_Velocity:hi",
+     "lift": 3.388,
+     "traded_true": 30,
+     "traded_rate": 0.1829,
+     "untraded_rate": 0.054
+    }
+   ],
+   "S": []
+  }
+ },
+ "2026.05": {
+  "LONG": {
+   "status": "OK",
+   "traded_bars": 387,
+   "untraded_bars": 8722,
+   "n_candidates": 205,
+   "T": [
+    {
+     "condition": "AT_Score_ST:lo",
+     "lift": 8.715,
+     "traded_true": 40,
+     "traded_rate": 0.1034,
+     "untraded_rate": 0.0119
+    },
+    {
+     "condition": "D2D_Up_Count:hi",
+     "lift": 7.707,
+     "traded_true": 76,
+     "traded_rate": 0.1964,
+     "untraded_rate": 0.0255
+    },
+    {
+     "condition": "D2D_Signal:==1",
+     "lift": 7.706,
+     "traded_true": 74,
+     "traded_rate": 0.1912,
+     "untraded_rate": 0.0248
+    },
+    {
+     "condition": "Slope_EMA_ST:lo",
+     "lift": 7.004,
+     "traded_true": 83,
+     "traded_rate": 0.2145,
+     "untraded_rate": 0.0306
+    },
+    {
+     "condition": "AT_Slope_ST:lo",
+     "lift": 6.4,
+     "traded_true": 97,
+     "traded_rate": 0.2506,
+     "untraded_rate": 0.0392
+    },
+    {
+     "condition": "KAMA_Dist:lo",
+     "lift": 4.49,
+     "traded_true": 38,
+     "traded_rate": 0.0982,
+     "untraded_rate": 0.0219
+    }
+   ],
+   "S": [
+    {
+     "condition": "Micro_FailedBreak:lo",
+     "lift": 0.129,
+     "traded_true": 10,
+     "traded_rate": 0.0258,
+     "untraded_rate": 0.1997
+    }
+   ]
+  },
+  "SHORT": {
+   "status": "OK",
+   "traded_bars": 247,
+   "untraded_bars": 10538,
+   "n_candidates": 208,
+   "T": [
+    {
+     "condition": "AT_Score_LT:hi",
+     "lift": 4.993,
+     "traded_true": 62,
+     "traded_rate": 0.251,
+     "untraded_rate": 0.0503
+    },
+    {
+     "condition": "D2D_Signal:==-1",
+     "lift": 4.73,
+     "traded_true": 29,
+     "traded_rate": 0.1174,
+     "untraded_rate": 0.0248
+    },
+    {
+     "condition": "D2D_Dn_Count:hi",
+     "lift": 4.274,
+     "traded_true": 29,
+     "traded_rate": 0.1174,
+     "untraded_rate": 0.0275
+    },
+    {
+     "condition": "EMA_Oscillator:hi",
+     "lift": 3.839,
+     "traded_true": 21,
+     "traded_rate": 0.085,
+     "untraded_rate": 0.0221
+    },
+    {
+     "condition": "D2D_Dynamic_Sensitivity:lo",
+     "lift": 3.484,
+     "traded_true": 62,
+     "traded_rate": 0.251,
+     "untraded_rate": 0.0721
+    },
+    {
+     "condition": "KAMA_Dist:hi",
+     "lift": 3.178,
+     "traded_true": 30,
+     "traded_rate": 0.1215,
+     "untraded_rate": 0.0382
+    }
+   ],
+   "S": []
+  }
+ },
+ "2026.06": {
+  "LONG": {
+   "status": "OK",
+   "traded_bars": 453,
+   "untraded_bars": 10217,
+   "n_candidates": 209,
+   "T": [
+    {
+     "condition": "AT_Score_ST:lo",
+     "lift": 9.187,
+     "traded_true": 47,
+     "traded_rate": 0.1038,
+     "untraded_rate": 0.0113
+    },
+    {
+     "condition": "D2D_Signal:==1",
+     "lift": 7.892,
+     "traded_true": 88,
+     "traded_rate": 0.1943,
+     "untraded_rate": 0.0246
+    },
+    {
+     "condition": "Slope_EMA_ST:lo",
+     "lift": 7.82,
+     "traded_true": 111,
+     "traded_rate": 0.245,
+     "untraded_rate": 0.0313
+    },
+    {
+     "condition": "D2D_Up_Count:hi",
+     "lift": 7.795,
+     "traded_true": 90,
+     "traded_rate": 0.1987,
+     "untraded_rate": 0.0255
+    },
+    {
+     "condition": "AT_Slope_ST:lo",
+     "lift": 6.738,
+     "traded_true": 124,
+     "traded_rate": 0.2737,
+     "untraded_rate": 0.0406
+    },
+    {
+     "condition": "EMA_Oscillator:lo",
+     "lift": 6.044,
+     "traded_true": 27,
+     "traded_rate": 0.0596,
+     "untraded_rate": 0.0099
+    }
+   ],
+   "S": [
+    {
+     "condition": "Micro_FailedBreak:lo",
+     "lift": 0.154,
+     "traded_true": 14,
+     "traded_rate": 0.0309,
+     "untraded_rate": 0.2012
+    }
+   ]
+  },
+  "SHORT": {
+   "status": "OK",
+   "traded_bars": 292,
+   "untraded_bars": 12393,
+   "n_candidates": 209,
+   "T": [
+    {
+     "condition": "AT_Score_LT:hi",
+     "lift": 4.426,
+     "traded_true": 69,
+     "traded_rate": 0.2363,
+     "untraded_rate": 0.0534
+    },
+    {
+     "condition": "D2D_Signal:==-1",
+     "lift": 3.95,
+     "traded_true": 30,
+     "traded_rate": 0.1027,
+     "untraded_rate": 0.026
+    },
+    {
+     "condition": "D2D_Dn_Count:hi",
+     "lift": 3.656,
+     "traded_true": 30,
+     "traded_rate": 0.1027,
+     "untraded_rate": 0.0281
+    },
+    {
+     "condition": "VAL_Side:==0",
+     "lift": 3.397,
+     "traded_true": 32,
+     "traded_rate": 0.1096,
+     "untraded_rate": 0.0323
+    },
+    {
+     "condition": "EMA_Oscillator:hi",
+     "lift": 3.392,
+     "traded_true": 22,
+     "traded_rate": 0.0753,
+     "untraded_rate": 0.0222
+    },
+    {
+     "condition": "D2D_Dynamic_Sensitivity:lo",
+     "lift": 3.279,
+     "traded_true": 84,
+     "traded_rate": 0.2877,
+     "untraded_rate": 0.0877
+    }
+   ],
+   "S": []
+  }
+ },
+ "2026.07": {
+  "LONG": {
+   "status": "OK",
+   "traded_bars": 559,
+   "untraded_bars": 12522,
+   "n_candidates": 210,
+   "T": [
+    {
+     "condition": "AT_Score_ST:lo",
+     "lift": 8.808,
+     "traded_true": 63,
+     "traded_rate": 0.1127,
+     "untraded_rate": 0.0128
+    },
+    {
+     "condition": "Slope_EMA_ST:lo",
+     "lift": 7.992,
+     "traded_true": 152,
+     "traded_rate": 0.2719,
+     "untraded_rate": 0.034
+    },
+    {
+     "condition": "D2D_Signal:==1",
+     "lift": 7.613,
+     "traded_true": 109,
+     "traded_rate": 0.195,
+     "untraded_rate": 0.0256
+    },
+    {
+     "condition": "D2D_Up_Count:hi",
+     "lift": 7.475,
+     "traded_true": 112,
+     "traded_rate": 0.2004,
+     "untraded_rate": 0.0268
+    },
+    {
+     "condition": "AT_Slope_ST:lo",
+     "lift": 6.641,
+     "traded_true": 168,
+     "traded_rate": 0.3005,
+     "untraded_rate": 0.0453
+    },
+    {
+     "condition": "EMA_Oscillator:lo",
+     "lift": 6.529,
+     "traded_true": 37,
+     "traded_rate": 0.0662,
+     "untraded_rate": 0.0101
+    }
+   ],
+   "S": [
+    {
+     "condition": "Micro_FailedBreak:lo",
+     "lift": 0.161,
+     "traded_true": 18,
+     "traded_rate": 0.0322,
+     "untraded_rate": 0.1997
+    }
+   ]
+  },
+  "SHORT": {
+   "status": "OK",
+   "traded_bars": 350,
+   "untraded_bars": 15121,
+   "n_candidates": 210,
+   "T": [
+    {
+     "condition": "AT_Score_LT:hi",
+     "lift": 4.52,
+     "traded_true": 76,
+     "traded_rate": 0.2171,
+     "untraded_rate": 0.048
+    },
+    {
+     "condition": "VAL_Side:==0",
+     "lift": 3.566,
+     "traded_true": 39,
+     "traded_rate": 0.1114,
+     "untraded_rate": 0.0312
+    },
+    {
+     "condition": "D2D_Signal:==-1",
+     "lift": 3.459,
+     "traded_true": 32,
+     "traded_rate": 0.0914,
+     "untraded_rate": 0.0264
+    },
+    {
+     "condition": "EMA_Oscillator:hi",
+     "lift": 3.373,
+     "traded_true": 26,
+     "traded_rate": 0.0743,
+     "untraded_rate": 0.022
+    },
+    {
+     "condition": "D2D_Dn_Count:hi",
+     "lift": 3.274,
+     "traded_true": 33,
+     "traded_rate": 0.0943,
+     "untraded_rate": 0.0288
+    },
+    {
+     "condition": "D2D_Dynamic_Sensitivity:lo",
+     "lift": 3.231,
+     "traded_true": 96,
+     "traded_rate": 0.2743,
+     "untraded_rate": 0.0849
+    }
+   ],
+   "S": []
+  }
+ }
+}
