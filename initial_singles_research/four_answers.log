@@ -1,0 +1,281 @@
+=== BOOK VOCABULARY, RE-DERIVED ===
+signals 297 · slots 891 · distinct conditions 177 · distinct variables 105 of 117 · conditions of 249 never used 72
+e^H over variable slots 83.2 · top variable AT_Slope_ST 4.3% (38 slots) · variables appearing exactly once 7
+conditions in LONG signals 141 · in SHORT signals 133 · LONG-only 44 · SHORT-only 36 · both 97
+book conditions absent from the 249 pool: []
+
+=== Q1. WHICH CONDITIONS — presence in the FIRED signals of the 973 bars, ranked by presence on PROFITABLE bars ===
+--- LONG (601 bars, 141 conditions present) top 20; every loss_events figure is < 20 and is a COUNT ---
+              condition  bars  share_traded_bars  profitable_bars  loss_events  mean_depth  mean_bar_pnl
+       AT_Regime_ST:==1   226              0.376              212           14      12.451       524.131
+              Volume:hi   197              0.328              189            8      10.802       516.964
+            OBV_Macd:lo   185              0.308              175           10      11.286       592.780
+         AT_Slope_ST:lo   184              0.306              173           11      13.500       500.385
+       OR_Low_Side:==-1   171              0.285              165            6      11.965       457.239
+  PrevDay_Low_Side:==-1   169              0.281              156           13       9.219       484.709
+        Slope_EMA_ST:lo   167              0.278              155           12      14.275       524.824
+     Micro_Rejection:lo   156              0.260              148            8       8.103       348.708
+          Upper_Wick:hi   140              0.233              136            4      11.521       772.223
+     Bars_Since_Flip:hi   144              0.240              134           10      13.500       432.066
+       Volume_Avg_10:hi   126              0.210              124            2      10.349       445.327
+      Momentum_Value:hi   130              0.216              123            7      15.523       686.822
+      Slope_Accel_LT:hi   121              0.201              115            6       8.405       199.980
+       AT_Regime_LT:==1   122              0.203              112           10      10.631       472.022
+      OR_High_Side:==-1   117              0.195              112            5      10.342       497.891
+   Micro_HLAsymmetry:hi   115              0.191              111            4      14.365       693.811
+         AT_Slope_LT:lo   116              0.193              110            6      16.190       662.945
+   Micro_FailedBreak:hi   114              0.190              110            4      13.395       588.213
+Session_Low_Dist_ATR:lo   115              0.191              110            5      10.313       741.610
+      Micro_VolOfVol:hi   112              0.186              109            3      13.580       526.013
+--- SHORT (372 bars, 133 conditions present) top 20; every loss_events figure is < 20 and is a COUNT ---
+                 condition  bars  share_traded_bars  profitable_bars  loss_events  mean_depth  mean_bar_pnl
+          Volume_Avg_10:hi   113              0.304              112            1       5.398       299.096
+              Bar_Range:hi   113              0.304              109            4       5.018       287.854
+                Sqz_Val:hi    89              0.239               87            2       4.742        97.679
+            Micro_Hurst:hi    88              0.237               86            2       4.545       148.572
+     PrevDay_High_Side:==1    85              0.228               81            4       4.859       132.188
+D2D_Dynamic_Sensitivity:lo    80              0.215               78            2       5.425       362.816
+             Lower_Wick:lo    76              0.204               74            2       5.329       383.363
+             D2D_ATR_MA:hi    72              0.194               71            1       5.111       146.531
+    Micro_RangeVelocity:lo    72              0.194               70            2       5.042       408.836
+  Session_High_Dist_ATR:hi    71              0.191               69            2       4.817       100.446
+            AT_Score_LT:hi    65              0.175               64            1       5.277       152.182
+            AT_Slope_ST:lo    65              0.175               64            1       5.215       129.511
+                D2D_ATR:hi    65              0.175               63            2       5.185       155.865
+                 Volume:hi    63              0.169               61            2       5.540       383.698
+        RangeOsc_State:==2    59              0.159               58            1       4.559       181.059
+    Micro_TickIntensity:hi    57              0.153               56            1       4.860       102.821
+       RangeOsc_State:==-1    54              0.145               52            2       5.241       145.406
+          Micro_Entropy:lo    51              0.137               51            0       5.392       468.031
+      Micro_HLAsymmetry:lo    53              0.142               50            3       4.830       139.855
+  Session_High_Dist_ATR:lo    52              0.140               50            2       4.750       187.623
+
+=== Q2. DOES ANYTHING STACK THE SAME WAY — per direction, Jaccard on the distinct-condition sets ===
+LONG 601 bars: exact-unique sets 591, largest exact repeat x3 | J>=0.8: 570 families, largest [6, 5, 4, 4], singletons 552, bars with >=1 partner 22 | J>=0.6: 444 families, largest [23, 19, 11, 6], singletons 384, bars with >=1 partner 101 | J>=0.4: 50 families, largest [546, 4, 2, 2], singletons 45, bars with >=1 partner 498
+   pairwise J (enumerated 180,300 pairs): mean 0.0821 median 0.0556 p99 0.4118 share J=0 25.5%
+SHORT 372 bars: exact-unique sets 348, largest exact repeat x3 | J>=0.8: 313 families, largest [22, 4, 3, 3], singletons 283, bars with >=1 partner 37 | J>=0.6: 190 families, largest [64, 58, 11, 8], singletons 160, bars with >=1 partner 140 | J>=0.4: 29 families, largest [342, 2, 2, 1], singletons 26, bars with >=1 partner 315
+   pairwise J (enumerated 69,006 pairs): mean 0.0737 median 0.0400 p99 0.5455 share J=0 47.4%
+
+=== Q3. THE DISCRIMINATOR — condition TRUE on the bar (oracle mask): 973 traded vs ALL eligible untraded bars, reweighted to the traded (direction x EST_hour) distribution ===
+LONG: traded 601 · eligible untraded 13,559 (ALL enumerated; no sampling) · hours present in traded 19 · untraded reweighted to the traded hour distribution (effective n after reweighting 601; hours with traded bars but no untraded bars: [])
+SHORT: traded 372 · eligible untraded 16,389 (ALL enumerated; no sampling) · hours present in traded 19 · untraded reweighted to the traded hour distribution (effective n after reweighting 372; hours with traded bars but no untraded bars: [])
+
+--- LONG: top 25 by hour-matched lift (249 conditions tested per direction; Bonferroni 0.05/249 = 2.0e-04 on the raw Fisher p) ---
+                 condition  book_group  traded_bars_true  traded_rate  untraded_rate_hourmatched  lift_hourmatched  lift_raw  fisher_p_raw
+         AT_Lookback_LT:lo not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+                 ATR_1M:lo not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+         AT_Lookback_ST:lo not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+D2D_Dynamic_Sensitivity:hi not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+           D2D_Up_Count:lo not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+           D2D_Dn_Count:hi  SHORT-only                 0       0.0000                     0.0000               inf       inf        1.0000
+           D2D_Dn_Count:lo not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+           D2D_Signal:==-1  SHORT-only                 0       0.0000                     0.0000               inf       inf        1.0000
+        OR_Low_Dist_ATR:lo not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+    PrevDay_Close_Side:==0 not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+     PrevDay_High_Side:==0 not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+       WeeklyOpen_Side:==0 not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+      PrevDay_Low_Side:==0 not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+       OR_High_Dist_ATR:lo not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+            AT_Score_ST:lo not-in-book                73       0.1215                     0.0136            8.9128    8.2760        0.0000
+           Slope_EMA_ST:lo        both               174       0.2895                     0.0348            8.3153    9.4365        0.0000
+            D2D_Signal:==1   LONG-only               118       0.1963                     0.0266            7.3742    6.5409        0.0000
+           D2D_Up_Count:hi not-in-book               121       0.2013                     0.0279            7.2165    6.3931        0.0000
+         EMA_Oscillator:lo        both                44       0.0732                     0.0106            6.8801    7.8163        0.0000
+            AT_Slope_ST:lo        both               192       0.3195                     0.0467            6.8386    7.8048        0.0000
+              KAMA_Dist:lo   LONG-only                74       0.1231                     0.0249            4.9353    5.5465        0.0000
+            D2D_Persist:lo not-in-book                23       0.0383                     0.0083            4.5964    4.9419        0.0000
+           RangeOsc_Val:lo        both                75       0.1248                     0.0292            4.2785    4.6105        0.0000
+               OBV_Macd:lo        both               267       0.4443                     0.1209            3.6757    4.0051        0.0000
+          KAMA_Dist_ATR:lo not-in-book                 8       0.0133                     0.0036            3.6505    4.1973        0.0013
+   conditions with lift >= 2 and >= 20 traded bars: 27; with lift >= 1.5: 54; lift < 0.67 (under-represented, >=20 traded bars): 37
+   bottom 10 by lift (>=20 traded bars): AT_Score_LT:hi 0.47, MultiDay_Position:hi 0.46, VAH_Dist_ATR:hi 0.43, VAL_Dist_ATR:hi 0.41, Dist_To_PoC_ATR:hi 0.41, OBVf_DirStepCount:hi 0.37, PrevDay_High_Side:==1 0.37, Session_Low_Dist_ATR:hi 0.36, VWAP_Z:hi 0.32, PrevDay_Low_Dist_ATR:hi 0.31
+   lift by book group (conditions with >=20 traded bars):
+             size  median   mean    max
+book_group                             
+LONG-only      44   1.095  1.502  7.374
+SHORT-only     27   0.777  0.895  1.854
+both           97   1.272  1.501  8.315
+not-in-book    44   0.889  1.473  8.913
+
+--- SHORT: top 25 by hour-matched lift (249 conditions tested per direction; Bonferroni 0.05/249 = 2.0e-04 on the raw Fisher p) ---
+                 condition  book_group  traded_bars_true  traded_rate  untraded_rate_hourmatched  lift_hourmatched  lift_raw  fisher_p_raw
+         AT_Lookback_LT:lo not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+                 ATR_1M:lo not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+         AT_Lookback_ST:lo not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+D2D_Dynamic_Sensitivity:hi not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+           D2D_Up_Count:lo not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+            D2D_Signal:==1   LONG-only                 0       0.0000                     0.0000               inf       inf        1.0000
+           D2D_Up_Count:hi not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+           D2D_Dn_Count:lo not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+        OR_Low_Dist_ATR:lo not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+     PrevDay_High_Side:==0 not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+      PrevDay_Low_Side:==0 not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+       OR_High_Dist_ATR:lo not-in-book                 0       0.0000                     0.0000               inf       inf        1.0000
+      Session_Low_Side:==0 not-in-book                16       0.0430                     0.0045            9.6032    8.1023        0.0000
+            AT_Score_LT:hi        both                79       0.2124                     0.0476            4.4629    4.7743        0.0000
+           D2D_Signal:==-1  SHORT-only                36       0.0968                     0.0271            3.5702    3.5964        0.0000
+              VAL_Side:==0  SHORT-only                42       0.1129                     0.0316            3.5692    3.7457        0.0000
+            AT_Score_ST:hi not-in-book                17       0.0457                     0.0133            3.4289    3.2994        0.0000
+          KAMA_Dist_ATR:hi not-in-book                 9       0.0242                     0.0072            3.3832    3.6377        0.0013
+           D2D_Dn_Count:hi  SHORT-only                37       0.0995                     0.0295            3.3750    3.4757        0.0000
+         EMA_Oscillator:hi   LONG-only                27       0.0726                     0.0223            3.2585    4.0460        0.0000
+D2D_Dynamic_Sensitivity:lo        both               104       0.2796                     0.0885            3.1604    3.0546        0.0000
+           OBV_Velocity:hi        both                56       0.1505                     0.0477            3.1560    3.3385        0.0000
+      Micro_GarmanKlass:lo not-in-book                 3       0.0081                     0.0026            3.0537    2.5417        0.1228
+              VAH_Side:==0  SHORT-only                38       0.1022                     0.0346            2.9482    3.2891        0.0000
+                Sqz_Val:hi        both               118       0.3172                     0.1122            2.8274    3.1242        0.0000
+   conditions with lift >= 2 and >= 20 traded bars: 25; with lift >= 1.5: 49; lift < 0.67 (under-represented, >=20 traded bars): 10
+   bottom 10 by lift (>=20 traded bars): KAMA_Dist_ATR:lo 0.65, Micro_AutoCorr:lo 0.64, RangeOsc_State:==-2 0.62, Micro_FractalDim:hi 0.60, D2D_Persist:lo 0.59, OBVf_DirStepCount:hi 0.58, VAH_Side:==-1 0.55, Micro_Hurst:lo 0.53, Efficiency_Ratio:lo 0.52, PoC_Side:==-1 0.40
+   lift by book group (conditions with >=20 traded bars):
+             size  median   mean    max
+book_group                             
+LONG-only      40   0.997  1.127  3.259
+SHORT-only     34   1.332  1.522  3.570
+both           96   1.222  1.378  4.463
+not-in-book    43   0.961  1.138  2.316
+
+=== Q4. THE 177-POOL COUNT — book vocabulary freed from its groupings; traded vs hour-matched eligible untraded ===
+
+--- 249-aligned (F12 rule) ---
+LONG pool size 117: traded  min 16 p10 28 p25 34 median 41 p75 47 p90 54 max 74 mean 40.95
+                   untraded(hour-wt) min 12 p10 28 p25 34 median 42 p75 51 p90 58 max 81 mean 42.83
+                   AUC P(traded > untraded) = 0.4523 · median percentile-rank of the 973 in the untraded distribution 0.440 · traded bars above untraded p90: 34 of 601
+SHORT pool size 110: traded  min 9 p10 19 p25 23 median 30 p75 42 p90 51 max 61 mean 32.55
+                    untraded(hour-wt) min 6 p10 19 p25 25 median 33 p75 41 p90 47 max 61 mean 33.15
+                    AUC P(traded > untraded) = 0.4692 · median percentile-rank of the 973 in the untraded distribution 0.386 · traded bars above untraded p90: 62 of 372
+
+--- 177 book pool, direction-specific (conds used in that direction's signals) ---
+LONG pool size 141: traded  min 35 p10 43 p25 47 median 51 p75 55 p90 59 max 69 mean 51.01
+                   untraded(hour-wt) min 20 p10 35 p25 40 median 45 p75 49 p90 53 max 70 mean 44.44
+                   AUC P(traded > untraded) = 0.7523 · median percentile-rank of the 973 in the untraded distribution 0.801 · traded bars above untraded p90: 206 of 601
+SHORT pool size 133: traded  min 26 p10 36 p25 39 median 43 p75 47 p90 52 max 63 mean 43.15
+                    untraded(hour-wt) min 13 p10 27 p25 32 median 37 p75 41 p90 45 max 58 mean 36.47
+                    AUC P(traded > untraded) = 0.7593 · median percentile-rank of the 973 in the untraded distribution 0.803 · traded bars above untraded p90: 150 of 372
+
+--- 177 book pool, all 177 regardless of direction ---
+LONG pool size 177: traded  min 37 p10 48 p25 52 median 57 p75 62 p90 66 max 75 mean 57.08
+                   untraded(hour-wt) min 24 p10 41 p25 46 median 52 p75 57 p90 61 max 80 mean 51.58
+                   AUC P(traded > untraded) = 0.6986 · median percentile-rank of the 973 in the untraded distribution 0.730 · traded bars above untraded p90: 162 of 601
+SHORT pool size 177: traded  min 40 p10 49 p25 53 median 58 p75 63 p90 69 max 80 mean 58.16
+                    untraded(hour-wt) min 26 p10 42 p25 47 median 52 p75 58 p90 62 max 77 mean 52.08
+                    AUC P(traded > untraded) = 0.6998 · median percentile-rank of the 973 in the untraded distribution 0.745 · traded bars above untraded p90: 113 of 372
+
+--- book pool, ONE-SIDED conditions only (LONG-only for LONG bars, SHORT-only for SHORT) ---
+LONG pool size 44: traded  min 10 p10 13 p25 14 median 16 p75 18 p90 20 max 23 mean 16.25
+                   untraded(hour-wt) min 7 p10 12 p25 13 median 15 p75 16 p90 18 max 26 mean 14.95
+                   AUC P(traded > untraded) = 0.6418 · median percentile-rank of the 973 in the untraded distribution 0.606 · traded bars above untraded p90: 102 of 601
+SHORT pool size 36: traded  min 3 p10 5 p25 6 median 8 p75 9 p90 10 max 15 mean 7.58
+                    untraded(hour-wt) min 0 p10 4 p25 5 median 6 p75 8 p90 9 max 15 mean 6.29
+                    AUC P(traded > untraded) = 0.6639 · median percentile-rank of the 973 in the untraded distribution 0.721 · traded bars above untraded p90: 67 of 372
+
+--- book pool, BOTH-SIDES conditions (97) ---
+LONG pool size 97: traded  min 20 p10 28 p25 31 median 35 p75 38 p90 42 max 49 mean 34.76
+                   untraded(hour-wt) min 10 p10 21 p25 25 median 30 p75 34 p90 37 max 49 mean 29.49
+                   AUC P(traded > untraded) = 0.7377 · median percentile-rank of the 973 in the untraded distribution 0.785 · traded bars above untraded p90: 175 of 601
+SHORT pool size 97: traded  min 19 p10 28 p25 32 median 35 p75 40 p90 43 max 53 mean 35.56
+                    untraded(hour-wt) min 10 p10 22 p25 26 median 31 p75 35 p90 38 max 52 mean 30.18
+                    AUC P(traded > untraded) = 0.7291 · median percentile-rank of the 973 in the untraded distribution 0.739 · traded bars above untraded p90: 134 of 372
+
+=== Q3 CLEAN: ranked by hour-matched lift among conditions TRUE on >= 20 traded bars ===
+--- LONG: 212 conditions qualify; top 25 ---
+              condition  book_group  traded_bars_true  traded_rate  untraded_rate_hourmatched  lift_hourmatched  fisher_p_raw
+         AT_Score_ST:lo not-in-book                73       0.1215                     0.0136            8.9128           0.0
+        Slope_EMA_ST:lo        both               174       0.2895                     0.0348            8.3153           0.0
+         D2D_Signal:==1   LONG-only               118       0.1963                     0.0266            7.3742           0.0
+        D2D_Up_Count:hi not-in-book               121       0.2013                     0.0279            7.2165           0.0
+      EMA_Oscillator:lo        both                44       0.0732                     0.0106            6.8801           0.0
+         AT_Slope_ST:lo        both               192       0.3195                     0.0467            6.8386           0.0
+           KAMA_Dist:lo   LONG-only                74       0.1231                     0.0249            4.9353           0.0
+         D2D_Persist:lo not-in-book                23       0.0383                     0.0083            4.5964           0.0
+        RangeOsc_Val:lo        both                75       0.1248                     0.0292            4.2785           0.0
+            OBV_Macd:lo        both               267       0.4443                     0.1209            3.6757           0.0
+          KAMA_Slope:lo not-in-book                40       0.0666                     0.0185            3.6042           0.0
+         AT_Score_LT:lo        both               119       0.1980                     0.0598            3.3114           0.0
+    RangeOsc_State:==-1        both               158       0.2629                     0.0821            3.2018           0.0
+       AT_Regime_ST:==1   LONG-only               306       0.5092                     0.1661            3.0652           0.0
+      Slope_Accel_LT:lo        both                52       0.0865                     0.0286            3.0277           0.0
+      Harmonic_LLEMA:lo not-in-book                21       0.0349                     0.0133            2.6349           0.0
+     ST_Flip_Event:==-1   LONG-only                37       0.0616                     0.0242            2.5453           0.0
+         AT_Slope_LT:lo   LONG-only               283       0.4709                     0.1920            2.4528           0.0
+        Slope_EMA_LT:lo not-in-book               282       0.4692                     0.1988            2.3599           0.0
+        VAH_Dist_ATR:lo not-in-book               116       0.1930                     0.0820            2.3552           0.0
+        VAL_Dist_ATR:lo not-in-book               142       0.2363                     0.1013            2.3333           0.0
+     Dist_To_PoC_ATR:lo        both               112       0.1864                     0.0809            2.3032           0.0
+Session_Low_Dist_ATR:lo   LONG-only               157       0.2612                     0.1159            2.2541           0.0
+  PrevDay_Low_Side:==-1        both               220       0.3661                     0.1638            2.2345           0.0
+      Momentum_Value:lo   LONG-only                96       0.1597                     0.0739            2.1607           0.0
+--- LONG: bottom 12 (under-represented on traded bars) ---
+              condition  book_group  traded_bars_true  traded_rate  untraded_rate_hourmatched  lift_hourmatched  fisher_p_raw
+            OBV_Macd:hi not-in-book               139       0.2313                     0.4812            0.4807           0.0
+         AT_Score_ST:hi not-in-book                70       0.1165                     0.2440            0.4774           0.0
+         AT_Score_LT:hi        both                26       0.0433                     0.0911            0.4748           0.0
+   MultiDay_Position:hi        both               111       0.1847                     0.3973            0.4649           0.0
+        VAH_Dist_ATR:hi   LONG-only                50       0.0832                     0.1924            0.4324           0.0
+        VAL_Dist_ATR:hi not-in-book                43       0.0715                     0.1734            0.4125           0.0
+     Dist_To_PoC_ATR:hi not-in-book                47       0.0782                     0.1897            0.4123           0.0
+   OBVf_DirStepCount:hi  SHORT-only                41       0.0682                     0.1845            0.3697           0.0
+  PrevDay_High_Side:==1        both                70       0.1165                     0.3186            0.3656           0.0
+Session_Low_Dist_ATR:hi not-in-book                36       0.0599                     0.1655            0.3619           0.0
+              VWAP_Z:hi not-in-book                44       0.0732                     0.2306            0.3174           0.0
+PrevDay_Low_Dist_ATR:hi  SHORT-only                24       0.0399                     0.1281            0.3118           0.0
+   Bonferroni-significant (p < 2.0e-04) with lift >= 1.5: 51; with lift <= 0.67: 37
+--- SHORT: 213 conditions qualify; top 25 ---
+                 condition  book_group  traded_bars_true  traded_rate  untraded_rate_hourmatched  lift_hourmatched  fisher_p_raw
+            AT_Score_LT:hi        both                79       0.2124                     0.0476            4.4629        0.0000
+           D2D_Signal:==-1  SHORT-only                36       0.0968                     0.0271            3.5702        0.0000
+              VAL_Side:==0  SHORT-only                42       0.1129                     0.0316            3.5692        0.0000
+           D2D_Dn_Count:hi  SHORT-only                37       0.0995                     0.0295            3.3750        0.0000
+         EMA_Oscillator:hi   LONG-only                27       0.0726                     0.0223            3.2585        0.0000
+D2D_Dynamic_Sensitivity:lo        both               104       0.2796                     0.0885            3.1604        0.0000
+           OBV_Velocity:hi        both                56       0.1505                     0.0477            3.1560        0.0000
+              VAH_Side:==0  SHORT-only                38       0.1022                     0.0346            2.9482        0.0000
+                Sqz_Val:hi        both               118       0.3172                     0.1122            2.8274        0.0000
+              PoC_Side:==0  SHORT-only                51       0.1371                     0.0505            2.7153        0.0000
+           Slope_EMA_ST:hi        both                46       0.1237                     0.0457            2.7073        0.0000
+        ST_Flip_Event:==-1   LONG-only                20       0.0538                     0.0200            2.6818        0.0001
+              KAMA_Dist:hi        both                36       0.0968                     0.0364            2.6550        0.0000
+         Momentum_Value:hi        both                79       0.2124                     0.0825            2.5739        0.0000
+            AT_Slope_ST:hi  SHORT-only                55       0.1478                     0.0589            2.5095        0.0000
+             Lower_Wick:lo        both                98       0.2634                     0.1081            2.4363        0.0000
+     PrevDay_High_Side:==1        both               132       0.3548                     0.1527            2.3237        0.0000
+             KAMA_Slope:hi not-in-book                25       0.0672                     0.0290            2.3165        0.0000
+            Micro_Hurst:hi        both               159       0.4274                     0.1867            2.2889        0.0000
+  Session_High_Dist_ATR:lo        both               105       0.2823                     0.1253            2.2522        0.0000
+     DailyOpen_Dist_ATR:hi  SHORT-only                89       0.2392                     0.1131            2.1155        0.0000
+        RangeOsc_State:==2        both                71       0.1909                     0.0930            2.0532        0.0000
+   Session_Low_Dist_ATR:hi not-in-book                47       0.1263                     0.0616            2.0506        0.0000
+           VAL_Dist_ATR:hi not-in-book                53       0.1425                     0.0700            2.0344        0.0000
+   PrevDay_Low_Dist_ATR:hi  SHORT-only                59       0.1586                     0.0789            2.0092        0.0000
+--- SHORT: bottom 12 (under-represented on traded bars) ---
+           condition  book_group  traded_bars_true  traded_rate  untraded_rate_hourmatched  lift_hourmatched  fisher_p_raw
+   Micro_VolOfVol:lo        both                62       0.1667                     0.2245            0.7424        0.0251
+ Micro_BarEntropy:hi  SHORT-only                51       0.1371                     0.1910            0.7179        0.0127
+    KAMA_Dist_ATR:lo not-in-book                85       0.2285                     0.3489            0.6549        0.0000
+   Micro_AutoCorr:lo  SHORT-only                49       0.1317                     0.2053            0.6417        0.0006
+ RangeOsc_State:==-2        both                31       0.0833                     0.1353            0.6160        0.0005
+ Micro_FractalDim:hi   LONG-only                45       0.1210                     0.2019            0.5993        0.0001
+      D2D_Persist:lo not-in-book                81       0.2177                     0.3672            0.5930        0.0000
+OBVf_DirStepCount:hi  SHORT-only                39       0.1048                     0.1795            0.5840        0.0001
+       VAH_Side:==-1  SHORT-only                41       0.1102                     0.2009            0.5485        0.0000
+      Micro_Hurst:lo  SHORT-only                39       0.1048                     0.1969            0.5325        0.0000
+ Efficiency_Ratio:lo  SHORT-only                38       0.1022                     0.1948            0.5243        0.0000
+       PoC_Side:==-1 not-in-book                21       0.0565                     0.1403            0.4024        0.0000
+   Bonferroni-significant (p < 2.0e-04) with lift >= 1.5: 47; with lift <= 0.67: 8
+
+=== Q2 FAMILY CORES at J>=0.6 (conditions present in >=80% of the family's bars) ===
+LONG family of 23 bars: depth_q [np.int64(3), np.int64(4), np.int64(5), np.int64(6), np.int64(7)]… mean 4.7 · loss events 3 · net 1431 · months ['2026.03', '2026.04'] · core: ADX_Rising:==1 + OR_Low_Side:==1 + PrevDay_High_Dist_ATR:lo + PrevDay_Low_Side:==-1
+LONG family of 19 bars: depth_q [np.int64(4), np.int64(5), np.int64(6), np.int64(7), np.int64(8), np.int64(9)]… mean 6.5 · loss events 3 · net 4652 · months ['2026.01', '2026.03', '2026.04', '2026.05', '2026.06', '2026.07'] · core: ADX_Rising:==0 + Harmonic_OBVf_Concordance:==0 + KAMA_Dist:lo + Lower_Wick:hi + Micro_WickImbalance:hi + Volume:hi
+LONG family of 11 bars: depth_q [np.int64(3), np.int64(4), np.int64(5)]… mean 4.6 · loss events 0 · net 2701 · months ['2026.02', '2026.03', '2026.06', '2026.07'] · core: PrevDay_Close_Side:==-1 + PrevDay_High_Dist_ATR:lo + PrevDay_Low_Side:==-1 + Sqz_State:==1 + VWAP_Side:==-1 + WeeklyOpen_Side:==-1
+SHORT family of 64 bars: depth_q [np.int64(3), np.int64(4), np.int64(5), np.int64(6), np.int64(7), np.int64(8)]… mean 5.0 · loss events 2 · net 7859 · months ['2026.01', '2026.02', '2026.03', '2026.04', '2026.05', '2026.06', '2026.07'] · core: Bar_Range:hi
+SHORT family of 58 bars: depth_q [np.int64(3), np.int64(4), np.int64(5), np.int64(6), np.int64(7), np.int64(8)]… mean 4.7 · loss events 2 · net 4577 · months ['2026.02', '2026.03', '2026.04', '2026.05', '2026.06', '2026.07'] · core: D2D_ATR_MA:hi + Session_High_Dist_ATR:hi + Sqz_Val:hi
+SHORT family of 11 bars: depth_q [np.int64(3), np.int64(4), np.int64(5)]… mean 3.9 · loss events 0 · net 2141 · months ['2026.02', '2026.03', '2026.04', '2026.05', '2026.06'] · core: ATR_1M:hi + Micro_CSSpread:hi + Micro_HLAsymmetry:hi + MultiDay_Slope:hi + RangeOsc_State:==2
+
+=== Q4b. NON-CIRCULAR: direction-specific book-pool count MINUS the conditions of every book signal firing on the bar (both populations) ===
+LONG: residual count (book-pool true, not in any firing signal)   traded min 14 p10 27 p25 32 median 37 p75 42 p90 46 max 59 mean 36.80
+                                                          untraded(hour-wt) min 17 p10 33 p25 37 median 42 p75 47 p90 51 max 67 mean 41.88
+       AUC P(traded > untraded) = 0.3128 | fired-signal conditions on the bar: traded mean 14.22, untraded mean 2.56 | untraded depth_q: 0 on 54.1%, 1-2 on 32.7%, >=3 on 13.2%
+       restricted to untraded bars with depth_q >= 3 (n=1596): untraded residual min 17 p10 30 p25 34 median 39 p75 43 p90 47 max 61 mean 38.50 · AUC 0.4362; raw 249-aligned count on the same cut: AUC 0.5405
+SHORT: residual count (book-pool true, not in any firing signal)   traded min 18 p10 26 p25 29 median 33 p75 37 p90 40 max 50 mean 32.92
+                                                           untraded(hour-wt) min 12 p10 26 p25 31 median 35 p75 40 p90 43 max 56 mean 34.99
+        AUC P(traded > untraded) = 0.4009 | fired-signal conditions on the bar: traded mean 10.23, untraded mean 1.49 | untraded depth_q: 0 on 64.8%, 1-2 on 30.4%, >=3 on 4.8%
+        restricted to untraded bars with depth_q >= 3 (n=667): untraded residual min 16 p10 27 p25 30 median 34 p75 38 p90 42 max 49 mean 34.01 · AUC 0.4512; raw 249-aligned count on the same cut: AUC 0.5129
