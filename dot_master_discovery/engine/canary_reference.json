@@ -6,5 +6,16 @@
     "PF": 4.81,
     "recorded": "2026-08-19, adopted engine: FLOORED, floor 3/3, cap 21, recentfb=False, 1.0 lot",
     "_note": "THE PER-SESSION ENGINE CHECK. Re-ratify ONLY on an authorised engine change, and record the date and configuration. The previous form hardcoded 2698/92347 in a condition and went silently inert when the engine moved - a mismatch skipped its own print rather than shouting."
-  }
+  },
+  "whole_dot": {
+    "trades": 5776,
+    "net": 284974,
+    "WR": 96.12,
+    "PF": 14.53,
+    "events": 42,
+    "event_days": 35,
+    "recorded": "2026-08-22, adopted engine: FLOORED, floor 3/3, cap 21, recentfb=False, 1.0 lot, 297 F0 triples",
+    "_note": "THE PER-SESSION ENGINE CHECK. BOOK-50 is redundant: the 297 is what ships, so the engine check should score the thing that ships. Re-ratify ONLY on an authorised engine change and record the date and configuration."
+  },
+  "_keying": "Keyed on the BOOK BASENAME, not a hardcoded filename: book50_signals.csv -> book50, whole_dot_signals.csv -> whole_dot. A new book with no entry says so by name rather than passing quietly."
 }

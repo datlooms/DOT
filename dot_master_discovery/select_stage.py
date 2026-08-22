@@ -128,7 +128,12 @@ def nested_arms(n_survivors, sizes, seed=SEED):
         if n > n_survivors:
             continue
         out[n] = sorted(order[:n].tolist())
-    out[n_survivors] = sorted(order.tolist())
+    # AN ARM OF SIZE ZERO IS NOT AN ARM. With 0 survivors this line created arms={0: []},
+    # the loop below built an EMPTY book, run_portfolio returned a frame with no columns,
+    # and _score_configured raised KeyError: 'signal_name'. A zero-survivor screen is a
+    # legitimate outcome of a capped smoke scan and must degrade, not crash.
+    if n_survivors > 0:
+        out[n_survivors] = sorted(order.tolist())
     return out, order
 
 
@@ -413,10 +418,17 @@ def run_select(df, ad, st, w, pool, anchor, cfg, cfg_path, out, input_sha, worke
         grammar_fn(bk)
         t1 = _t.time()
         import score_g as _sg
+        if not len(bk):
+            print(f'    arm {n:>6}: EMPTY BOOK - no signals to score. This is a screen '
+                  f'outcome, not an error.', flush=True)
+            scores[n] = ({'trades': 0, 'WR': 0.0, 'PF': '', 'net': 0.0, 'signals': n,
+                          'events': 0, 'event_days': 0, 'trade_losses': 0,
+                          'secs': 0.0}, None)
+            continue
         sigs = _sg.build_book(df, pool, anchor, bk, adaptive=ad, structural=st)
         try:
             r, td = score_fn(df, sigs, ad, st, w, _conv_for(df, cfg), cfg)
-        except (ZeroDivisionError, ValueError, IndexError) as exc:
+        except (ZeroDivisionError, ValueError, IndexError, KeyError, AttributeError) as exc:
             # A SMALL ARM CAN PRODUCE ZERO BOOK-ONLY TRADES: every trade on the bar is a
             # conviction gap filler, so the BOOK-only population is empty and the metrics
             # block divides by zero. Report the arm as EMPTY rather than aborting the

@@ -1428,12 +1428,16 @@ def _smoke_select(df, ad, st, w, pool, anchor, out, input_sha, workers):
     for _ln in _gl:
         print(_ln, flush=True)
 
-    print('  [3/6] BOOK-50 CANARY - a separate book, needs no survivor', flush=True)
-    b50 = os.path.join(_HERE, 'engine', 'book50_signals.csv')
-    if os.path.exists(b50):
-        s8_committed(df, ad, st, w, pool, anchor, b50, out, input_sha)
+    print('  [3/6] ENGINE CANARY - scores THE WHOLE DOT (297), the book that ships. '
+          'BOOK-50 is redundant. Needs no survivor.', flush=True)
+    # THE WHOLE DOT, NOT BOOK-50. BOOK-50 was the engine check when it was the incumbent;
+    # the 297 is what ships now, so smoke scores the thing that ships and the canary
+    # compares against the 297's ratified figures.
+    _cb = os.path.join(_HERE, 'engine', 'whole_dot_signals.csv')
+    if os.path.exists(_cb):
+        s8_committed(df, ad, st, w, pool, anchor, _cb, out, input_sha)
     else:
-        print('      *** BOOK-50 ABSENT - THE ENGINE CHECK DID NOT RUN. Not a pass. ***',
+        print('      *** whole_dot_signals.csv ABSENT - THE ENGINE CHECK DID NOT RUN. Not a pass. ***',
               flush=True)
 
     print('  [4/6] DEPLOY MANIFEST - pure file checks', flush=True)
@@ -1689,12 +1693,18 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
     # missing reference says so by name rather than passing quietly. Substituting new
     # literals here would rebuild the same defect with fresher numbers.
     canary = False
-    if frozen and os.path.basename(book_file or '') == 'book50_signals.csv':
+    # KEYED ON THE BOOK, NOT ONE HARDCODED FILENAME. BOOK-50 is redundant now: the 297 is
+    # what ships, so the per-session engine check should score the thing that ships. A book
+    # with no reference entry says so by name rather than passing quietly.
+    _bk_key = {'book50_signals.csv': 'book50',
+               'whole_dot_signals.csv': 'whole_dot'}.get(
+                   os.path.basename(book_file or ''))
+    if frozen and _bk_key:
         _ref = None
         try:
             _refcfg = json.load(open(os.path.join(_HERE, 'engine', 'canary_reference.json'),
                                      encoding='utf-8'))
-            _ref = _refcfg.get('book50')
+            _ref = _refcfg.get(_bk_key)
         except Exception as _exc:
             lines.append(f'  *** CANARY REFERENCE UNAVAILABLE: engine/canary_reference.json '
                          f'({type(_exc).__name__}). THE PER-SESSION ENGINE CHECK DID NOT RUN. '
@@ -1715,8 +1725,8 @@ def s8_committed(df, ad, st, w, pool, anchor, book_file, out, input_sha):
                              f'unintended, or the reference is stale and must be re-ratified '
                              f'in engine/canary_reference.json. DO NOT IGNORE THIS LINE. ***')
         elif _ref is None and 'CANARY REFERENCE UNAVAILABLE' not in ''.join(lines[-1:]):
-            lines.append('  *** CANARY REFERENCE ABSENT: engine/canary_reference.json has no '
-                         '"book50" entry. THE ENGINE CHECK DID NOT RUN. ***')
+            lines.append(f'  *** CANARY REFERENCE ABSENT: engine/canary_reference.json has no '
+                         f'"{_bk_key}" entry. THE ENGINE CHECK DID NOT RUN. ***')
 
     for _bl in breakdown_report(df, executed, book, gates=_LAST_GATES, cfg=_cfg):
         lines.append(_bl)
