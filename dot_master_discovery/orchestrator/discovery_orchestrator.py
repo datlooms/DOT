@@ -598,22 +598,113 @@ def _f0_chunk_pickle(script, idx):
     return os.path.join(RESULTS_DIR, f"results_F0_{script}_c{idx:04d}.pkl")
 
 
+def _f0_stream_kept(script, n_chunks, index, threshold, stream_mode, cache_size=8):
+    """Walk the PF-descending index, loading ONE CHUNK AT A TIME, and return the KEPT
+    survivors in exactly the order deduplicate() would have produced.
+
+    PEAK RSS = one chunk (max 227 MB measured) + the kept survivors + a small LRU of
+    recently-touched chunks. It never holds the field.
+
+    THE KEPT LIST IS STILL IN MEMORY and that is deliberate: f0_parity_proof and
+    f0_rows_from_raw both consume it, and the parity proof is what establishes
+    serial == parallel and MUST NOT BE WEAKENED to fit memory. At the default 0.80 the
+    kept list is 19,754 rows. Under --emit-all it is the whole field, which is why the
+    caller must also stream the WRITE - see collate_f0's row-writing loop.
+    """
+    from collections import OrderedDict
+    cache = OrderedDict()
+
+    def _chunk(i):
+        if i in cache:
+            cache.move_to_end(i)
+            return cache[i]
+        with open(_f0_chunk_pickle(script, i), 'rb') as f:
+            c = pickle.load(f)
+        cache[i] = c
+        while len(cache) > cache_size:
+            cache.popitem(last=False)
+        return c
+
+    keep, keep_sets = [], []
+    for k, (_negpf, ci, pos) in enumerate(index):
+        srv = _chunk(ci)[pos]
+        if stream_mode:
+            # threshold >= 1.0: len(es & ks)/len(es) <= 1.0 always, so the comparison
+            # cannot fire. Entry sets are never built.
+            keep.append(srv)
+        else:
+            es = set(srv['entry_indices'])
+            dup = False
+            for ks in keep_sets:
+                if len(es) == 0 or len(es & ks) / len(es) > threshold:
+                    dup = True
+                    break
+            if not dup:
+                keep.append(srv)
+                keep_sets.append(es)
+        if (k + 1) % 100000 == 0:
+            print(f"    [F0] dedup pass {k + 1:,}/{len(index):,}, kept {len(keep):,}",
+                  flush=True)
+    print(f"  [F0] Before dedup: {len(index):,} | After dedup: {len(keep):,}", flush=True)
+    return keep
+
+
 def collate_f0(script, n_chunks, df, adaptive, structural, warmup, expected_total, input_sha):
     ok, detail = candidate_invariant('F0', script, n_chunks, expected_total)
     if not ok and detail != 'missing per-chunk candidate count':
         raise SystemExit(f"ABORT [F0] CANDIDATE-COUNT INVARIANT FAILED: {detail}. Chunking changed "
                          f"the combo space; results are NOT trustworthy.")
-    raw = []
+    # STREAMING COLLATION. THE DESIGN WAS WRONG, NOT THE ALLOCATION.
+    #
+    # The previous form did `raw.extend(pickle.load(f))` over all 512 chunks, then handed
+    # that whole list to f0_parity_proof/f0_rows_from_raw, then to pd.DataFrame - THREE
+    # FULL-FIELD COPIES AT PEAK. Measured on the operator's disk: 512 pickles summing
+    # 17,460,288,054 bytes (17.46 GB, avg 34 MB, max 227 MB at c0509), which unpickles to
+    # roughly 35-90 GB of live Python objects. It does not fit in 32 GB and would not fit
+    # in 128 GB. NOTHING WAS MODIFIED TO CAUSE THIS: it is the first run in which the
+    # emit-all transport actually worked, so it is the first time collation was handed a
+    # real unfiltered field instead of the 31,227 pre-filtered rows of the void run.
+    #
+    # HOW THE CROSS-CHUNK DEDUP IS HANDLED, AND THE TWO PATHS ARE **NOT** STRUCTURALLY
+    # DIFFERENT - one arithmetically-justified branch inside one loop:
+    #
+    #   deduplicate() sorts PF-DESCENDING and compares each candidate against a running
+    #   KEEP-SET. The keep-set entry sets are what must be held; the raw field is not.
+    #
+    #   * _overlap_threshold() >= 1.0  (--emit-all sets 1.01): the test
+    #     `len(es & ks) / len(es) > threshold` CANNOT be true, because that ratio is at
+    #     most 1.0. Dedup provably drops nothing, so entry sets are never materialised and
+    #     rows stream straight out. This is arithmetic, not an optimisation.
+    #   * _overlap_threshold() < 1.0  (the DEFAULT 0.80): dedup is live and is preserved
+    #     EXACTLY - same PF-descending order, same single global pass, same running
+    #     keep-set. Only the KEPT entry sets are held (19,754 at default), never the field.
+    #
+    # PASS 1 builds a light index of (-pf, chunk, position) so the global PF sort survives
+    # without the field in memory: ~40 bytes per survivor.
+    _thr = f0m._overlap_threshold()
+    _stream = _thr >= 1.0
+    _index = []
     for idx in range(n_chunks):
         pk = _f0_chunk_pickle(script, idx)
         if not (os.path.exists(pk) and chunk_is_complete('F0', script, idx)):
             return False, 0
         with open(pk, 'rb') as f:
-            raw.extend(pickle.load(f))
-    n_raw = len(raw)
+            _c = pickle.load(f)
+        for _j, _srv in enumerate(_c):
+            _index.append((-float(_srv['pf']), idx, _j))
+        del _c
+    n_raw = len(_index)
+    _index.sort()
+    print(f"  [F0] STREAMING COLLATION: {n_raw:,} survivors indexed across {n_chunks} "
+          f"chunks | overlap_threshold {_thr} -> "
+          f"{'DEDUP IS A NO-OP (ratio cannot exceed 1.0), entry sets never held' if _stream else 'DEDUP LIVE, keep-set entry sets held'}",
+          flush=True)
+    raw = _f0_stream_kept(script, n_chunks, _index, _thr, _stream)
     _wk = int(os.environ.get('DOT_WORKERS', '1'))
     _fp = os.environ.get('DOT_FRAME_PATH') or None
     if _wk > 1 and _fp:
+        # `raw` IS ALREADY THE KEPT, PF-SORTED LIST - dedup ran during the stream, so
+        # the downstream call must not run it a second time.
         _ok, rows = f0_parity_proof(df, adaptive, structural, warmup, raw, _wk, 'full', _fp,
                                     RESULTS_DIR, input_sha=str(input_sha or ''))
     else:
@@ -1030,6 +1121,7 @@ def run_chunk_rows(fam, script, df, adaptive, structural, warmup, kw, lo, hi):
 
 
 def _chunk_worker(payload):
+    _n_emitted = 0
     fam, script, scope, results_dir, frame_path, idx, lo, hi = payload
     import discovery_orchestrator as orch
     orch.RESULTS_DIR = results_dir
@@ -1048,6 +1140,12 @@ def _chunk_worker(payload):
             fh.flush()
             os.fsync(fh.fileno())
         os.replace(tmpp, pk)
+        # THE COUNTER LIED FOR 31 MINUTES. `common = []` frees the list after pickling to
+        # keep the worker's RSS down - correct - but len(common) is taken at the return,
+        # so EVERY F0 CHUNK REPORTED "0 survivors" while c0509 wrote 227,309,020 bytes.
+        # The operator watched 512 chunks report zero while 17.46 GB accumulated and had
+        # no signal until the MemoryError. Capture the count BEFORE freeing.
+        _n_emitted = len(common)
         common = []
     if expected is not None:
         cpath = os.path.join(results_dir, f"results_{fam}_{script}_c{idx:04d}.cand")
@@ -1059,8 +1157,9 @@ def _chunk_worker(payload):
         os.replace(tmpc, cpath)
     csv, done = orch._chunk_paths(fam, script, idx)
     orch._write_atomic_csv(pd.DataFrame(common, columns=SCHEMA), csv)
-    orch._mark_family_done(csv, done, len(common), script)
-    return (fam, idx, len(common), time.time() - t0, hi - lo)
+    _n = _n_emitted if fam == 'F0' else len(common)
+    orch._mark_family_done(csv, done, _n, script)
+    return (fam, idx, _n, time.time() - t0, hi - lo)
 
 
 def candidate_invariant(fam, script, n_chunks, expected_total):
