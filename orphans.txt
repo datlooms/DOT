@@ -1,0 +1,14 @@
+AT_Slope_ST:lo + Micro_VolOfVol:hi + Volume:hi
+AT_Slope_ST:lo + Momentum_Value:hi + AT_Regime_ST:==1
+Bar_Range:hi + OBV_Macd:lo + Micro_TickIntensity:hi
+Micro_Entropy:lo + Micro_HLAsymmetry:lo + OR_Low_Side:==-1
+Slope_Accel_LT:hi + Micro_TickIntensity:hi + PrevDay_Low_Side:==-1
+VWAP_Dist_ATR:lo + D2D_Signal:==1 + VWAP_Side:==1
+AT_Slope_ST:hi + Micro_MicroGap:lo + Upper_Wick:hi
+AT_Slope_ST:lo + Sqz_Val:hi + Micro_CSSpread:lo
+D2D_Dynamic_Sensitivity:lo + Upper_Wick:hi + VAH_Side:==-1
+EMA_Oscillator:lo + Micro_Hurst:hi + ADX_Value:lo
+Efficiency_Ratio:hi + Micro_BarEntropy:hi + Body_Size:hi
+Micro_IBSP:hi + Micro_VolAccel:hi + VWAP_Z:lo
+Micro_VolAccel:hi + Body_Size:lo + OR_Low_Side:==-1
+Volume_Ratio_10:lo + Micro_RollProxy:lo + Volume:hi
