@@ -625,7 +625,8 @@ def collate_f0(script, n_chunks, df, adaptive, structural, warmup, expected_tota
         stamp_provenance(csv, input_sha)
     with open(os.path.splitext(csv)[0] + '.note', 'w', encoding='utf-8') as f:
         f.write(F0_ASYMMETRY_NOTE + '\n')
-    print(f"  [F0] {n_raw} raw survivors across {n_chunks} chunks -> global 80% overlap dedup at "
+    print(f"  [F0] {n_raw} raw survivors across {n_chunks} chunks -> global "
+          f"{f0m._overlap_threshold():.0%} overlap dedup at "
           f"COLLATION (single pass, ascending chunk order) -> {len(rows)} pool rows", flush=True)
     return True, len(rows)
 
@@ -1260,7 +1261,8 @@ def parity_check(scope='proof', workers=1, df=None, adaptive=None, structural=No
             b_d = pd.DataFrame(chunked, columns=SCHEMA).sort_values(list(SCHEMA)).reset_index(drop=True)
             dedup_ok = a_d.equals(b_d)
             dedup_line = (f"    F0 COLLATION DEDUP VERIFIED: {'YES' if dedup_ok else 'NO'} — "
-                          f"{len(parts)} raw survivors from chunks -> global 80% overlap dedup at "
+                          f"{len(parts)} raw survivors from chunks -> global "
+                          f"{f0m._overlap_threshold():.0%} overlap dedup at "
                           f"collation -> {len(b_d)} rows; unchunked run deduped -> {len(a_d)} rows; "
                           f"byte-identical: {dedup_ok}")
             parts = chunked
@@ -1304,7 +1306,13 @@ def orchestrate(scope='proof', workers=1, df=None, adaptive=None, structural=Non
     # it and `master.py --stage S3 --emit-all` was rejected by the parser.
     if emit_all:
         f0m.EMIT_ALL = True
+        # AND ACROSS SPAWN. The parent assignment above is necessary but NOT sufficient:
+        # every pool worker re-imports the scanner fresh at EMIT_ALL = False, which is why
+        # all 512 chunks of the 2h36m run filtered at MIN_TRADES 30 / MIN_PF 2.0.
+        import dot_frame_binding as _fbe
+        _fbe.configure_emit_all(True)
         f0m.OUTPUT_DIR = RESULTS_DIR
+        _fbe.configure_f0_output_dir(RESULTS_DIR)
         print(f'  *** --emit-all: F0 emits EVERY signal - MIN_TRADES, MIN_PF and the dedup '
               f'OVERLAP_THRESHOLD all lifted. Scanner writes into {RESULTS_DIR}. THIS IS NOT '
               f'THE 19,754-ROW BASELINE. ***', flush=True)

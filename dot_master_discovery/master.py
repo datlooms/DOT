@@ -1794,6 +1794,14 @@ def preflight_loader_audit():
     grew = {k: (LOADER_ALLOWLIST[k], v) for k, v in found.items()
             if k in LOADER_ALLOWLIST and v > LOADER_ALLOWLIST[k]}
     total = sum(found.values())
+    # THE ATTESTATION RECORD MUST CARRY THIS. It printed to the operator's console and was
+    # NEVER written to run_log_EMITALL.txt, so the record of a 2h36m run did not say whether
+    # its loader audit had passed. The audit runs BEFORE the run log is opened, so the
+    # verdict is captured here and replayed by the first stage that has a log to write to.
+    globals()['LOADER_AUDIT_RESULT'] = {
+        'total': int(total), 'files': len(found),
+        'verdict': 'FAIL' if (new or grew) else 'PASS',
+        'new': sorted(new), 'grew': {k: v for k, v in grew.items()}}
     print(f'  LOADER AUDIT — {total} references to load_sealed_baseline across {len(found)} files, '
           f'all on the frozen allowlist' if not (new or grew) else
           f'  LOADER AUDIT — FAIL', flush=True)
@@ -4208,6 +4216,12 @@ def main():
 
     only = args.stage
     print('\n[S0] INGEST & VALIDATE')
+    _la = globals().get('LOADER_AUDIT_RESULT')
+    if _la:
+        print(f'  LOADER AUDIT (attested): {_la["verdict"]} - {_la["total"]} references '
+              f'across {_la["files"]} files'
+              + (f' | NEW {_la["new"]}' if _la['new'] else '')
+              + (f' | GREW {_la["grew"]}' if _la['grew'] else ''), flush=True)
     _logp = rl.open_run_log(out)
     print(f'  run log -> {_logp} (ATTESTATION RECORD: carries wall-clock; every CSV does not)')
     with rl.Stage('S0', 'ingest & validate'):

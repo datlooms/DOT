@@ -3,6 +3,8 @@ import os
 _ENV_FRAME = 'DOT_FRAME_PATH'
 _ENV_SHA = 'DOT_INPUT_SHA'
 _ENV_FP = 'DOT_FRAME_FINGERPRINT'
+_ENV_EMITALL = 'DOT_EMIT_ALL'
+_ENV_F0OUT = 'DOT_F0_OUTPUT_DIR'
 _STATE = {}
 
 
@@ -18,6 +20,90 @@ def configure_environment(frame_path, input_sha, fingerprint):
             parts.insert(0, d)
     os.environ['PYTHONPATH'] = os.pathsep.join(parts)
     return dict(frame=frame_path, sha=input_sha, fingerprint=fingerprint)
+
+
+def configure_emit_all(on):
+    """Carry EMIT_ALL ACROSS THE SPAWN BOUNDARY, by the mechanism that carries the frame.
+
+    THE DEFECT: discovery_orchestrator L1306 `f0m.EMIT_ALL = True` was the ONLY assignment
+    in the package and it runs in the PARENT. Every ProcessPoolExecutor worker re-imports
+    scanners/triple_convergence_and_d2ddir.py fresh at module-scope EMIT_ALL = False
+    (scanner L31), and _min_trades/_min_pf/_overlap_threshold all branch on it. SO ALL 512
+    CHUNKS OF THE 2h36m RUN OF 2026-08-21 EXECUTED AT MIN_TRADES 30 AND MIN_PF 2.0. The
+    only lift that took effect was the dedup, which runs in the parent at collation - which
+    is exactly why the three orphans that reappeared carry PF 4.09 / 10.2 / 3.17, all above
+    the 2.0 floor, and the eleven at proxy PF 1.35-1.96 did not.
+
+    AN ENVIRONMENT VARIABLE, NOT A PAYLOAD FIELD. A payload is opt-in per call site, and
+    opt-in transport is precisely what produced this defect: a new entry point that forgets
+    the field filters silently and emits an incomplete catalogue with no error.
+    """
+    if on:
+        os.environ[_ENV_EMITALL] = '1'
+    else:
+        os.environ.pop(_ENV_EMITALL, None)
+
+
+def emit_all_requested():
+    return os.environ.get(_ENV_EMITALL) == '1'
+
+
+def configure_f0_output_dir(path):
+    """SECOND INSTANCE OF THE SAME CLASS, found by the sweep.
+
+    orchestrate() sets f0m.OUTPUT_DIR = RESULTS_DIR in the PARENT, and the scanner reads it
+    through _output_dir() inside run_search - WHICH RUNS IN THE WORKER. So under --emit-all
+    every worker wrote raw_survivors.csv to the module default "dots_results" instead of
+    the run's own results directory, which is why that file could not be found where it was
+    expected.
+    """
+    if path:
+        os.environ[_ENV_F0OUT] = str(path)
+    else:
+        os.environ.pop(_ENV_F0OUT, None)
+
+
+def install_emit_all():
+    """Re-establish EMIT_ALL at interpreter startup, inside every spawned worker.
+
+    ASSERTS RATHER THAN TRUSTS, matching install_if_configured's shape at L38-41: a worker
+    that reaches this with the flag set but the scanner unreachable must ABORT, because a
+    worker running under --emit-all while silently filtering is the failure being fixed.
+    """
+    if not emit_all_requested():
+        return None
+    try:
+        import triple_convergence_and_d2ddir as _f0
+    except Exception as exc:
+        raise SystemExit(
+            f'ABORT [emit-all transport] {_ENV_EMITALL} is set but the F0 scanner could not '
+            f'be imported in this process: {type(exc).__name__}: {str(exc)[:90]}. A worker '
+            f'running under --emit-all with the flag unapplied would filter at '
+            f'MIN_TRADES/MIN_PF and emit a SILENTLY INCOMPLETE catalogue.')
+    _f0.EMIT_ALL = True
+    return _f0
+
+
+def install_f0_output_dir():
+    d = os.environ.get(_ENV_F0OUT)
+    if not d:
+        return None
+    try:
+        import triple_convergence_and_d2ddir as _f0
+    except Exception:
+        return None
+    _f0.OUTPUT_DIR = d
+    return d
+
+
+def assert_emit_all_applied(mod):
+    """THE WORKER ASSERTS. Called by the scanner itself before it filters anything."""
+    if emit_all_requested() and not getattr(mod, 'EMIT_ALL', False):
+        raise SystemExit(
+            f'ABORT [emit-all transport] {_ENV_EMITALL} is set in the environment but this '
+            f'process has EMIT_ALL=False. The flag did not survive spawn, and this worker '
+            f'would filter at MIN_TRADES/MIN_PF while the run claims to be lifting them - '
+            f'the exact shape that voided the 2h36m run of 2026-08-21.')
 
 
 def is_configured():

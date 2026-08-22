@@ -26,6 +26,16 @@ try:
     import dot_frame_binding
 except Exception:
     dot_frame_binding = None
+# EMIT-ALL TRANSPORT. Deliberately OUTSIDE the is_configured() guard: DOT_EMIT_ALL is
+# independent of the frame binding, and a worker holding the flag but not the frame must
+# still abort loudly rather than filter silently.
+if dot_frame_binding is not None and dot_frame_binding.emit_all_requested():
+    dot_frame_binding.install_emit_all()
+if dot_frame_binding is not None:
+    try:
+        dot_frame_binding.install_f0_output_dir()
+    except Exception:
+        pass
 if dot_frame_binding is not None and dot_frame_binding.is_configured():
     dot_frame_binding.install_if_configured()
     try:

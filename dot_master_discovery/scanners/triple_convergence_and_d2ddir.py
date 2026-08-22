@@ -60,6 +60,28 @@ def _output_dir():
     return d
 
 
+def assert_emit_all_transport():
+    """THE WORKER ASSERTS, IT DOES NOT TRUST. Called before any filtering happens."""
+    try:
+        import dot_frame_binding as _fb
+        _fb.assert_emit_all_applied(sys.modules[__name__])
+    except SystemExit:
+        raise
+    except Exception:
+        pass
+
+
+def effective_filters():
+    """THE PRE-FLIGHT LINE - RESOLVED NUMBERS, NOT THE FLAG.
+
+    Read at second thirty instead of discovering a void run at minute one hundred. A run
+    claiming --emit-all whose first chunk prints min_pf=2.0 is void, and the operator can
+    kill it immediately. Same shape as adm_engine's rule / cap / floor / tier-gates line.
+    """
+    return (f'[F0] effective filters: min_trades={_min_trades()} min_pf={_min_pf()} '
+            f'overlap_threshold={_overlap_threshold()}  (EMIT_ALL={EMIT_ALL})')
+
+
 def _min_trades():
     """0 under --emit-all, so every signal is emitted regardless of trade count."""
     return 0 if EMIT_ALL else MIN_TRADES
@@ -408,6 +430,8 @@ def parity_check(df, feature_conditions, entry_allowed, d2d_dir, arrays, n_signa
 # ═══════════════════════════════════════════════════════════════
 
 def run_search(df, feature_conditions, all_features, entry_allowed, d2d_dir, arrays):
+    assert_emit_all_transport()
+    print('  ' + effective_filters(), flush=True)
     print("\n" + "=" * 60)
     print("COMBINATORIAL SEARCH (triple convergence + D2D gate)")
     print("=" * 60)
