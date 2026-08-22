@@ -393,6 +393,23 @@ def run_select(df, ad, st, w, pool, anchor, cfg, cfg_path, out, input_sha, worke
           f'so the seed is not cosmetic', flush=True)
     sizes = tuple(n for n in arm_sizes if n <= len(surv))
     arms, order = nested_arms(len(surv), sizes, seed=seed)
+    # NO ARMS IS A LEGITIMATE OUTCOME, NOT AN ERROR. A capped smoke scan can screen one
+    # candidate and pass none; the real screen can in principle admit nothing. Everything
+    # below assumes at least one arm - `max(arms)` on an empty dict, the nesting zip, the
+    # scoring loop - so the function returns here rather than being guarded three times.
+    # This is the same defect twice: I fixed `nested_arms` returning {0: []} and did not
+    # walk the rest of the function, so the crash moved one line to max(arms).
+    if not arms:
+        print(f'  NO ARMS: {len(surv)} survivor(s) from {len(scan):,} scanned rows - no '
+              f'requested size {list(arm_sizes)} can be drawn. THE ARM AND ARTIFACT LEG '
+              f'IS SKIPPED and nothing downstream is scored. This is a SCREEN OUTCOME, '
+              f'not a failure: under --smoke it is the cap, and on a real scan it is a '
+              f'finding about the screen.', flush=True)
+        return {'survivors': surv, 'rejected': rej, 'arms': {}, 'arm_books': {},
+                'scores': {}, 'seed': seed, 'book_size': None, 'fingerprint': fpr,
+                'train_months': train_months, 'held': held, 'screen_secs': el,
+                'scan_rows': len(scan), 'gate_lines': [], 'gate_verdicts': {},
+                'quality_arms': {}}
     bs = book_size if book_size is not None else (297 if 297 in arms else max(arms))
     if bs not in arms:
         raise SystemExit(
