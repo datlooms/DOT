@@ -1,0 +1,15 @@
+direction,signal_def,role,new_at_risk_covered,at_risk_hit,control_bars_hit,qualifying_bars,agg_pf,trades_scan,src
+LONG,EMA_Oscillator:hi + Upper_Wick:hi + D2D_Signal:==1,COVER,1,1,24,48,12.32,28,field
+LONG,OBV_Macd:lo + Micro_VolOfVol:hi + Harmonic_D2D_Concordance:==0,FILL,0,1,81,557,2.09,85,field
+LONG,KAMA_Dist:hi + Volume:hi + D2D_Signal:==1,FILL,0,1,70,174,2.44,119,field
+LONG,KAMA_Dist:hi + D2D_Signal:==1 + Harmonic_D2D_Concordance:==0,FILL,0,1,66,198,2.99,86,field
+LONG,OBV_Macd:lo + Sqz_Val:hi + Micro_Hurst:hi,FILL,0,1,64,411,2.86,67,field
+LONG,Bar_Range:hi + Upper_Wick:hi + D2D_Signal:==1,FILL,0,1,62,166,2.86,79,field
+SHORT,OBVf_DirStepCount:lo + EMA_Oscillator:lo + ADX_Value:lo,COVER,5,5,7,128,2.86,30,field
+SHORT,D2D_ATR:hi + Sqz_Val:hi + Session_High_Dist_ATR:hi,COVER,2,2,59,265,4.22,47,field
+SHORT,Micro_AutoCorr:hi + VA_Position:hi + OR_Position:lo,COVER,2,2,7,130,3.99,27,field
+SHORT,RangeOsc_State:==-2 + PrevDay_Close_Side:==-1 + OR_High_Side:==1,COVER,1,2,3,289,13.18,22,field
+SHORT,Micro_Amihud:hi + Micro_VolOfVol:lo + OR_Low_Side:==-1,COVER,1,1,3,172,12.75,32,field
+SHORT,D2D_Dynamic_Sensitivity:lo + Dist_To_PoC_ATR:lo + VWAP_Sigma:hi,COVER,1,2,8,102,8.08,25,field
+SHORT,DailyOpen_Dist_ATR:lo + TChan_A15:hi + PoC_Side:==0,COVER,1,1,15,76,7.33,27,field
+SHORT,Micro_MicroGap:lo + VWAP_Sigma:lo + OR_High_Side:==-1,COVER,1,1,7,138,5.55,16,field
